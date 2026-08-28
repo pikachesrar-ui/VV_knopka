@@ -41,6 +41,12 @@ subtitle_color = "#FFFFFF"
 subtitle_stroke_color = "#000000"
 subtitle_stroke_width = 2.2
 
+[animal]
+# First cat compilation target: six distinct licensed sources x ~5 sec = ~30 sec.
+clip_seconds = 5
+material_count = 6
+min_unique_materials = 5
+
 [materials]
 ai_material_count = 8
 min_unique_ai_materials = 3
