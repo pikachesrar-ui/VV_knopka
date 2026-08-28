@@ -9,6 +9,16 @@ import httpx
 from .settings import Settings
 
 
+def final_video_candidates(task: dict[str, Any]) -> list[str]:
+    """Return rendered MPT outputs, preferring the final video with voice/subtitles.
+
+    MoneyPrinterTurbo exposes both `videos` (final output) and `combined_videos`
+    (the intermediate visual-only concat). The intermediate file is intentionally
+    silent because narration is attached only while producing the final video.
+    """
+    return list(task.get("videos") or task.get("combined_videos") or [])
+
+
 class MoneyPrinterTurboClient:
     """Thin adapter over MoneyPrinterTurbo's current /api/v1 video API."""
 
@@ -23,10 +33,17 @@ class MoneyPrinterTurboClient:
             headers["x-api-key"] = self.api_key
         return headers
 
-    def create_ai_video(self, plan: dict[str, Any], language: str) -> str:
+    def create_ai_video(
+        self,
+        plan: dict[str, Any],
+        language: str,
+        *,
+        materials: list[dict[str, Any]] | None = None,
+    ) -> str:
         video_cfg = self.settings.raw["video"]
         audio_cfg = self.settings.raw["audio"]
         voice = audio_cfg["edge_voice_ru"] if language == "ru" else audio_cfg["edge_voice_en"]
+        use_curated_materials = bool(materials)
         payload = {
             "video_subject": plan["title"],
             "video_script": plan["script"],
@@ -36,7 +53,8 @@ class MoneyPrinterTurboClient:
             "video_transition_mode": video_cfg.get("visual_transition"),
             "video_clip_duration": int(video_cfg["clip_seconds"]),
             "video_count": 1,
-            "video_source": "pexels",
+            "video_source": "local" if use_curated_materials else "pexels",
+            "video_materials": materials if use_curated_materials else None,
             "video_language": language,
             "voice_name": voice,
             "voice_volume": 1.0,
@@ -44,7 +62,7 @@ class MoneyPrinterTurboClient:
             "bgm_type": "random",
             "bgm_volume": float(video_cfg["bgm_volume"]),
             "subtitle_enabled": bool(video_cfg["subtitle_enabled"]),
-            "match_materials_to_script": True,
+            "match_materials_to_script": not use_curated_materials,
         }
         with httpx.Client(timeout=60) as client:
             response = client.post(f"{self.base_url}/api/v1/videos", headers=self._headers(), json=payload)
@@ -71,7 +89,7 @@ class MoneyPrinterTurboClient:
         raise TimeoutError(f"MoneyPrinterTurbo task {task_id} timed out")
 
     def download_video(self, task: dict[str, Any], output: str | os.PathLike[str]) -> str:
-        candidates = task.get("combined_videos") or task.get("videos") or []
+        candidates = final_video_candidates(task)
         if not candidates:
             raise RuntimeError("MoneyPrinterTurbo completed without a downloadable video")
         source = candidates[0]
