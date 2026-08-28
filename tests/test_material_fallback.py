@@ -50,7 +50,11 @@ def test_accepts_three_long_vision_approved_sources(tmp_path):
     slot_dir = tmp_path / "runtime" / "slots" / "01"
     _write_audit(settings, slot_dir, [20, 15, 10])
 
-    materials, stats = load_duration_sufficient_materials(settings, slot_dir=slot_dir)
+    materials, stats = load_duration_sufficient_materials(
+        settings,
+        slot_dir=slot_dir,
+        expected_anchor="octopus",
+    )
 
     assert len(materials) == 3
     assert stats["unique_sources"] == 3
@@ -63,4 +67,21 @@ def test_rejects_too_few_unique_sources_even_if_long(tmp_path):
     _write_audit(settings, slot_dir, [60, 60])
 
     with pytest.raises(CuratedMaterialFallbackError, match="need at least 3"):
-        load_duration_sufficient_materials(settings, slot_dir=slot_dir)
+        load_duration_sufficient_materials(
+            settings,
+            slot_dir=slot_dir,
+            expected_anchor="octopus",
+        )
+
+
+def test_rejects_cache_for_old_visual_anchor_after_replan(tmp_path):
+    settings = _settings(tmp_path)
+    slot_dir = tmp_path / "runtime" / "slots" / "03"
+    _write_audit(settings, slot_dir, [20, 20, 20])
+
+    with pytest.raises(CuratedMaterialFallbackError, match="does not match current plan anchor"):
+        load_duration_sufficient_materials(
+            settings,
+            slot_dir=slot_dir,
+            expected_anchor="penguin",
+        )
