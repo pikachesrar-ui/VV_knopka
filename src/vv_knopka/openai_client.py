@@ -32,6 +32,51 @@ SHORT_PLAN_SCHEMA: dict[str, Any] = {
 }
 
 
+# The pilot is rendered from free licensed stock. Rare species can produce a
+# scientifically good script but an unusable visual plan. Keep the automatic
+# topic picker on subjects that have a realistic chance of yielding several
+# distinct Pexels/Pixabay clips. Explicit user topic requests still override this.
+STOCK_FRIENDLY_AI_ANCHORS = (
+    "cat",
+    "dog",
+    "octopus",
+    "bee",
+    "ant",
+    "penguin",
+    "dolphin",
+    "elephant",
+    "horse",
+    "rabbit",
+    "fox",
+    "owl",
+    "parrot",
+    "turtle",
+    "snake",
+    "butterfly",
+    "spider",
+    "frog",
+    "duck",
+    "chicken",
+)
+
+
+def _previous_visual_anchors(settings: Settings, current_slot: int) -> list[str]:
+    """Read already-generated pilot plans so the automatic picker can vary subjects."""
+    anchors: list[str] = []
+    for slot in range(1, current_slot):
+        path = settings.runtime_dir / "slots" / f"{slot:02d}" / "plan.json"
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        anchor = str(payload.get("visual_anchor") or "").strip().lower()
+        if anchor and anchor not in anchors:
+            anchors.append(anchor)
+    return anchors
+
+
 class OpenAIPlanner:
     def __init__(self, settings: Settings, ledger: BudgetLedger):
         self.settings = settings
@@ -79,6 +124,19 @@ class OpenAIPlanner:
                     "Search terms should seek clearly visible playful/cute/curious domestic cats or kittens, "
                     "while every search term still contains the exact word \"cat\"."
                 )
+        elif pipeline == "ai_short":
+            used = _previous_visual_anchors(self.settings, slot)
+            available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in used]
+            if not available:
+                available = list(STOCK_FRIENDLY_AI_ANCHORS)
+            topic_instruction = (
+                "\nSTOCK-AVAILABILITY CONSTRAINT FOR THIS AUTOMATIC PILOT: choose the main subject from "
+                f"this exact stock-friendly visual_anchor list: {', '.join(available)}. "
+                "Do not narrow it to a rare species, subspecies, breed, or scientific name. "
+                "The factual story itself must genuinely apply to the chosen broad animal, so do not use generic "
+                "footage to illustrate a claim that is only true of a rare species. "
+                "Prefer a visually demonstrable behavior that can be represented by several distinct licensed stock clips."
+            )
 
         prompt = f"""You are the editor of a review-first Shorts pilot.
 Niche: Animals / Nature Curiosities.
@@ -86,7 +144,7 @@ Language: {language_name}.
 Pipeline: {pipeline}.
 Slot: {slot}/15.
 {task}{topic_instruction}
-For visual_anchor, return one concise ENGLISH noun or noun phrase naming the visible main subject that must be present in every stock clip (examples: "octopus", "red panda", "honey bee").
+For visual_anchor, return one concise ENGLISH noun or noun phrase naming the visible main subject that must be present in every stock clip (examples: "octopus", "cat", "bee").
 Every search term must include that exact visual_anchor. Avoid ambiguous standalone visual terms such as "skin texture", "reef", "ocean", or "forest" that could retrieve footage without the main subject.
 Search terms must describe generic footage that can be found on licensed stock providers such as Pexels/Pixabay.
 Keep the title natural, not deceptive clickbait. Hashtags must not claim something unsupported.
