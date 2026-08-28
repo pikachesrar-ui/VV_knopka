@@ -28,38 +28,55 @@
 1. В скачанном `slot-01-ru-ai.mp4` нет звука.
 2. Материалы нерелевантны: кроме осьминогов попали рыбы/кораллы, медузы, черепахи и даже человеческая кожа.
 
-### Root cause звука
+### Root cause звука — исправлен
 
-MoneyPrinterTurbo корректно создал:
-
-- `audio.mp3`;
-- `subtitle.srt`;
-- промежуточный `combined-1.mp4`;
-- финальный `final-1.mp4`.
+MoneyPrinterTurbo корректно создал `audio.mp3`, `subtitle.srt`, промежуточный `combined-1.mp4` и финальный `final-1.mp4`.
 
 Наш adapter ошибочно предпочитал `combined_videos` перед `videos`, поэтому скачивал промежуточную silent visual concat вместо финального файла.
 
-Исправлено: `download_video()` теперь предпочитает `task["videos"]` и использует `combined_videos` только как fallback. Добавлены regression tests.
+Исправлено: `download_video()` теперь предпочитает `task["videos"]` и использует `combined_videos` только как fallback. Есть regression test.
 
 ### Root cause материалов
 
 MPT получил 5 Pexels search terms, нашёл 19–20 кандидатов на каждый и автоматически выбрал 10 клипов. Pexels search semantics слишком широкая: запросы вроде `octopus skin texture macro` способны возвращать человеческую кожу, а reef/underwater terms — других морских животных.
 
-Исправление в VV_knopka:
+Первый защитный фикс сделал URL/slug gate: кандидат проходил только если Pexels page slug явно содержал `octopus`. Он корректно не пропустил filler, но оказался слишком строгим.
 
-- больше не доверяем автоматическому Pexels selection внутри MPT для `ai_short`;
-- перед рендером VV_knopka сам запрашивает Pexels;
-- из плана берётся/выводится обязательный `visual_anchor` (для текущего slot 1 это `octopus`);
-- кандидат проходит только если Pexels page slug явно содержит visual anchor;
-- нерелевантные `skin`, fish/coral, turtle/jellyfish clips блокируются до скачивания;
-- выбираются 8 уникальных portrait clips;
-- provenance сохраняется в `runtime/slots/01/ai_materials.json`;
-- выбранные клипы скачиваются в MPT `storage/local_videos` и передаются MPT как explicit local materials;
-- если 8 релевантных клипов не найдено, pipeline FAILS CLOSED вместо filler footage.
+## Второй material-gate run — FAIL CLOSED 2/8
 
-Также pacing изменён с 4 до **6 секунд на источник**: на 25–45 секунд теперь достаточно максимум ~8 клипов вместо 10–12 быстрых смен.
+На ПК пользователя после `8 passed` команда:
 
-Для будущих планов OpenAI structured output теперь содержит `visual_anchor`, и каждый footage search term обязан включать этот anchor.
+```powershell
+.\.venv\Scripts\vv.exe render-ai 1
+```
+
+остановилась до MPT-render с:
+
+```text
+RuntimeError: Pexels relevance gate found only 2/8 usable clips whose source page explicitly matches visual anchor 'octopus'.
+```
+
+Это ожидаемый fail-closed, но показывает, что наличие слова `octopus` в URL имеет слишком низкий recall и не годится как основной критерий визуальной релевантности.
+
+## Текущий material relevance design — Luna vision
+
+URL slug теперь только слабый metadata signal. Основной gate:
+
+1. VV_knopka делает Pexels search по anchored queries.
+2. Собирает максимум **30** уникальных portrait-кандидатов длительностью >= 6 сек.
+3. Берёт Pexels preview image каждого кандидата.
+4. **GPT-5.6 Luna vision** через Responses API проверяет батчами по 10 превью, действительно ли обязательный visual anchor (`octopus`) ясно виден в кадре.
+5. Отбрасываются unrelated animals, люди/человеческая кожа, scenery-only, drawings/text и неоднозначные close-ups.
+6. Требуется `accepted=true` и confidence >= **0.72**.
+7. Как только набрано 8 approved clips, только они скачиваются в MPT `storage/local_videos`.
+8. Все решения и причины сохраняются в `runtime/slots/01/ai_materials.json`.
+9. Если после максимум 30 preview не набрано 8 approved clips, pipeline снова FAILS CLOSED. В таком случае следующий шаг — второй бесплатный footage provider, а не ослабление visual gate вслепую.
+
+Vision model: `gpt-5.6-luna`. Его фактический token usage записывается в тот же OpenAI budget ledger; project cap остаётся **$10**. Config резервирует максимум `$0.03` на один vision batch только как budget guard, фактическая стоимость считается по usage.
+
+Также pacing остаётся **6 секунд на источник**.
+
+Для будущих планов OpenAI structured output содержит `visual_anchor`, и каждый footage search term обязан включать этот anchor. Для старого slot 1 anchor автоматически выводится как `octopus`, поэтому регенерировать plan не нужно.
 
 ## Дополнительный фикс MPT config
 
@@ -72,12 +89,13 @@ MPT API можно оставить запущенным. В другом PowerS
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\vv.exe status
 .\.venv\Scripts\vv.exe render-ai 1
 ```
 
-Повторно запускать `vv plan 1` **не нужно**: текущий plan сохраняется, для него visual anchor автоматически выводится как `octopus`.
+Повторно запускать `vv plan 1` **не нужно**.
 
-Новый `render-ai 1` должен сначала вывести примерно:
+Новый `render-ai 1` сначала потратит небольшое количество OpenAI API budget на Luna vision. При успехе появится:
 
 ```text
 Curated Pexels materials: 8
@@ -95,11 +113,11 @@ runtime/ready_for_review/slot-01-ru-ai.mp4
 
 - слышна русская озвучка;
 - есть субтитры;
-- все/практически все кадры действительно показывают осьминога;
+- кадры показывают осьминога как реальный видимый основной объект;
 - нет человеческой кожи, случайных рыб, медуз, черепах и другого filler footage;
-- смена кадров менее дёрганая (6 сек вместо 4).
+- смена кадров менее дёрганая, чем в первом 4-sec варианте.
 
-Если relevance gate не сможет найти 8 клипов, прислать полный текст ошибки и `runtime/slots/01/ai_materials.json`; не ослаблять gate вслепую.
+Если новый vision gate не сможет найти 8 клипов, прислать полный текст ошибки и `runtime/slots/01/ai_materials.json`. Тогда добавлять второй бесплатный footage source.
 
 ## Дальше
 
