@@ -6,6 +6,7 @@ import json
 from dotenv import load_dotenv
 
 from .animal_compilation import render_compilation, write_stock_sources_manifest
+from .animal_highlights import select_highlights
 from .budget import BudgetLedger
 from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
@@ -35,8 +36,6 @@ def _multi_source_audit_exhausted(slot_dir, *, expected_anchor: str | None = Non
     normalized_expected = str(expected_anchor or "").strip()
     audit_anchor = str(audit.get("visual_anchor") or "").strip()
     if normalized_expected and audit_anchor.casefold() != normalized_expected.casefold():
-        # This audit belongs to an older plan for the same slot. It must not
-        # suppress a fresh search for the new animal/topic.
         return False
 
     providers = audit.get("providers") or {}
@@ -47,10 +46,6 @@ def _multi_source_audit_exhausted(slot_dir, *, expected_anchor: str | None = Non
 
 def _prepare_ai_materials(settings, content, *, slot, slot_dir, ledger):
     expected_anchor = str(content.get("visual_anchor") or "").strip()
-
-    # Prefer the already-reviewed local cache only when it belongs to the current
-    # plan's visible subject. Re-planning a slot with a different animal must
-    # trigger a new stock search rather than inheriting the previous audit.
     try:
         materials, stats = load_duration_sufficient_materials(
             settings,
@@ -64,8 +59,6 @@ def _prepare_ai_materials(settings, content, *, slot, slot_dir, ledger):
         )
         return materials
     except CuratedMaterialFallbackError as cached_error:
-        # If both providers have already been visually exhausted for THIS anchor,
-        # another call would only spend money reviewing the same pool again.
         if _multi_source_audit_exhausted(slot_dir, expected_anchor=expected_anchor):
             raise SystemExit(
                 f"Cached multi-source audit is exhausted: {cached_error} "
@@ -81,10 +74,6 @@ def _prepare_ai_materials(settings, content, *, slot, slot_dir, ledger):
             ledger=ledger,
         )
     except RuntimeError:
-        # The search function writes its audit before failing on the old 8-file
-        # preference. The newly downloaded approved clips may still satisfy the
-        # more meaningful duration-based fallback, so check once before surfacing
-        # the original failure.
         try:
             materials, stats = load_duration_sufficient_materials(
                 settings,
@@ -207,8 +196,27 @@ def main() -> None:
             print(f"Auto-curated licensed animal sources: {source_manifest}")
             print(f"Material audit: {slot_dir / 'ai_materials.json'}")
 
+        animal_cfg = settings.raw.get("animal", {})
+        highlight_manifest = select_highlights(
+            settings,
+            ledger,
+            source_manifest=source_manifest,
+            slot_dir=slot_dir,
+            language=slot.language,
+            editorial_plan=content,
+            clip_seconds=float(animal_cfg.get("clip_seconds", 5)),
+        )
+        print(f"Highlight edit: {highlight_manifest}")
+
         output = settings.runtime_dir / "ready_for_review" / f"slot-{slot.slot:02d}-{slot.language}-animals.mp4"
-        print(render_compilation(settings, source_manifest, output))
+        print(
+            render_compilation(
+                settings,
+                source_manifest,
+                output,
+                highlight_manifest=highlight_manifest,
+            )
+        )
         return
 
 
