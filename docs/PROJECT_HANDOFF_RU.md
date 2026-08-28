@@ -35,26 +35,7 @@ Animal compilations: никакого loud bass/drop/impact/boom SFX; source/pro
 - PR не merge до ручного PASS первых двух видео;
 - новый чат сначала полностью читает `AGENT.md`, этот файл и `docs/PROGRESS_RU.md`, затем проверяет live GitHub state/CI.
 
-## 3. Реализовано
-
-- deterministic 15-slot manifest;
-- OpenAI Responses API structured planner;
-- token/cost budget ledger;
-- duplicate/script similarity/publication gates;
-- MoneyPrinterTurbo `/api/v1` adapter;
-- Windows bootstrap VV_knopka;
-- Windows setup/config/start scripts для MPT;
-- Edge TTS + Edge subtitles;
-- multi-source stock curator с Pexels + Pixabay;
-- GPT-5.6 Luna vision relevance gate;
-- local explicit-material handoff в MPT;
-- duration-based approved-footage fallback;
-- FFmpeg animal compilation pipeline;
-- provenance/commercial-use gate для animal clips;
-- review staging;
-- context persistence: `AGENT.md`, `PROJECT_HANDOFF_RU.md`, `PROGRESS_RU.md`.
-
-## 4. Подтверждённая локальная среда
+## 3. Подтверждённая локальная среда
 
 Путь: `D:\KiraS\VV_knopka`.
 
@@ -64,115 +45,150 @@ Animal compilations: никакого loud bass/drop/impact/boom SFX; source/pro
 - OpenAI/Pexels/Pixabay keys локально в `.env`;
 - MoneyPrinterTurbo v1.3.5 установлен в ignored `MoneyPrinterTurbo`;
 - MPT API работает на `127.0.0.1:8080`;
-- последний известный OpenAI ledger после material vision: **$0.0104 / $10.00**.
+- последний известный OpenAI ledger перед slots 2-3: **$0.0104 / $10.00**.
 
-## 5. Slot 1 plan
+## 4. Реализованная архитектура
 
-`vv plan 1` успешно создан.
+### AI short
+
+Terra structured plan -> Pexels/Pixabay candidate search -> GPT-5.6 Luna image relevance gate -> downloaded local approved stock -> MPT local-material render -> Edge TTS/subtitles -> review output.
+
+Ключевые quality fixes:
+
+- MPT final `videos` скачивается раньше silent `combined_videos`;
+- visual anchor обязателен;
+- visual confidence threshold >= `0.72`;
+- narrow topics могут использовать минимум 3 unique approved sources при >=36 sec reusable footage;
+- MPT curated mode использует непересекающиеся segments длинных approved sources;
+- landscape material превращается в 1080x1920 blur-fill;
+- Russian subtitles используют локальный Windows Cyrillic font, не committed binary;
+- MPT per-segment FadeIn отключён.
+
+### Animal compilation
+
+Local FFmpeg assembly остаётся отдельной веткой.
+
+Актуальный pilot flow умеет автоматически построить `sources.json` из vision-approved Pexels/Pixabay stock, сохраняя:
+
+- provider;
+- provider id;
+- creator;
+- source URL;
+- license name;
+- `commercial_use_allowed=true` только для поддерживаемых stock providers;
+- vision confidence/reason.
+
+Renderer:
+
+- target сейчас 6 unique clips × ~5 sec ≈30 sec;
+- minimum unique clips = 5;
+- no transition SFX;
+- tiny visual/audio fades only;
+- source audio loudness normalization;
+- missing source audio получает silent stereo track вместо render failure;
+- all source aspect ratios получают 1080x1920 blur-fill + sharp complete foreground.
+
+Pexels/Pixabay license basis перепроверен 2026-08-28; third-party trademark/privacy/IP restrictions всё равно остаются отдельным риском, поэтому provenance хранится.
+
+## 5. Slot 1 — Russian AI Short: MANUAL QUALITY PASS
 
 Тема: **«Почему осьминог меняет цвет во сне»**.
 
-Первый plan-вызов OpenAI стоил **$0.0051**. Fact-check PASS с оговоркой: изменения окраски/активность мозга во сне наблюдаются, но нельзя утверждать, что содержание сновидений осьминога доказано.
+Первый plan вызов стоил `$0.0051`. После material vision общий ledger был `$0.0104`.
 
-`vv plan 1` повторно не запускать без причины.
+История реальных проблем и исправлений:
 
-## 6. Первый render slot 1 — FAIL
+1. Первый review MP4 был silent — VV adapter скачивал MPT intermediate `combined_videos`. Исправлено на final `videos` first.
+2. Blind Pexels selection включал fish/coral/jellyfish/turtle/human skin. Добавлен Pexels+Pixabay Luna visual gate.
+3. 8 unique clips оказалось слишком жёстким для octopus. Добавлен duration-based approved footage fallback.
+4. Русский CJK font дал плохое spacing/wrap. Заменён локальным Windows Cyrillic font.
+5. Landscape Pixabay clip имел black bars. Добавлен local 9:16 blur-fill.
+6. `FadeIn` затемнял каждый segment. Отключён.
 
-Первый MPT render технически завершился, но review выявил:
+После последнего quality render пользователь сообщил: **«Этот результат мне нравится»**. Slot 1 теперь считается **QUALITY PASS**.
 
-1. скачанный review MP4 был без звука;
-2. blind Pexels selection подмешал fish/coral, jellyfish, turtle и human skin.
+## 6. Текущий запрос пользователя
 
-Sound bug исправлен: VV adapter теперь скачивает `videos` (final output), а не промежуточный `combined_videos`.
+Пользователь хочет теперь одновременно попробовать:
 
-## 7. Footage relevance evolution
+1. видео с котиками;
+2. видео на английском.
 
-- strict Pexels URL/slug gate: `2/8`;
-- GPT-5.6 Luna visual review 30 Pexels previews: `2/8`;
-- Pexels + Pixabay visual review: всего `3/8` unique source videos;
-- вывод: relevance gate работает, но 8 отдельных исходников — неправильный hard requirement для узких тем.
+Это естественно соответствует frozen pilot:
 
-Текущий gate:
+- **slot 2** = Russian `animal_compilation`, сейчас специально cats;
+- **slot 3** = English `ai_short`.
 
-- visual anchor обязателен (`octopus` для slot 1);
-- candidate проходит только Luna image review `accepted=true` + confidence >= `0.72`;
-- minimum unique approved sources = **3**;
-- clip segment = **6 sec**;
-- max reusable segments per source for capacity = **4**;
-- minimum reusable approved footage = **36 sec**;
-- filler/relevance threshold не ослабляется;
-- MPT curated footage использует `video_concat_mode=random`, чтобы сначала использовать уникальные sources, затем непересекающиеся segments длинных sources.
+## 7. Slot 2 — cats design
 
-## 8. Второй render slot 1 — TECHNICAL PASS, QUALITY PASS ещё нет
+Новый CLI topic override:
 
-MPT task: `d4e53d76-3be1-49f3-9dc2-fe6a944967ab`.
+```powershell
+.\.venv\Scripts\vv.exe plan 2 --topic cats
+```
 
-Пользователь просмотрел итог и сообщил: **звук есть, результат достойный, но надо дорабатывать**.
+Для cat topic planner обязан вернуть `visual_anchor="cat"` и cat-specific stock queries.
 
-Подтверждено из task log:
+Затем:
 
-- narration audio ~36.82 sec;
-- Edge subtitle file создан;
-- 3 approved source videos: 2 portrait Pexels + 1 landscape Pixabay;
-- MPT создал 17 available source segments и использовал 9 segments;
-- final MP4 успешно создан.
+```powershell
+.\.venv\Scripts\vv.exe render-animal 2
+```
 
-### Quality-проблемы по human review
+Если `runtime/slots/02/sources.json` отсутствует, команда автоматически:
 
-1. Русские subtitles выглядят плохо: разреженные буквы, агрессивный wrap, слово `хроматофоры` визуально разорвано между строками.
-2. Landscape Pixabay footage показан с огромными black bars в 9:16.
-3. Некоторые переходы затемняют кадр.
-4. Один long Pixabay source используется несколькими непересекающимися segments; пока допустимо, но следить за заметной повторяемостью.
+1. запускает тот же Pexels+Pixabay stock curator;
+2. Luna принимает только clearly visible cat candidates;
+3. требует минимум 5 unique licensed cat clips;
+4. выбирает до 6;
+5. пишет source/provenance/license manifest;
+6. рендерит FFmpeg compilation.
 
-Root causes:
+Output:
 
-- MPT task использовал `STHeitiMedium.ttc` для русского;
-- MPT mismatch-aspect code сохраняет landscape целиком на black canvas;
-- `FadeIn` применяется **к каждому source segment отдельно**, то есть fade-from-black, а не настоящий crossfade.
+```text
+runtime/ready_for_review/slot-02-ru-animals.mp4
+```
 
-## 9. Текущий quality-fix в рабочей ветке
+Это первый montage-style test. Перед реальной публикацией всё равно оценить, хватает ли editorial transformation; при необходимости следующим этапом добавить voiceover/on-screen running joke.
 
-Внесено до следующего render:
+## 8. Slot 3 — first English AI Short
 
-- `visual_transition = none` — чистые cuts вместо per-clip fade-from-black;
-- для русского VV_knopka локально копирует установленный Windows Cyrillic font в ignored MPT runtime: приоритет Arial Bold -> Segoe UI Bold -> Arial -> Segoe UI;
-- никакой font binary не попадает в Git;
-- Russian subtitles: size **46**, position `custom`, vertical position **68%**, stroke width **2.2**;
-- landscape local stock до MPT автоматически конвертируется в **1080x1920 blur-fill**:
-  - blurred zoomed source fills background;
-  - полный sharp original frame остаётся по центру;
-  - black bars исчезают;
-- portrait sources не транскодируются;
-- derived `*-vv916.mp4` кэшируется локально;
-- script/plan/vision-approved source set не меняются;
-- новых OpenAI calls для этой quality-проверки не требуется.
+Команды:
 
-## 10. Точная текущая точка
+```powershell
+.\.venv\Scripts\vv.exe plan 3
+.\.venv\Scripts\vv.exe render-ai 3
+```
 
-MPT API можно оставить запущенным. На ПК пользователя:
+Output:
+
+```text
+runtime/ready_for_review/slot-03-en-ai.mp4
+```
+
+Использует proven slot-1 quality stack, но English TTS/font.
+
+## 9. Точная текущая точка
+
+На ПК пользователя:
 
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv.exe render-ai 1
+
+.\.venv\Scripts\vv.exe plan 2 --topic cats
+.\.venv\Scripts\vv.exe render-animal 2
+
+.\.venv\Scripts\vv.exe plan 3
+.\.venv\Scripts\vv.exe render-ai 3
+
+.\.venv\Scripts\vv.exe status
 ```
 
-`vv plan 1` НЕ запускать.
+Не публиковать автоматически. После двух renders — human review и style adjustments.
 
-При первом render после quality-fix один landscape Pixabay source будет локально transcoded в `*-vv916.mp4`; это может добавить паузу до создания MPT task, но OpenAI budget не расходует.
+## 10. Отложено
 
-Проверить `runtime/ready_for_review/slot-01-ru-ai.mp4`:
-
-- звук есть;
-- Cyrillic subtitles выглядят естественно;
-- нет странного межбуквенного spacing;
-- subtitle placement не конфликтует с нижним UI Shorts;
-- black bars исчезли;
-- нет fade-from-black на каждом clip;
-- footage всё ещё про осьминога;
-- повторяемость long source не раздражает.
-
-Только после **manual QUALITY PASS slot 1** переходить к slot 2 — русской cute/funny animal compilation.
-
-Отложено: automatic publish, analytics feedback loop, trend hunter, social scraper, mass batch, expensive text-to-video.
+До review slots 2-3 не делать: automatic publish, analytics feedback loop, trend hunter, social scraper, mass batch, expensive text-to-video.
