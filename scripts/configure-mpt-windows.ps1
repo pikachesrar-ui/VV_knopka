@@ -34,7 +34,10 @@ $content = [regex]::Replace($content, '(?m)^subtitle_provider\s*=\s*".*"\s*$', '
 $content = [regex]::Replace($content, '(?m)^upload_post_auto_upload\s*=\s*(true|false)\s*$', 'upload_post_auto_upload = false', 1)
 $content = [regex]::Replace($content, '(?m)^upload_post_enabled\s*=\s*(true|false)\s*$', 'upload_post_enabled = false', 1)
 
-Set-Content -Path $mptConfig -Value $content -Encoding UTF8
+# Windows PowerShell 5's `Set-Content -Encoding UTF8` writes a BOM. MoneyPrinterTurbo
+# can recover from it, but emits a misleading TOML warning first. Write UTF-8 without BOM.
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($mptConfig, $content, $utf8NoBom)
 
 Write-Host "MoneyPrinterTurbo configured:"
 Write-Host "  host: 127.0.0.1"
