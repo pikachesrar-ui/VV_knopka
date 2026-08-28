@@ -124,17 +124,6 @@ Structured output содержит:
 - hard budget = $10;
 - блокирует новые платные вызовы, если они могут вывести пилот за лимит.
 
-### OpenAI auth diagnostics
-
-После реального 401-инцидента добавлены:
-
-- `vv doctor` — безопасно проверяет, что `OPENAI_API_KEY` загружен, не печатая сам ключ;
-- проверка ключа через официальный OpenAI account-info endpoint `/v1/me` без token spend;
-- безопасные объяснения 401/403/429;
-- API error text очищается от возможных `sk-...` секретов;
-- `plan` больше не должен отдавать пользователю сырой `httpx` traceback для типовых OpenAI API ошибок;
-- добавлен unit test на redaction и понятную 401-диагностику.
-
 ### MoneyPrinterTurbo adapter
 
 Интеграция строится через локальный API MoneyPrinterTurbo.
@@ -212,7 +201,7 @@ VV_knopka setup complete.
 Python 3.11.0
 ```
 
-`vv status`:
+`vv status` перед первым успешным API-вызовом:
 
 ```text
 OpenAI spent: $0.0000 / $10.00
@@ -222,70 +211,68 @@ publication gate: PASS
 
 ---
 
-## 8. Текущий OpenAI auth incident — 2026-08-28
+## 8. OpenAI API и slot 1 — PLAN УСПЕШЕН
 
-Пользователь добавил `OPENAI_API_KEY` в локальный `.env` и запустил:
+Первый запуск `vv plan 1` сначала дал `401 Unauthorized`, но причиной оказался **неверно вставленный пользователем API key**. Это не было проблемой кода, модели или Responses API.
+
+После исправления значения `OPENAI_API_KEY` в локальном `.env` команда:
 
 ```powershell
 .\.venv\Scripts\vv.exe plan 1
 ```
 
-Запрос дошёл до `https://api.openai.com/v1/responses`, но OpenAI ответил:
+успешно завершилась и создала:
 
 ```text
-401 Unauthorized
+D:\KiraS\VV_knopka\runtime\slots\01\plan.json
 ```
 
-Это означает, что генерация/модель ещё не запускались: запрос был отклонён на этапе аутентификации.
+Временную auth-diagnostics/`vv doctor`, которую начали добавлять из-за ошибочного 401, затем убрали из рабочей ветки как ненужную.
 
-В ответ на этот инцидент в ветку добавлены `vv doctor` и safe OpenAI errors.
+### Содержимое первого плана
 
-### Точная текущая точка продолжения
+Тема:
 
-На ПК пользователя выполнить:
+**«Почему осьминог меняет цвет во сне»**
 
-```powershell
-git pull
-.\.venv\Scripts\vv.exe doctor
-```
+Hook:
 
-`vv doctor` не должен печатать секрет и не тратит токены. Он показывает только тип/длину загруженного значения и результат auth-check.
+**«Осьминог может менять цвет, даже когда спит.»**
 
-Если результат снова `401` / `invalid_api_key`:
+План рассчитан на русский `ai_short` примерно 25–45 секунд. В нём есть search terms для footage, caption, hashtags, editorial value и 3 fact-check items.
 
-1. открыть OpenAI API Platform;
-2. создать **новый secret API key** в нужном project;
-3. заменить только значение `OPENAI_API_KEY=...` в локальном `.env`;
-4. старый неверный/скомпрометированный ключ при необходимости удалить;
-5. снова запустить `vv doctor`;
-6. только после `OpenAI authentication: PASS` повторять `vv plan 1`.
+### Fact-check первого плана — PASS с оговоркой
 
-Не просить пользователя присылать ключ в чат и не выводить содержимое `.env`.
+Проверено по научным источникам:
 
-После успешного `vv doctor`:
+- у осьминогов действительно есть пигментные клетки-хроматофоры и нейронное управление изменениями рисунка/окраски;
+- во время сна у изученных видов наблюдаются быстрые изменения кожного рисунка и текстуры;
+- в работе Nature 2023 активная фаза сна сопровождалась wake-like neural activity и динамической skin patterning;
+- **не нужно формулировать это как доказательство сновидений** — связь с dream content не доказана.
 
-```powershell
-.\.venv\Scripts\vv.exe plan 1
-.\.venv\Scripts\vv.exe status
-Get-Content .\runtime\slots\01\plan.json -Raw
-```
-
-Дальше проверить title/hook/script/search_terms/fact_check_items до установки MoneyPrinterTurbo и до рендера.
+Текущий текст плана эту осторожность в целом соблюдает, поэтому **регенерация slot 1 перед первым рендером не требуется**.
 
 ---
 
-## 9. Следующий milestone после успешного plan 1
+## 9. Точная текущая точка продолжения
 
-1. Проверить фактические claims slot 1 по надёжным источникам.
-2. При необходимости скорректировать prompt/style.
-3. Установить/запустить MoneyPrinterTurbo.
-4. Проверить `http://127.0.0.1:8080/docs`.
-5. Настроить footage provider и Edge TTS.
-6. Render slot 1.
-7. Получить MP4 в `runtime/ready_for_review`.
-8. Пользователь вручную оценивает voice, pacing, hook, footage, subtitles, монтаж и AI-slop ощущение.
-9. Затем подготовить source-tracked licensed clips и сделать slot 2.
-10. Только после slots 1–2 переходить к остальным 13.
+Локальная база проекта готова, OpenAI API работает, slot 1 plan создан и fact-check пройден.
+
+Следующие практические шаги:
+
+1. На ПК пользователя выполнить `git pull`, чтобы подтянуть последние правки/handoff.
+2. Выполнить `vv status` и зафиксировать фактическую стоимость первого plan-вызова.
+3. Установить/запустить MoneyPrinterTurbo на Windows.
+4. Проверить, что `http://127.0.0.1:8080/docs` доступен.
+5. Настроить бесплатный Edge TTS.
+6. Настроить footage provider (например, Pexels; при необходимости Pixabay/другой разрешённый источник).
+7. Выполнить `vv render-ai 1`.
+8. Получить MP4 в `runtime/ready_for_review/slot-01-ru-ai.mp4`.
+9. Пользователь вручную оценивает voice, pacing, hook, footage, subtitles, монтаж и AI-slop ощущение.
+10. После правок подготовить source-tracked licensed clips и сделать slot 2 — русскую animal compilation.
+11. Только после slots 1–2 переходить к остальным 13.
+
+Важно: `runtime/` игнорируется Git, поэтому локальный `plan.json` не должен исчезнуть при обычном `git pull`.
 
 ---
 
