@@ -8,8 +8,9 @@ Before changing code or giving project-status claims:
 
 1. Read this file completely.
 2. Read `docs/PROJECT_HANDOFF_RU.md` completely.
-3. Check the current repository state, active branch, and draft PR #1.
-4. Treat GitHub as the source of truth for code/history; treat the handoff as the source of truth for product intent and agreed constraints.
+3. Read `docs/PROGRESS_RU.md` completely for the newest operational checkpoint.
+4. Check the current repository state, active branch, and draft PR #1.
+5. Treat GitHub as the source of truth for code/history; treat the handoff as the source of truth for product intent and agreed constraints; treat `PROGRESS_RU.md` as the short live checkpoint.
 
 ## 2. Project goal
 
@@ -57,7 +58,8 @@ Until the user explicitly changes it:
 ## 6. Architecture constraints
 
 - `VV_knopka` is our orchestration/business-logic repository.
-- Do not vendor or fork the entire MoneyPrinterTurbo codebase into this repo unless there is a strong, documented reason.
+- Do not vendor or fork the entire MoneyPrinterTurbo codebase into Git history unless there is a strong, documented reason.
+- A local ignored checkout at `MoneyPrinterTurbo/` is allowed for runtime integration.
 - Integrate with current MoneyPrinterTurbo through its local API where practical.
 - MoneyPrinterTurbo currently exposes `/api/v1/videos` and task-status endpoints; verify upstream before making compatibility-sensitive changes.
 - Edge TTS is the preferred free/default TTS for the pilot unless testing shows a quality blocker.
@@ -73,8 +75,8 @@ Rules:
 
 - Continue work on the existing MVP branch/PR unless there is a concrete reason to split work.
 - Do not merge PR #1 merely because tests pass; the first two rendered pilot videos should be visually reviewed first.
-- Keep `docs/PROJECT_HANDOFF_RU.md` updated whenever a meaningful milestone, decision, blocker, command, branch/PR status, or next step changes.
-- If the handoff contradicts live GitHub state on a mechanical fact (commit SHA, CI result, file list), GitHub wins and the handoff should be corrected.
+- Keep `docs/PROJECT_HANDOFF_RU.md` updated for durable project context and `docs/PROGRESS_RU.md` updated for the newest operational checkpoint.
+- If documentation contradicts live GitHub state on a mechanical fact (commit SHA, CI result, file list), GitHub wins and docs should be corrected.
 
 ## 8. Definition of the next milestone
 
@@ -91,4 +93,4 @@ The immediate milestone is not “finish all 15 videos.” It is:
 
 ## 9. Context persistence rule
 
-At the end of every substantial work session, update `docs/PROJECT_HANDOFF_RU.md` so a fresh chat can resume from GitHub without relying on conversational memory.
+At the end of every substantial work session, update the handoff/progress docs so a fresh chat can resume from GitHub without relying on conversational memory.
