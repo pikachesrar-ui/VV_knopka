@@ -14,7 +14,7 @@ def _material(provider: str, index: int):
     return {
         "provider": provider,
         "url": f"clip-{index}.mp4",
-        "duration": 10,
+        "duration": 10 + index,
         "source_info": {
             "page_url": f"https://example.test/{provider}/{index}",
             "creator": f"creator-{index}",
@@ -25,7 +25,7 @@ def _material(provider: str, index: int):
     }
 
 
-def test_stock_manifest_preserves_provider_license_and_provenance(tmp_path):
+def test_stock_manifest_preserves_provider_license_provenance_and_duration(tmp_path):
     settings = _settings(tmp_path)
     local_dir = tmp_path / "MoneyPrinterTurbo" / "storage" / "local_videos"
     local_dir.mkdir(parents=True)
@@ -46,6 +46,7 @@ def test_stock_manifest_preserves_provider_license_and_provenance(tmp_path):
     }
     assert all(clip["commercial_use_allowed"] for clip in data["clips"])
     assert all(clip["source_url"] for clip in data["clips"])
+    assert [clip["duration"] for clip in data["clips"]] == [11, 12, 13, 14, 15, 16]
 
 
 def test_stock_manifest_refuses_too_few_unique_clips(tmp_path):
