@@ -27,7 +27,7 @@ function Find-Python311 {
 
     if (Get-Command uv -ErrorAction SilentlyContinue) {
         Write-Host "Python 3.11+ was not found. Installing Python 3.11 with uv..."
-        & uv python install 3.11
+        & uv python install 3.11 | Out-Host
         if ($LASTEXITCODE -ne 0) {
             throw "uv failed to install Python 3.11."
         }
@@ -39,7 +39,7 @@ function Find-Python311 {
 
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Host "Python 3.11+ was not found. Installing Python 3.11 with winget..."
-        & winget install --id Python.Python.3.11 -e --scope user --accept-package-agreements --accept-source-agreements
+        & winget install --id Python.Python.3.11 -e --scope user --accept-package-agreements --accept-source-agreements | Out-Host
         if ($LASTEXITCODE -ne 0) {
             throw "winget failed to install Python 3.11. Install Python 3.11 manually and rerun this script."
         }
