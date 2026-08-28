@@ -13,7 +13,7 @@
 - `vv plan 1` создан: русский Short «Почему осьминог меняет цвет во сне».
 - Первый plan-вызов OpenAI стоил `$0.0051`; общий hard cap пилота `$10`.
 - После Pexels + Pixabay vision review общий ledger: **`$0.0104 / $10.00`**.
-- Локальные тесты после multi-source версии: **`10 passed in 0.10s`**.
+- Multi-source relevance gate дал 3 реально релевантных source videos.
 
 ## Первый render slot 1 — review FAIL
 
@@ -24,54 +24,65 @@
 
 Sound root cause исправлен: adapter раньше скачивал `combined_videos` (visual-only), теперь сначала берёт MPT `videos` (final output с TTS/subtitles).
 
-Pacing изменён с 4 до 6 секунд на сегмент.
+## Material relevance — итог текущего этапа
 
-## Material relevance — реальные результаты
+- Strict Pexels slug gate: `2/8`, безопасно, но слишком низкий recall.
+- Luna visual gate на 30 Pexels previews: `2/8`.
+- Pexels + Pixabay: `3/8` unique source videos.
+- Это подтвердило, что visual filter работает, а требование 8 отдельных stock-файлов завышено для узкой темы.
 
-### 1. Strict Pexels slug gate
+Теперь quality gate считает usable duration:
 
-Требование `octopus` в Pexels URL безопасно остановило filler, но нашло только `2/8`. Критерий признан слишком жёстким.
-
-### 2. GPT-5.6 Luna visual gate на Pexels
-
-Просмотрено 30 preview images, принято только `2/8`. Вывод: проблема уже не в фильтре, а в бедности каталога Pexels по узкой теме.
-
-### 3. Pexels + Pixabay
-
-Добавлен Pixabay Video API и тот же Luna visual gate `accepted=true`, confidence >= `0.72`.
-
-Фактический локальный прогон пользователя:
-
-```text
-RuntimeError: Multi-source visual relevance gate found only 3/8 usable clips for visible anchor 'octopus' after Pexels + Pixabay.
-OpenAI spent: $0.0104 / $10.00
-10 passed in 0.10s
-```
-
-Это снова корректный fail-closed: нерелевантный filler не пропущен. Но требование **8 отдельных исходных файлов** признано продуктово неправильным для узких тем.
-
-## Текущий фикс: quality by duration, а не 8 unique files
-
-Проверен актуальный MoneyPrinterTurbo `combine_videos()`:
-
-- в `sequential` mode он берёт только первый segment каждого source;
-- в `random` mode он режет длинные source videos на несколько непересекающихся сегментов, сначала приоритизирует по одному segment от каждого unique source, затем использует следующие segments как fallback до покрытия narration.
-
-Поэтому для уже vision-approved local footage теперь вводится fallback:
-
-- предпочтение всё ещё 8 unique clips;
-- minimum unique approved sources = **3**;
+- минимум **3** unique vision-approved source videos;
 - reusable segment size = **6 sec**;
-- максимум **4 сегмента на один source** при подсчёте quality gate;
-- minimum reusable approved footage = **36 sec**;
-- confidence threshold не снижается (`>=0.72`);
-- human skin/random animals/scenery всё ещё запрещены;
-- если cached approved material удовлетворяет duration-gate, новых Pexels/Pixabay/Luna запросов не делается;
-- если оба provider pool уже исчерпаны и cached material недостаточен, команда останавливается **без повторной траты OpenAI**.
+- максимум **4 сегмента на source** для capacity calculation;
+- минимум **36 sec** reusable approved footage;
+- confidence остаётся `>=0.72`;
+- filler не разрешается.
 
-MPT adapter для curated local footage теперь использует `video_concat_mode=random`, чтобы брать разные непересекающиеся части длинных approved sources вместо повторения одного и того же первого кадра.
+MPT curated footage использует `random`: сначала по одному segment от каждого unique source, затем непересекающиеся дополнительные segments.
 
-Добавлены regression tests для duration fallback и curated MPT concat mode.
+## Второй render slot 1 — TECHNICAL PASS, QUALITY TUNING NEEDED
+
+Пользователь получил второй MP4 и подтвердил:
+
+- **звук есть**;
+- содержание/кадры уже в целом достойные;
+- результат можно считать технически рабочим;
+- quality PASS пока не ставим: нужны визуальные доработки.
+
+MPT task `d4e53d76-3be1-49f3-9dc2-fe6a944967ab`:
+
+- audio duration: ~36.82 sec;
+- Edge subtitles созданы;
+- использованы 3 approved sources: 2 Pexels portrait + 1 Pixabay landscape;
+- MPT сформировал 17 available subsegments и использовал 9 для покрытия narration;
+- final video успешно создан.
+
+### Замеченные quality-проблемы
+
+1. **Русские субтитры выглядят плохо:** большой tracking/межбуквенные интервалы, неудачные переносы слов (`хроматофо / ры`).
+   - root cause: MPT default `STHeitiMedium.ttc` — CJK font, неудачный выбор для русского.
+2. **Landscape Pixabay source имеет большие black bars** в 9:16.
+   - root cause: MPT сохраняет mismatched aspect ratio и помещает изображение на чёрный canvas.
+3. **Некоторые кадры слишком тёмные при смене.**
+   - root cause: `FadeIn` применяется отдельно к каждому 6-sec segment как fade-from-black, а не как crossfade между соседними clips.
+4. Один длинный Pixabay source закономерно используется несколькими разными segments. Это допустимо, но дальше нужно следить, чтобы повторяемость визуально не бросалась в глаза.
+
+## Текущий quality-fix в ветке
+
+До следующего render внесено:
+
+- `visual_transition = none`: убран per-clip FadeIn/black fade;
+- для русских subtitles VV_knopka локально использует Windows Cyrillic font (приоритет Arial Bold -> Segoe UI Bold -> Arial -> Segoe UI), копируя его только в ignored MPT runtime; font никогда не коммитится;
+- Russian subtitle font size = **46**;
+- subtitle position = **custom, 68%**, выше нижней UI-зоны Shorts;
+- stroke width = **2.2**;
+- landscape local stock автоматически pre-rendered в **1080x1920 blur-fill**: размытый zoomed background + полный sharp original frame по центру;
+- portrait stock остаётся без лишнего transcoding;
+- derived `*-vv916.mp4` cache переиспользуется на следующих renders.
+
+Не менять script/plan и не делать новые vision/API calls для этой quality-проверки.
 
 ## Точная следующая точка
 
@@ -86,25 +97,17 @@ git pull
 
 `vv plan 1` повторно НЕ запускать.
 
-Ожидаемый успешный cached path начинается примерно так:
+Следующий render должен использовать тот же approved stock cache и не требовать новых Luna calls. При первом запуске новый code один раз подготовит landscape Pixabay source в `*-vv916.mp4`, поэтому перед MPT task может быть дополнительная локальная FFmpeg-пауза.
 
-```text
-Reusing approved stock: 3 unique sources, XX.Xs reusable footage
-Curated stock materials: 3
-Material audit: D:\KiraS\VV_knopka\runtime\slots\01\ai_materials.json
-MPT task: ...
-```
+Проверить новый `runtime/ready_for_review/slot-01-ru-ai.mp4`:
 
-Этот запуск в идеале **не должен увеличивать OpenAI spend**, потому что использует уже проверенные 3 источника.
+- звук есть;
+- русский subtitle font выглядит нормально, без разреженных букв;
+- слова не разрываются так агрессивно;
+- subtitles не слишком низко;
+- нет black bars на landscape source;
+- нет fade-to-black на каждой смене;
+- octopus footage остаётся релевантным;
+- повторяемость одного long source не раздражает.
 
-Если cached 3 sources дают меньше 36 секунд reusable footage, команда остановится с точным количеством секунд без повторного vision bill. Тогда следующий вариант — добавить relevant still-image fallback/Ken Burns или ещё один источник, но не снижать visual relevance.
-
-После успешного render проверить `runtime/ready_for_review/slot-01-ru-ai.mp4`:
-
-- русская озвучка слышна;
-- субтитры есть;
-- все использованные segments содержат осьминога;
-- нет human skin / random fish / jellyfish / turtle filler;
-- повторное использование разных частей одного source не выглядит очевидным/навязчивым.
-
-Только после ручного PASS slot 1 переходить к slot 2. Автопубликация остаётся выключена.
+Только после ручного quality PASS slot 1 переходить к slot 2. Автопубликация остаётся выключена.
