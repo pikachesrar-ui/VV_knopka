@@ -14,13 +14,14 @@ SHORT_PLAN_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "title", "hook", "script", "search_terms", "caption", "hashtags",
+        "title", "hook", "script", "visual_anchor", "search_terms", "caption", "hashtags",
         "editorial_value", "fact_check_items", "ai_disclosure_recommended"
     ],
     "properties": {
         "title": {"type": "string"},
         "hook": {"type": "string"},
         "script": {"type": "string"},
+        "visual_anchor": {"type": "string"},
         "search_terms": {"type": "array", "minItems": 4, "maxItems": 10, "items": {"type": "string"}},
         "caption": {"type": "string"},
         "hashtags": {"type": "array", "minItems": 3, "maxItems": 8, "items": {"type": "string"}},
@@ -65,6 +66,8 @@ Language: {language_name}.
 Pipeline: {pipeline}.
 Slot: {slot}/15.
 {task}
+For visual_anchor, return one concise ENGLISH noun or noun phrase naming the visible main subject that must be present in every stock clip (examples: "octopus", "red panda", "honey bee").
+Every search term must include that exact visual_anchor. Avoid ambiguous standalone visual terms such as "skin texture", "reef", "ocean", or "forest" that could retrieve footage without the main subject.
 Search terms must describe generic footage that can be found on licensed stock providers such as Pexels/Pixabay.
 Keep the title natural, not deceptive clickbait. Hashtags must not claim something unsupported.
 Return only the requested structured object."""
