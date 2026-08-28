@@ -11,6 +11,7 @@ from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
 from .mpt import MoneyPrinterTurboClient
 from .openai_client import OpenAIPlanner
+from .pexels_curator import prepare_pexels_materials
 from .settings import load_settings
 
 
@@ -73,8 +74,18 @@ def main() -> None:
         if not plan_path.exists():
             raise SystemExit(f"missing {plan_path}; run `vv plan {slot.slot}` first")
         content = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        materials = prepare_pexels_materials(
+            settings,
+            content,
+            slot=slot.slot,
+            slot_dir=slot_dir,
+        )
+        print(f"Curated Pexels materials: {len(materials)}")
+        print(f"Material audit: {slot_dir / 'ai_materials.json'}")
+
         mpt = MoneyPrinterTurboClient(settings)
-        task_id = mpt.create_ai_video(content, slot.language)
+        task_id = mpt.create_ai_video(content, slot.language, materials=materials)
         print(f"MPT task: {task_id}")
         task = mpt.wait(task_id)
         (slot_dir / "mpt-task.json").write_text(json.dumps(task, ensure_ascii=False, indent=2), encoding="utf-8")
