@@ -25,13 +25,13 @@
 - output только в `runtime/ready_for_review`;
 - не добавлять новые платные providers без отдельного решения пользователя.
 
-Animal compilations: никакого loud bass/drop/impact/boom SFX; source/provenance и commercial-use eligibility обязательны; raw social repost pipeline запрещён как default.
+Animal compilations: никакого loud bass/drop/impact/boom; source/provenance и commercial-use eligibility обязательны; raw social repost pipeline запрещён как default.
 
 ## 2. Git workflow
 
 - default branch: `main`;
 - рабочая ветка: `mvp/pilot-scaffold`;
-- draft PR #1: `MVP: review-first 15-Short pilot scaffold`;
+- draft PR #1;
 - PR не merge без отдельного решения пользователя;
 - новый чат сначала полностью читает `AGENT.md`, этот файл и `docs/PROGRESS_RU.md`, затем проверяет live GitHub state/CI.
 
@@ -45,116 +45,123 @@ Animal compilations: никакого loud bass/drop/impact/boom SFX; source/pro
 - OpenAI/Pexels/Pixabay keys локально в `.env`;
 - MoneyPrinterTurbo v1.3.5 установлен в ignored `MoneyPrinterTurbo`;
 - MPT API работает на `127.0.0.1:8080`;
-- после последнего pull локальный pytest пользователя: **16 passed in 0.15s**.
+- перед cat-highlight v2 последний локальный pytest пользователя: **19 passed in 0.17s**.
 
-## 4. Реализованная архитектура
+## 4. AI short architecture
 
-### AI short
+Terra structured plan -> Pexels/Pixabay candidate search -> GPT-5.6 Luna image relevance gate -> approved local stock -> MPT local-material render -> Edge TTS/subtitles -> review output.
 
-Terra structured plan -> Pexels/Pixabay candidate search -> GPT-5.6 Luna image relevance gate -> downloaded local approved stock -> MPT local-material render -> Edge TTS/subtitles -> review output.
+Quality/safety:
 
-Quality/safety behavior:
-
-- MPT final `videos` скачивается раньше silent `combined_videos`;
-- visual anchor обязателен;
-- visual confidence threshold >= `0.72`;
-- narrow topics могут использовать минимум 3 unique approved sources при >=36 sec reusable footage;
-- MPT curated mode использует непересекающиеся segments длинных approved sources;
-- landscape material превращается в 1080x1920 blur-fill;
-- Russian subtitles используют локальный Windows Cyrillic font, не committed binary;
-- subtitle size/position после последнего human review: **52 / 74%**;
-- MPT per-segment FadeIn отключён;
-- stock cache теперь anchor-aware: audit от старого topic не может переиспользоваться после replan.
-
-### Automatic topic stockability
-
-Выяснилось, что хороший factual topic может быть непригоден для бесплатного stock workflow. Реальный пример: slot 3 выбрал `superb lyrebird`, но Pexels+Pixabay+Luna дали только 2 approved sources.
-
-Поэтому для AI slots **без explicit `--topic`** planner теперь ограничен broad stock-friendly anchors:
-
-`cat, dog, octopus, bee, ant, penguin, dolphin, elephant, horse, rabbit, fox, owl, parrot, turtle, snake, butterfly, spider, frog, duck, chicken`.
-
-Дополнительные правила:
-
-- не сужать anchor до rare species/subspecies/breed/scientific name;
-- факт должен действительно относиться к broad chosen animal;
-- нельзя рассказывать rare-species fact поверх generic animal footage;
-- visual anchors из предыдущих slot plans исключаются, пока остаются другие stock-friendly варианты;
-- explicit user topic override остаётся разрешён и имеет приоритет.
-
-### Animal compilation
-
-Local FFmpeg assembly остаётся отдельной веткой.
-
-Актуальный pilot flow умеет автоматически построить `sources.json` из vision-approved Pexels/Pixabay stock, сохраняя provider/provider id/creator/source URL/license/commercial flag/vision evidence.
-
-Renderer:
-
-- target сейчас 6 unique clips × ~5 sec ≈30 sec;
-- minimum unique clips = 5;
-- no transition SFX;
-- tiny visual/audio fades only;
-- source audio loudness normalization;
-- missing source audio получает silent stereo track вместо render failure;
-- all source aspect ratios получают 1080x1920 blur-fill + sharp complete foreground.
+- final MPT `videos` вместо silent intermediate `combined_videos`;
+- visual anchor обязателен, confidence >=0.72;
+- narrow topics: минимум 3 approved sources + >=36 sec reusable footage;
+- landscape -> 1080x1920 blur-fill;
+- Russian subtitle font = local Windows Cyrillic font;
+- актуальные AI subtitles: size 52, position 74%, stroke 2.2;
+- MPT per-segment FadeIn выключен;
+- material cache anchor-aware;
+- auto-selected AI topics ограничены broad stock-friendly animals, чтобы не повторять ситуацию `superb lyrebird` 2/8.
 
 ## 5. Slot 1 — Russian AI Short: MANUAL QUALITY PASS
 
 Тема: **«Почему осьминог меняет цвет во сне»**.
 
-История проблем: silent intermediate -> final video fix; unrelated Pexels filler -> Pexels+Pixabay+Luna; 8 unique clips -> duration fallback; bad CJK Russian font -> Windows Cyrillic; black bars -> blur-fill; per-clip black FadeIn -> disabled.
+Исправлялись: silent final copy, unrelated stock, low source count, bad CJK Russian font, black bars, fade-from-black.
 
-Пользователь сообщил: **«Этот результат мне нравится»**. Slot 1 считается QUALITY PASS.
+После финального просмотра пользователь сообщил: **«Этот результат мне нравится»**. Slot 1 = QUALITY PASS.
 
-После дополнительного кадра пользователь попросил сделать subtitles немного больше и ниже. Зафиксировано:
+## 6. Slot 2 — Russian cats compilation: первый render REVIEW FAIL
 
-- font size `52`;
-- custom position `74%`.
-
-## 6. Slot 2 — Russian cats compilation
-
-Пользователь хочет тест с котиками.
-
-Команды:
+Пользователь выполнил:
 
 ```powershell
 .\.venv\Scripts\vv.exe plan 2 --topic cats
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Planner при `--topic cats` обязан вернуть `visual_anchor="cat"`. Затем auto-curator ищет licensed Pexels/Pixabay clips, Luna принимает clearly visible cats, provenance сохраняется, FFmpeg собирает review montage.
+Получено 6 релевантных licensed cat clips из Pexels/Pixabay. Visual aspect handling приемлем.
 
-Output:
+Human review выявил:
 
-```text
-runtime/ready_for_review/slot-02-ru-animals.mp4
-```
+1. **практически нет звука**;
+2. видео ощущается как random moments / первые 5 sec каждого source;
+3. пользователь ожидал более интересную нарезку;
+4. пользователь предложил приятный `meow` на переходах вместо раздражающего bass-impact.
 
-Это review-only montage test; до публикации отдельно оценить editorial transformation/reused-content risk.
+Лог подтвердил audio root cause: большинство stock clips вообще не имеют audio stream. Старый renderer подставлял `anullsrc`, поэтому final AAC существовал технически, но почти весь был silence (около 2 kb/s audio bitrate).
 
-## 7. Slot 3 — English AI Short: first attempt STOCK FAIL
+## 7. Cat compilation v2 — текущая архитектура
 
-Пользователь выполнил:
+### Highlight selection
 
-```text
-vv plan 3
-vv render-ai 3
-```
+Добавлен `src/vv_knopka/animal_highlights.py`.
 
-Первый plan выбрал `visual_anchor="superb lyrebird"`.
+`render-animal` теперь перед FFmpeg assembly:
 
-Рендер fail-closed:
+- переиспользует уже найденный `sources.json`;
+- для каждого source рассматривает до 4 time windows по всей длине;
+- на каждый window локально делает 3-frame contact sheet;
+- один GPT-5.6 Luna vision call выбирает наиболее cute/funny/action-focused ~5 sec segment каждого clip;
+- Luna переставляет clips так, чтобы strongest hook был первым и дальше было разнообразие;
+- Luna пишет короткую caption <=5 слов на языке slot, связанную с реально видимым моментом;
+- результат кэшируется в `runtime/slots/02/highlights.json`;
+- при неизменном `sources.json` повторный render не должен снова платить за highlight review.
 
-```text
-Multi-source visual relevance gate found only 2/8 usable clips for visible anchor 'superb lyrebird'
-Only 2 vision-approved unique sources are cached; need at least 3.
-```
+Highlight review использует существующий `$10` ledger; max estimated one-call reservation = `$0.05`.
 
-Это стало основанием для stock-friendly planner constraint выше.
+### Video edit
 
-Важный cache fix: если `plan 3` теперь перегенерировать с другим anchor, старый `ai_materials.json` (`superb lyrebird`) не считается reusable/exhausted для нового animal. Новый stock search должен стартовать автоматически; вручную удалять audit не нужно.
+Animal renderer теперь:
 
-## 8. Точная текущая точка
+- использует выбранный `start` timestamp, а не первые 5 sec;
+- использует порядок из `highlights.json`;
+- burning captions локально через Cyrillic-capable system font;
+- сохраняет 9:16 blur-fill + sharp full foreground;
+- tiny fades остаются только мягкими, без black/bass impacts.
+
+### Sound design
+
+Final animal audio теперь должен быть слышимым даже если stock немой:
+
+- source audio сохраняется/нормализуется там, где существует;
+- VV_knopka процедурно генерирует локальный тихий bell-like playful BGM;
+- на каждом cut процедурно генерируется мягкий synthetic **meow**; чередуются 3 pitch variants;
+- procedural audio полностью локален, не скачивает внешние assets и не создаёт copyright/licensing зависимости;
+- final mix = source + BGM + meow timeline -> FFmpeg `amix` -> limiter -> AAC 192k;
+- bass/drop/impact/boom по-прежнему запрещены.
+
+Актуальный animal config:
+
+- 6 clips, минимум 5 unique;
+- 5 sec/clip;
+- caption size 58, y=76%;
+- source audio volume 0.75;
+- BGM volume 0.55;
+- meow volume 0.75;
+- `transition_sfx = "soft_meow"`.
+
+Если procedural meow human review не понравится, следующий шаг — заменить его одним реальным лицензированным meow sample, не меняя архитектуру.
+
+## 8. Tests added for cat v2
+
+Добавлены/обновлены tests:
+
+- candidate starts покрывают beginning/middle/end, а не только t=0;
+- short clip -> start 0 fallback;
+- generated BGM is non-silent stereo 48k;
+- generated meow timeline is non-silent stereo 48k;
+- `sources.json` сохраняет source duration.
+
+Точный итог pytest после этих новых commits ещё должен подтвердить пользователь/GitHub CI.
+
+## 9. Slot 3 — English AI Short
+
+Пока **на паузе по просьбе пользователя**, пока доводится cats pipeline.
+
+Первый старый plan выбрал `superb lyrebird` и fail-closed 2/8. Planner уже исправлен на broad stock-friendly anchors и anchor-aware stale cache, но сейчас не продолжать English render до нового решения пользователя.
+
+## 10. Точная текущая точка
 
 На ПК пользователя:
 
@@ -162,32 +169,33 @@ Only 2 vision-approved unique sources are cached; need at least 3.
 git pull
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-```
-
-Для slot 3 старый lyrebird plan намеренно заменить:
-
-```powershell
-.\.venv\Scripts\vv.exe plan 3
-Get-Content .\runtime\slots\03\plan.json -Raw
-.\.venv\Scripts\vv.exe render-ai 3
-```
-
-Для slot 2 независимо:
-
-```powershell
-.\.venv\Scripts\vv.exe plan 2 --topic cats
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Ожидаемые outputs:
+Важно:
+
+- `plan 2` повторно НЕ нужен;
+- `sources.json` НЕ удалять;
+- первый cat v2 render создаст `highlight_previews/` + `highlights.json`, поэтому сделает один новый Luna highlight call;
+- следующие rerenders с тем же source manifest должны переиспользовать highlight cache.
+
+Ожидаемый output:
 
 ```text
 runtime/ready_for_review/slot-02-ru-animals.mp4
-runtime/ready_for_review/slot-03-en-ai.mp4
 ```
 
-Не публиковать автоматически. После обоих renders — human review и style adjustments.
+Human review:
 
-## 9. Отложено
+- BGM слышен, но не давит;
+- source sound слышен там, где он существует;
+- meow приятный, короткий, не басовый;
+- выбранные моменты лучше случайного начала;
+- clip order ощущается намеренным;
+- captions соответствуют действию и не мешают картинке.
 
-До review slots 2-3 не делать: automatic publish, analytics feedback loop, trend hunter, social scraper, mass batch, expensive text-to-video.
+Auto-publish остаётся OFF.
+
+## 11. Отложено
+
+До quality PASS cats v2 не продолжать: English slot 3, automatic publish, analytics feedback loop, trend hunter, social scraper, mass batch, expensive text-to-video.
