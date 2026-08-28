@@ -26,10 +26,15 @@ max_estimated_cost_per_call_usd = 0.25
 aspect = "9:16"
 target_min_seconds = 25
 target_max_seconds = 45
-clip_seconds = 4
+clip_seconds = 6
 subtitle_enabled = true
 bgm_volume = 0.08
 visual_transition = "FadeIn"
+
+[materials]
+ai_material_count = 8
+pexels_per_page = 40
+require_anchor_in_pexels_slug = true
 
 [audio]
 transition_sfx = "none"
