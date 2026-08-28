@@ -1,4 +1,4 @@
-from vv_knopka.mpt import MoneyPrinterTurboClient
+from vv_knopka.mpt import MoneyPrinterTurboClient, normalize_transition
 from vv_knopka.settings import Settings
 
 
@@ -27,7 +27,14 @@ class _Client:
         return _Response()
 
 
-def test_curated_materials_use_random_concat_for_non_overlapping_segments(monkeypatch, tmp_path):
+def test_none_transition_maps_to_mpt_null():
+    assert normalize_transition("none") is None
+    assert normalize_transition("off") is None
+    assert normalize_transition(None) is None
+    assert normalize_transition("FadeIn") == "FadeIn"
+
+
+def test_curated_materials_use_random_concat_and_short_style(monkeypatch, tmp_path):
     monkeypatch.setattr("vv_knopka.mpt.httpx.Client", _Client)
     settings = Settings(
         raw={
@@ -35,9 +42,13 @@ def test_curated_materials_use_random_concat_for_non_overlapping_segments(monkey
             "video": {
                 "aspect": "9:16",
                 "clip_seconds": 6,
-                "visual_transition": "FadeIn",
+                "visual_transition": "none",
                 "bgm_volume": 0.08,
                 "subtitle_enabled": True,
+                "subtitle_font_size": 46,
+                "subtitle_position": "custom",
+                "subtitle_custom_position": 68.0,
+                "subtitle_stroke_width": 2.2,
             },
             "audio": {
                 "edge_voice_ru": "ru-RU-SvetlanaNeural-Female",
@@ -47,6 +58,8 @@ def test_curated_materials_use_random_concat_for_non_overlapping_segments(monkey
         root=tmp_path,
     )
     client = MoneyPrinterTurboClient(settings)
+    monkeypatch.setattr(client, "_ensure_windows_cyrillic_font", lambda: "VVKnopka-Cyrillic.ttf")
+    monkeypatch.setattr(client, "_prepare_vertical_materials", lambda materials: materials)
     plan = {
         "title": "Octopus",
         "script": "Test",
@@ -59,6 +72,13 @@ def test_curated_materials_use_random_concat_for_non_overlapping_segments(monkey
         materials=[{"provider": "pexels", "url": "clip.mp4", "duration": 20}],
     )
 
-    assert _Client.last_payload["video_source"] == "local"
-    assert _Client.last_payload["video_concat_mode"] == "random"
-    assert _Client.last_payload["match_materials_to_script"] is False
+    payload = _Client.last_payload
+    assert payload["video_source"] == "local"
+    assert payload["video_concat_mode"] == "random"
+    assert payload["video_transition_mode"] is None
+    assert payload["match_materials_to_script"] is False
+    assert payload["font_name"] == "VVKnopka-Cyrillic.ttf"
+    assert payload["font_size"] == 46
+    assert payload["subtitle_position"] == "custom"
+    assert payload["custom_position"] == 68.0
+    assert payload["stroke_width"] == 2.2
