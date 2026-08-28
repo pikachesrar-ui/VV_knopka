@@ -49,6 +49,8 @@
 6. Visual layout для каждого клипа — 1080x1920 blur-fill + полный sharp source в центре, чтобы не было black bars и жёсткого crop.
 7. Переходы — только tiny visual/audio fades; transition SFX отсутствуют.
 
+Это **review-only montage-style test**. Перед публикацией проверить, хватает ли оригинального editorial layer для YouTube reused-content policy; если нет, следующим шагом добавить voiceover/running joke/on-screen commentary. Автопубликация остаётся выключенной.
+
 Лицензии перепроверены 2026-08-28: Pexels License разрешает commercial use; Pixabay Content License разрешает commercial/non-commercial use subject to its restrictions. Provenance всё равно обязателен.
 
 ## Параллельный эксперимент: slot 3 — first English AI Short
