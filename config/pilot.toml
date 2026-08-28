@@ -51,6 +51,8 @@ caption_y = 0.76
 source_audio_volume = 0.75
 # Procedural backing track is intentionally quiet and contains no low bass/drop hits.
 bgm_volume = 0.55
+# Animal-only cut sound. Global transition_sfx stays locked to none by publication gate.
+transition_sfx = "soft_meow"
 # Soft procedural meow at each cut. Three pitch variants alternate automatically.
 meow_volume = 0.75
 
@@ -70,7 +72,8 @@ vision_max_estimated_cost_per_call_usd = 0.03
 highlight_vision_max_estimated_cost_usd = 0.05
 
 [audio]
-transition_sfx = "soft_meow"
+# Global transition SFX remain disabled. Animal-only soft_meow is scoped under [animal].
+transition_sfx = "none"
 forbidden_transition_tags = ["bass", "bass_drop", "impact", "boom", "sub_drop"]
 compilation_lufs = -16.0
 true_peak_db = -1.5
