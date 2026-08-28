@@ -10,7 +10,6 @@ from .budget import BudgetLedger
 from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
 from .mpt import MoneyPrinterTurboClient
-from .openai_auth import check_openai_auth, describe_openai_key
 from .openai_client import OpenAIPlanner
 from .settings import load_settings
 
@@ -29,7 +28,6 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-pilot")
     sub.add_parser("status")
-    sub.add_parser("doctor")
     plan = sub.add_parser("plan")
     plan.add_argument("slot", type=int)
     ai = sub.add_parser("render-ai")
@@ -54,14 +52,6 @@ def main() -> None:
         print(f"OpenAI spent: ${ledger.spent_usd():.4f} / ${settings.budget_usd:.2f}")
         print(f"auto_publish: {settings.auto_publish}")
         print(f"publication gate: {'PASS' if publication_gate(settings).passed else 'FAIL'}")
-        return
-
-    if args.command == "doctor":
-        print(f"OPENAI_API_KEY: {describe_openai_key()}")
-        result = check_openai_auth()
-        print(result.message)
-        if not result.ok:
-            raise SystemExit(1)
         return
 
     slot = _slot(settings, args.slot)
