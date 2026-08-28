@@ -5,7 +5,7 @@ import json
 
 from dotenv import load_dotenv
 
-from .animal_compilation import render_compilation
+from .animal_compilation import render_compilation, write_stock_sources_manifest
 from .budget import BudgetLedger
 from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
@@ -93,6 +93,7 @@ def main() -> None:
     sub.add_parser("status")
     plan = sub.add_parser("plan")
     plan.add_argument("slot", type=int)
+    plan.add_argument("--topic", default=None, help="Explicit topic/animal requested by the user")
     ai = sub.add_parser("render-ai")
     ai.add_argument("slot", type=int)
     animal = sub.add_parser("render-animal")
@@ -123,7 +124,12 @@ def main() -> None:
 
     if args.command == "plan":
         planner = OpenAIPlanner(settings, ledger)
-        content = planner.create_plan(slot=slot.slot, pipeline=slot.pipeline, language=slot.language)
+        content = planner.create_plan(
+            slot=slot.slot,
+            pipeline=slot.pipeline,
+            language=slot.language,
+            topic_hint=args.topic,
+        )
         path = slot_dir / "plan.json"
         path.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
         print(path)
@@ -159,7 +165,31 @@ def main() -> None:
     if args.command == "render-animal":
         if slot.pipeline != "animal_compilation":
             raise SystemExit("render-animal can only be used on animal_compilation slots")
+        plan_path = slot_dir / "plan.json"
+        if not plan_path.exists():
+            raise SystemExit(f"missing {plan_path}; run `vv plan {slot.slot} --topic cats` first")
+        content = json.loads(plan_path.read_text(encoding="utf-8"))
         source_manifest = slot_dir / "sources.json"
+
+        if not source_manifest.exists():
+            materials = _prepare_ai_materials(
+                settings,
+                content,
+                slot=slot.slot,
+                slot_dir=slot_dir,
+                ledger=ledger,
+            )
+            animal_cfg = settings.raw.get("animal", {})
+            write_stock_sources_manifest(
+                settings,
+                materials,
+                source_manifest,
+                max_clips=int(animal_cfg.get("material_count", 6)),
+                min_unique_clips=int(animal_cfg.get("min_unique_materials", 5)),
+            )
+            print(f"Auto-curated licensed animal sources: {source_manifest}")
+            print(f"Material audit: {slot_dir / 'ai_materials.json'}")
+
         output = settings.runtime_dir / "ready_for_review" / f"slot-{slot.slot:02d}-{slot.language}-animals.mp4"
         print(render_compilation(settings, source_manifest, output))
         return
