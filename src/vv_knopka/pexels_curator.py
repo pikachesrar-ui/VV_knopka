@@ -214,7 +214,6 @@ def _vision_review_batch(
     if not candidates:
         return []
 
-    cfg = settings.raw["openai"]
     materials_cfg = settings.raw.get("materials", {})
     model = str(materials_cfg.get("vision_model", "gpt-5.6-luna"))
     estimated = float(materials_cfg.get("vision_max_estimated_cost_per_call_usd", 0.03))
@@ -585,20 +584,30 @@ def prepare_pexels_materials(
         target_count=target_count,
     )
 
+    previous_pexels_stats = (previous_audit.get("providers") or {}).get("pexels") or {}
+    previous_pexels_reviewed = int(
+        previous_pexels_stats.get("vision_reviewed")
+        or previous_audit.get("vision_reviewed")
+        or 0
+    )
+    cached_pexels_count = sum(
+        1 for info in provenance if str(info.get("provider") or "") == "pexels"
+    )
+
     provider_stats: dict[str, Any] = {
         "cache": {"reused": len(selected)},
-        "pexels": {"candidates": 0, "vision_reviewed": 0, "vision_approved": 0},
+        "pexels": {
+            "candidates": int(previous_pexels_stats.get("candidates") or previous_audit.get("candidate_count") or 0),
+            "vision_reviewed": previous_pexels_reviewed,
+            "vision_approved": int(previous_pexels_stats.get("vision_approved") or previous_audit.get("vision_approved") or cached_pexels_count),
+            "reused_from_previous_audit": bool(previous_pexels_reviewed),
+        },
         "pixabay": {"candidates": 0, "vision_reviewed": 0, "vision_approved": 0},
     }
     new_decisions: dict[str, list[dict[str, Any]]] = {"pexels": [], "pixabay": []}
 
-    # If the immediately previous run already exhausted the configured Pexels
-    # preview budget for this anchor, do not pay to review the same pool again.
-    previous_pexels_reviewed = int(
-        ((previous_audit.get("providers") or {}).get("pexels") or {}).get("vision_reviewed")
-        or previous_audit.get("vision_reviewed")
-        or 0
-    )
+    # If a previous run already exhausted the configured Pexels preview budget
+    # for this anchor, do not pay to review the same pool again.
     pexels_exhausted = previous_pexels_reviewed >= max_candidates
 
     if len(selected) < target_count and not pexels_exhausted:
@@ -627,6 +636,7 @@ def prepare_pexels_materials(
             "candidates": len(pexels_candidates),
             "vision_reviewed": len(decisions),
             "vision_approved": len(approved),
+            "reused_from_previous_audit": False,
         }
         new_decisions["pexels"] = decisions
         with httpx.Client(timeout=120, follow_redirects=True) as client:
