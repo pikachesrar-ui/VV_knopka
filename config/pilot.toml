@@ -29,7 +29,17 @@ target_max_seconds = 45
 clip_seconds = 6
 subtitle_enabled = true
 bgm_volume = 0.08
-visual_transition = "FadeIn"
+# MPT FadeIn fades every source from black rather than crossfading clips.
+# Keep clean cuts until VV_knopka implements a true transition layer.
+visual_transition = "none"
+subtitle_font_name = "VVKnopka-Cyrillic.ttf"
+subtitle_font_name_en = "BeVietnamPro-Bold.ttf"
+subtitle_font_size = 46
+subtitle_position = "custom"
+subtitle_custom_position = 68.0
+subtitle_color = "#FFFFFF"
+subtitle_stroke_color = "#000000"
+subtitle_stroke_width = 2.2
 
 [materials]
 ai_material_count = 8
