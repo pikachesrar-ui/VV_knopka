@@ -40,7 +40,14 @@ class OpenAIPlanner:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is not set")
 
-    def create_plan(self, *, slot: int, pipeline: str, language: str) -> dict[str, Any]:
+    def create_plan(
+        self,
+        *,
+        slot: int,
+        pipeline: str,
+        language: str,
+        topic_hint: str | None = None,
+    ) -> dict[str, Any]:
         cfg = self.settings.raw["openai"]
         model = cfg["writer_model"]
         self.ledger.ensure_room(float(cfg["max_estimated_cost_per_call_usd"]))
@@ -60,12 +67,25 @@ class OpenAIPlanner:
                 "bass drops, impact booms, or loud transition effects."
             )
 
+        topic_instruction = ""
+        if topic_hint:
+            normalized_topic = topic_hint.strip()
+            topic_instruction = (
+                f"\nExplicit user topic request: {normalized_topic!r}. Honor this request rather than choosing a different animal."
+            )
+            if normalized_topic.lower() in {"cat", "cats", "kitten", "kittens", "кот", "коты", "котики", "кошки"}:
+                topic_instruction += (
+                    " This is a domestic-cat video: set visual_anchor exactly to \"cat\". "
+                    "Search terms should seek clearly visible playful/cute/curious domestic cats or kittens, "
+                    "while every search term still contains the exact word \"cat\"."
+                )
+
         prompt = f"""You are the editor of a review-first Shorts pilot.
 Niche: Animals / Nature Curiosities.
 Language: {language_name}.
 Pipeline: {pipeline}.
 Slot: {slot}/15.
-{task}
+{task}{topic_instruction}
 For visual_anchor, return one concise ENGLISH noun or noun phrase naming the visible main subject that must be present in every stock clip (examples: "octopus", "red panda", "honey bee").
 Every search term must include that exact visual_anchor. Avoid ambiguous standalone visual terms such as "skin texture", "reef", "ocean", or "forest" that could retrieve footage without the main subject.
 Search terms must describe generic footage that can be found on licensed stock providers such as Pexels/Pixabay.
