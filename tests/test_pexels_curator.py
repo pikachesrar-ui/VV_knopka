@@ -1,4 +1,8 @@
-from vv_knopka.pexels_curator import infer_visual_anchor, pexels_page_matches_anchor
+from vv_knopka.pexels_curator import (
+    infer_visual_anchor,
+    pexels_page_matches_anchor,
+    select_vision_approved_candidates,
+)
 
 
 def test_infer_visual_anchor_from_existing_slot_one_plan():
@@ -14,7 +18,7 @@ def test_infer_visual_anchor_from_existing_slot_one_plan():
     assert infer_visual_anchor(plan) == "octopus"
 
 
-def test_pexels_anchor_filter_rejects_unrelated_filler():
+def test_slug_is_only_a_metadata_signal():
     assert pexels_page_matches_anchor(
         "https://www.pexels.com/video/close-up-video-of-an-octopus-17836505/",
         "octopus",
@@ -23,7 +27,23 @@ def test_pexels_anchor_filter_rejects_unrelated_filler():
         "https://www.pexels.com/video/skin-texture-close-up-7477545/",
         "octopus",
     )
-    assert not pexels_page_matches_anchor(
-        "https://www.pexels.com/video/tropical-fish-on-coral-reef-37906980/",
-        "octopus",
+
+
+def test_vision_gate_rejects_unrelated_and_low_confidence_candidates():
+    candidates = [
+        {"id": 1, "slug_mentions_anchor": False},
+        {"id": 2, "slug_mentions_anchor": True},
+        {"id": 3, "slug_mentions_anchor": False},
+    ]
+    decisions = [
+        {"id": 1, "accepted": True, "confidence": 0.96, "reason": "octopus clearly visible"},
+        {"id": 2, "accepted": False, "confidence": 0.99, "reason": "only coral and fish"},
+        {"id": 3, "accepted": True, "confidence": 0.50, "reason": "ambiguous shape"},
+    ]
+    approved = select_vision_approved_candidates(
+        candidates,
+        decisions,
+        minimum_confidence=0.72,
     )
+    assert [item["id"] for item in approved] == [1]
+    assert approved[0]["vision_confidence"] == 0.96
