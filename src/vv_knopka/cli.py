@@ -82,7 +82,7 @@ def main() -> None:
             slot_dir=slot_dir,
             ledger=ledger,
         )
-        print(f"Curated Pexels materials: {len(materials)}")
+        print(f"Curated stock materials: {len(materials)}")
         print(f"Material audit: {slot_dir / 'ai_materials.json'}")
 
         mpt = MoneyPrinterTurboClient(settings)
