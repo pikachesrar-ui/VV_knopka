@@ -74,22 +74,21 @@ Current review vehicle: **draft PR #1** into `main`.
 Rules:
 
 - Continue work on the existing MVP branch/PR unless there is a concrete reason to split work.
-- Do not merge PR #1 merely because tests pass; the first two rendered pilot videos should be visually reviewed first.
+- Do not merge PR #1 merely because tests pass; rendered pilot videos must be visually reviewed first.
 - Keep `docs/PROJECT_HANDOFF_RU.md` updated for durable project context and `docs/PROGRESS_RU.md` updated for the newest operational checkpoint.
 - If documentation contradicts live GitHub state on a mechanical fact (commit SHA, CI result, file list), GitHub wins and docs should be corrected.
 
-## 8. Definition of the next milestone
+## 8. Current milestone
 
-The immediate milestone is not “finish all 15 videos.” It is:
+Slot 1 (Russian `ai_short`, octopus) has received manual **QUALITY PASS** after sound, relevance, subtitle, aspect-ratio, and transition fixes.
 
-1. Set up the project on the user's Windows PC.
-2. Configure the OpenAI key locally.
-3. Run the status/budget checks.
-4. Install/start MoneyPrinterTurbo locally.
-5. Produce **slot 1: Russian `ai_short`**.
-6. Inspect the rendered result manually.
-7. Produce **slot 2: Russian `animal_compilation`** after obtaining suitable licensed/source-tracked clips.
-8. Use those two videos to adjust style/quality before batch-producing the remaining 13.
+The immediate milestone is now:
+
+1. Produce **slot 2: Russian `animal_compilation` about cats** from source-tracked licensed stock.
+2. Human-review montage pacing, audio, framing, and transition feel.
+3. Produce **slot 3: first English `ai_short`** using the proven slot-1 quality stack.
+4. Human-review slot 3 voice/subtitles/footage and fact claims.
+5. Only then decide what additional style layer is needed before producing the remaining pilot videos.
 
 ## 9. Context persistence rule
 
