@@ -2,6 +2,15 @@
 
 Review-first AI-assisted short-form video studio for a small YouTube Shorts experiment.
 
+## Continue in a new chat / agent session
+
+Before doing any project work, read these two files completely:
+
+1. [`AGENT.md`](AGENT.md) — mandatory rules and frozen pilot constraints.
+2. [`docs/PROJECT_HANDOFF_RU.md`](docs/PROJECT_HANDOFF_RU.md) — detailed current status, completed work, blockers, commands, and next steps.
+
+Then verify the live GitHub state of `main`, `mvp/pilot-scaffold`, and draft PR #1.
+
 ## Pilot
 
 Produce **15 review-ready Shorts** on one test channel:
