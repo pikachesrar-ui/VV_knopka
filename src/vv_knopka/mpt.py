@@ -49,7 +49,12 @@ class MoneyPrinterTurboClient:
             "video_script": plan["script"],
             "video_terms": plan["search_terms"],
             "video_aspect": video_cfg["aspect"],
-            "video_concat_mode": "sequential",
+            # In sequential mode MPT intentionally takes only the first segment
+            # from each source. For vision-approved local footage, random mode
+            # first prioritizes one segment per unique source and then uses later
+            # non-overlapping segments as fallback. This lets a small number of
+            # highly relevant long clips cover the narration without filler.
+            "video_concat_mode": "random" if use_curated_materials else "sequential",
             "video_transition_mode": video_cfg.get("visual_transition"),
             "video_clip_duration": int(video_cfg["clip_seconds"]),
             "video_count": 1,
