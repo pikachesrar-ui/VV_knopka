@@ -23,7 +23,7 @@ def _slot(settings, number: int):
     return slots[number]
 
 
-def _multi_source_audit_exhausted(slot_dir) -> bool:
+def _multi_source_audit_exhausted(slot_dir, *, expected_anchor: str | None = None) -> bool:
     audit_path = slot_dir / "ai_materials.json"
     if not audit_path.exists():
         return False
@@ -31,6 +31,14 @@ def _multi_source_audit_exhausted(slot_dir) -> bool:
         audit = json.loads(audit_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
+
+    normalized_expected = str(expected_anchor or "").strip()
+    audit_anchor = str(audit.get("visual_anchor") or "").strip()
+    if normalized_expected and audit_anchor.casefold() != normalized_expected.casefold():
+        # This audit belongs to an older plan for the same slot. It must not
+        # suppress a fresh search for the new animal/topic.
+        return False
+
     providers = audit.get("providers") or {}
     pexels_reviewed = int((providers.get("pexels") or {}).get("vision_reviewed") or 0)
     pixabay_reviewed = int((providers.get("pixabay") or {}).get("vision_reviewed") or 0)
@@ -38,11 +46,17 @@ def _multi_source_audit_exhausted(slot_dir) -> bool:
 
 
 def _prepare_ai_materials(settings, content, *, slot, slot_dir, ledger):
-    # Prefer the already-reviewed local cache. Narrow subjects often have only a
-    # few good stock sources; MPT can safely use later non-overlapping segments
-    # from those long approved sources in random concat mode.
+    expected_anchor = str(content.get("visual_anchor") or "").strip()
+
+    # Prefer the already-reviewed local cache only when it belongs to the current
+    # plan's visible subject. Re-planning a slot with a different animal must
+    # trigger a new stock search rather than inheriting the previous audit.
     try:
-        materials, stats = load_duration_sufficient_materials(settings, slot_dir=slot_dir)
+        materials, stats = load_duration_sufficient_materials(
+            settings,
+            slot_dir=slot_dir,
+            expected_anchor=expected_anchor,
+        )
         print(
             "Reusing approved stock: "
             f"{stats['unique_sources']} unique sources, "
@@ -50,10 +64,9 @@ def _prepare_ai_materials(settings, content, *, slot, slot_dir, ledger):
         )
         return materials
     except CuratedMaterialFallbackError as cached_error:
-        # If both providers have already been visually exhausted, another call
-        # would only spend money reviewing the same pool again. Fail without a
-        # new API charge and surface the duration/source diagnostic instead.
-        if _multi_source_audit_exhausted(slot_dir):
+        # If both providers have already been visually exhausted for THIS anchor,
+        # another call would only spend money reviewing the same pool again.
+        if _multi_source_audit_exhausted(slot_dir, expected_anchor=expected_anchor):
             raise SystemExit(
                 f"Cached multi-source audit is exhausted: {cached_error} "
                 "No additional vision calls were made."
@@ -73,7 +86,11 @@ def _prepare_ai_materials(settings, content, *, slot, slot_dir, ledger):
         # more meaningful duration-based fallback, so check once before surfacing
         # the original failure.
         try:
-            materials, stats = load_duration_sufficient_materials(settings, slot_dir=slot_dir)
+            materials, stats = load_duration_sufficient_materials(
+                settings,
+                slot_dir=slot_dir,
+                expected_anchor=expected_anchor,
+            )
             print(
                 "Using duration-sufficient approved stock: "
                 f"{stats['unique_sources']} unique sources, "
