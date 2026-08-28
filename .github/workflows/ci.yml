@@ -23,3 +23,22 @@ jobs:
         run: pytest -q
       - name: Verify pilot lock
         run: vv status
+
+  windows-bootstrap:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Put Python 3.10 on PATH to reproduce the reported machine state
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.6"
+      - name: Install uv fallback
+        uses: astral-sh/setup-uv@v6
+      - name: Run Windows bootstrap
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
+      - name: Verify venv Python and pilot lock
+        shell: powershell
+        run: |
+          .\.venv\Scripts\python.exe -c "import sys; assert sys.version_info >= (3,11); print(sys.version)"
+          .\.venv\Scripts\vv.exe status
