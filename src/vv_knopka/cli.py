@@ -9,6 +9,7 @@ from .animal_compilation import render_compilation
 from .budget import BudgetLedger
 from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
+from .material_fallback import CuratedMaterialFallbackError, load_duration_sufficient_materials
 from .mpt import MoneyPrinterTurboClient
 from .openai_client import OpenAIPlanner
 from .pexels_curator import prepare_pexels_materials
@@ -20,6 +21,67 @@ def _slot(settings, number: int):
     if number not in slots:
         raise SystemExit(f"slot must be 1..{len(slots)}")
     return slots[number]
+
+
+def _multi_source_audit_exhausted(slot_dir) -> bool:
+    audit_path = slot_dir / "ai_materials.json"
+    if not audit_path.exists():
+        return False
+    try:
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    providers = audit.get("providers") or {}
+    pexels_reviewed = int((providers.get("pexels") or {}).get("vision_reviewed") or 0)
+    pixabay_reviewed = int((providers.get("pixabay") or {}).get("vision_reviewed") or 0)
+    return pexels_reviewed > 0 and pixabay_reviewed > 0
+
+
+def _prepare_ai_materials(settings, content, *, slot, slot_dir, ledger):
+    # Prefer the already-reviewed local cache. Narrow subjects often have only a
+    # few good stock sources; MPT can safely use later non-overlapping segments
+    # from those long approved sources in random concat mode.
+    try:
+        materials, stats = load_duration_sufficient_materials(settings, slot_dir=slot_dir)
+        print(
+            "Reusing approved stock: "
+            f"{stats['unique_sources']} unique sources, "
+            f"{stats['reusable_seconds']:.1f}s reusable footage"
+        )
+        return materials
+    except CuratedMaterialFallbackError as cached_error:
+        # If both providers have already been visually exhausted, another call
+        # would only spend money reviewing the same pool again. Fail without a
+        # new API charge and surface the duration/source diagnostic instead.
+        if _multi_source_audit_exhausted(slot_dir):
+            raise SystemExit(
+                f"Cached multi-source audit is exhausted: {cached_error} "
+                "No additional vision calls were made."
+            ) from cached_error
+
+    try:
+        return prepare_pexels_materials(
+            settings,
+            content,
+            slot=slot,
+            slot_dir=slot_dir,
+            ledger=ledger,
+        )
+    except RuntimeError:
+        # The search function writes its audit before failing on the old 8-file
+        # preference. The newly downloaded approved clips may still satisfy the
+        # more meaningful duration-based fallback, so check once before surfacing
+        # the original failure.
+        try:
+            materials, stats = load_duration_sufficient_materials(settings, slot_dir=slot_dir)
+            print(
+                "Using duration-sufficient approved stock: "
+                f"{stats['unique_sources']} unique sources, "
+                f"{stats['reusable_seconds']:.1f}s reusable footage"
+            )
+            return materials
+        except CuratedMaterialFallbackError:
+            raise
 
 
 def main() -> None:
@@ -75,7 +137,7 @@ def main() -> None:
             raise SystemExit(f"missing {plan_path}; run `vv plan {slot.slot}` first")
         content = json.loads(plan_path.read_text(encoding="utf-8"))
 
-        materials = prepare_pexels_materials(
+        materials = _prepare_ai_materials(
             settings,
             content,
             slot=slot.slot,
