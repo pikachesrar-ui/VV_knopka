@@ -45,9 +45,9 @@ def test_curated_materials_use_random_concat_and_short_style(monkeypatch, tmp_pa
                 "visual_transition": "none",
                 "bgm_volume": 0.08,
                 "subtitle_enabled": True,
-                "subtitle_font_size": 46,
+                "subtitle_font_size": 52,
                 "subtitle_position": "custom",
-                "subtitle_custom_position": 68.0,
+                "subtitle_custom_position": 74.0,
                 "subtitle_stroke_width": 2.2,
             },
             "audio": {
@@ -78,7 +78,7 @@ def test_curated_materials_use_random_concat_and_short_style(monkeypatch, tmp_pa
     assert payload["video_transition_mode"] is None
     assert payload["match_materials_to_script"] is False
     assert payload["font_name"] == "VVKnopka-Cyrillic.ttf"
-    assert payload["font_size"] == 46
+    assert payload["font_size"] == 52
     assert payload["subtitle_position"] == "custom"
-    assert payload["custom_position"] == 68.0
+    assert payload["custom_position"] == 74.0
     assert payload["stroke_width"] == 2.2
