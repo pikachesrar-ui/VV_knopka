@@ -63,14 +63,17 @@ def _ffprobe_duration(path: Path) -> float:
 
 
 def _contact_sheet(video: Path, start: float, seconds: float, output: Path) -> Path:
-    """Create one 3-frame strip representing a candidate time window."""
+    """Create one compact 3-frame strip representing a candidate time window."""
     output.parent.mkdir(parents=True, exist_ok=True)
     fps = 3.0 / max(seconds, 0.5)
+    # Keep these intentionally small: the full highlight review can contain up
+    # to 24 candidate images. Low-detail vision does not benefit from sending a
+    # large Base64 payload here.
     vf = (
         f"fps={fps:.6f},"
-        "scale=320:568:force_original_aspect_ratio=decrease,"
-        "pad=320:568:(ow-iw)/2:(oh-ih)/2:color=black,"
-        "tile=3x1:padding=4:margin=0"
+        "scale=240:426:force_original_aspect_ratio=decrease,"
+        "pad=240:426:(ow-iw)/2:(oh-ih)/2:color=black,"
+        "tile=3x1:padding=3:margin=0"
     )
     command = [
         _ffmpeg_binary(),
@@ -86,7 +89,7 @@ def _contact_sheet(video: Path, start: float, seconds: float, output: Path) -> P
         "-frames:v",
         "1",
         "-q:v",
-        "4",
+        "6",
         str(output),
     ]
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
@@ -116,11 +119,152 @@ def _extract_output_text(data: dict[str, Any]) -> str:
     return "".join(texts)
 
 
+def _response_error_detail(response: httpx.Response) -> str:
+    """Return a useful OpenAI error without ever echoing request headers/keys."""
+    try:
+        body = response.json()
+    except Exception:
+        text = (response.text or "").strip().replace("\n", " ")
+        return text[:600] or f"HTTP {response.status_code}"
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, dict):
+        parts = []
+        for key in ("message", "type", "code", "param"):
+            value = error.get(key)
+            if value not in (None, ""):
+                parts.append(f"{key}={value}")
+        if parts:
+            return "; ".join(parts)[:900]
+    return json.dumps(body, ensure_ascii=False)[:900]
+
+
 def _manifest_signature(source_manifest: Path, clip_seconds: float) -> str:
     digest = hashlib.sha256()
     digest.update(source_manifest.read_bytes())
-    digest.update(f"|clip_seconds={clip_seconds:.3f}|highlight-v2".encode("utf-8"))
+    digest.update(f"|clip_seconds={clip_seconds:.3f}|highlight-v3".encode("utf-8"))
     return digest.hexdigest()
+
+
+def _single_clip_fallback(
+    *,
+    settings: Settings,
+    ledger: BudgetLedger,
+    model: str,
+    api_key: str,
+    clip_candidates: list[dict[str, Any]],
+    language_name: str,
+    editorial_plan: dict[str, Any],
+    total_estimate: float,
+    slot_dir: Path,
+) -> tuple[list[int], dict[int, dict[str, Any]]]:
+    """Retry highlight choice one clip at a time after a large request is forbidden.
+
+    This keeps each request to at most four compact Base64 images. It also gives
+    us a precise provider error if even the reduced request is denied.
+    """
+    selections: dict[int, dict[str, Any]] = {}
+    per_call_estimate = max(total_estimate / max(len(clip_candidates), 1), 0.005)
+
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["candidate", "score", "description", "caption"],
+        "properties": {
+            "candidate": {"type": "string", "pattern": "^[A-D]$"},
+            "score": {"type": "number", "minimum": 0, "maximum": 10},
+            "description": {"type": "string"},
+            "caption": {"type": "string"},
+        },
+    }
+
+    for entry in clip_candidates:
+        clip_index = int(entry["clip_index"])
+        content: list[dict[str, Any]] = [
+            {
+                "type": "input_text",
+                "text": (
+                    "Choose the most engaging 5-second candidate from this cute-cat source clip. "
+                    "Prefer visible action, reaction, play, surprise, or an especially cute moment over idle setup. "
+                    f"Write one playful on-screen caption in {language_name}, maximum 5 words, no emojis, "
+                    "and describe only what is visibly happening. "
+                    f"Editorial concept: title={editorial_plan.get('title')!r}; "
+                    f"hook={editorial_plan.get('hook')!r}."
+                ),
+            }
+        ]
+        candidate_map: dict[str, dict[str, Any]] = {}
+        for candidate in entry["candidates"]:
+            label = str(candidate["label"])
+            candidate_map[label] = candidate
+            content.append(
+                {
+                    "type": "input_text",
+                    "text": f"Candidate {label}, start {float(candidate['start']):.2f}s",
+                }
+            )
+            content.append(
+                {
+                    "type": "input_image",
+                    "image_url": _data_url(Path(candidate["preview"])),
+                    "detail": "low",
+                }
+            )
+
+        ledger.ensure_room(per_call_estimate)
+        payload = {
+            "model": model,
+            "input": [{"role": "user", "content": content}],
+            "reasoning": {"effort": "none"},
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "vv_animal_single_highlight",
+                    "strict": True,
+                    "schema": schema,
+                },
+                "verbosity": "low",
+            },
+            "max_output_tokens": 500,
+            "store": False,
+        }
+        with httpx.Client(timeout=180) as client:
+            response = client.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+        if response.status_code == 403:
+            raise RuntimeError(
+                "OpenAI highlight vision was forbidden even after reducing to one clip / four images. "
+                f"Provider detail: {_response_error_detail(response)}"
+            )
+        response.raise_for_status()
+        data = response.json()
+        parsed = json.loads(_extract_output_text(data))
+        chosen = candidate_map.get(str(parsed.get("candidate") or ""))
+        if chosen is None:
+            raise RuntimeError(f"Highlight fallback returned an invalid candidate for clip {clip_index}")
+
+        usage = data.get("usage") or {}
+        ledger.record(
+            model=model,
+            input_tokens=int(usage.get("input_tokens", 0)),
+            output_tokens=int(usage.get("output_tokens", 0)),
+            purpose=f"slot-highlight-fallback:{slot_dir.name}:clip-{clip_index}",
+        )
+        selections[clip_index] = {
+            "clip_index": clip_index,
+            "candidate": str(parsed["candidate"]),
+            "start": float(chosen["start"]),
+            "score": float(parsed["score"]),
+            "description": str(parsed["description"]).strip(),
+            "caption": str(parsed["caption"]).strip()[:80],
+        }
+
+    # Strongest moment first. Remaining sources are all unique, so a stable
+    # score sort gives a useful rhythm without a seventh model call.
+    order = sorted(selections, key=lambda idx: (-float(selections[idx]["score"]), idx))
+    return order, selections
 
 
 def select_highlights(
@@ -141,7 +285,7 @@ def select_highlights(
             cached = json.loads(output.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             cached = {}
-        if cached.get("source_signature") == signature and cached.get("version") == 2:
+        if cached.get("source_signature") == signature and cached.get("version") == 3:
             return output
 
     raw = json.loads(source_manifest.read_text(encoding="utf-8"))
@@ -241,7 +385,7 @@ def select_highlights(
     payload = {
         "model": model,
         "input": [{"role": "user", "content": user_content}],
-        "reasoning": {"effort": "low"},
+        "reasoning": {"effort": "none"},
         "text": {
             "format": {
                 "type": "json_schema",
@@ -251,6 +395,7 @@ def select_highlights(
             },
             "verbosity": "low",
         },
+        "max_output_tokens": 1800,
         "store": False,
     }
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -263,55 +408,68 @@ def select_highlights(
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json=payload,
         )
+
+    if response.status_code == 403:
+        order, selections_by_index = _single_clip_fallback(
+            settings=settings,
+            ledger=ledger,
+            model=model,
+            api_key=api_key,
+            clip_candidates=clip_candidates,
+            language_name=language_name,
+            editorial_plan=editorial_plan,
+            total_estimate=estimate,
+            slot_dir=slot_dir,
+        )
+    else:
         response.raise_for_status()
         data = response.json()
-
-    parsed = json.loads(_extract_output_text(data))
-    usage = data.get("usage") or {}
-    ledger.record(
-        model=model,
-        input_tokens=int(usage.get("input_tokens", 0)),
-        output_tokens=int(usage.get("output_tokens", 0)),
-        purpose=f"slot-highlight:{slot_dir.name}:{language}",
-    )
-
-    selections_by_index: dict[int, dict[str, Any]] = {}
-    candidates_by_index = {entry["clip_index"]: entry for entry in clip_candidates}
-    for selection in parsed.get("selections", []):
-        index = int(selection["clip_index"])
-        if index in selections_by_index or index not in candidates_by_index:
-            continue
-        candidate_map = {
-            item["label"]: item for item in candidates_by_index[index]["candidates"]
-        }
-        chosen = candidate_map.get(str(selection["candidate"]))
-        if not chosen:
-            continue
-        selections_by_index[index] = {
-            "clip_index": index,
-            "candidate": str(selection["candidate"]),
-            "start": float(chosen["start"]),
-            "score": float(selection["score"]),
-            "description": str(selection["description"]).strip(),
-            "caption": str(selection["caption"]).strip()[:80],
-        }
-
-    if len(selections_by_index) != count:
-        raise RuntimeError(
-            f"Highlight editor returned {len(selections_by_index)}/{count} valid selections"
+        parsed = json.loads(_extract_output_text(data))
+        usage = data.get("usage") or {}
+        ledger.record(
+            model=model,
+            input_tokens=int(usage.get("input_tokens", 0)),
+            output_tokens=int(usage.get("output_tokens", 0)),
+            purpose=f"slot-highlight:{slot_dir.name}:{language}",
         )
 
-    order_raw = [int(value) for value in parsed.get("order", [])]
-    order: list[int] = []
-    for value in order_raw:
-        if value in selections_by_index and value not in order:
-            order.append(value)
-    for value in range(1, count + 1):
-        if value not in order:
-            order.append(value)
+        selections_by_index: dict[int, dict[str, Any]] = {}
+        candidates_by_index = {entry["clip_index"]: entry for entry in clip_candidates}
+        for selection in parsed.get("selections", []):
+            index = int(selection["clip_index"])
+            if index in selections_by_index or index not in candidates_by_index:
+                continue
+            candidate_map = {
+                item["label"]: item for item in candidates_by_index[index]["candidates"]
+            }
+            chosen = candidate_map.get(str(selection["candidate"]))
+            if not chosen:
+                continue
+            selections_by_index[index] = {
+                "clip_index": index,
+                "candidate": str(selection["candidate"]),
+                "start": float(chosen["start"]),
+                "score": float(selection["score"]),
+                "description": str(selection["description"]).strip(),
+                "caption": str(selection["caption"]).strip()[:80],
+            }
+
+        if len(selections_by_index) != count:
+            raise RuntimeError(
+                f"Highlight editor returned {len(selections_by_index)}/{count} valid selections"
+            )
+
+        order_raw = [int(value) for value in parsed.get("order", [])]
+        order = []
+        for value in order_raw:
+            if value in selections_by_index and value not in order:
+                order.append(value)
+        for value in range(1, count + 1):
+            if value not in order:
+                order.append(value)
 
     result = {
-        "version": 2,
+        "version": 3,
         "source_signature": signature,
         "clip_seconds": float(clip_seconds),
         "language": language,
