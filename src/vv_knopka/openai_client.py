@@ -7,7 +7,6 @@ from typing import Any
 import httpx
 
 from .budget import BudgetLedger
-from .openai_auth import safe_openai_error
 from .settings import Settings
 
 
@@ -85,19 +84,14 @@ Return only the requested structured object."""
             },
             "store": False,
         }
-        try:
-            with httpx.Client(timeout=120) as client:
-                response = client.post(
-                    "https://api.openai.com/v1/responses",
-                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                    json=payload,
-                )
-        except httpx.RequestError as exc:
-            raise RuntimeError(f"Could not reach OpenAI API: {type(exc).__name__}") from None
-
-        if response.status_code >= 400:
-            raise RuntimeError(safe_openai_error(response))
-        data = response.json()
+        with httpx.Client(timeout=120) as client:
+            response = client.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
 
         text = data.get("output_text") or _extract_output_text(data)
         plan = json.loads(text)
