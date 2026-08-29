@@ -9,9 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 from .animal_audio_sources import has_audible_audio
 from .settings import Settings, load_settings
+from .trend_discovery import _is_creative_commons
 
 
 def _ffprobe_duration(path: Path) -> float:
@@ -61,6 +64,39 @@ def select_candidate(report: dict[str, Any], rank: int) -> dict[str, Any]:
     return dict(candidate)
 
 
+def verify_youtube_cc_license(candidate: dict[str, Any]) -> str:
+    """Re-check the selected YouTube page without downloading media or using an API key."""
+    existing = str(candidate.get("license") or "").strip()
+    if candidate.get("rights_status") == "creative_commons_attribution_required" and _is_creative_commons(existing):
+        return existing
+
+    source_url = str(candidate.get("url") or "").strip()
+    if not source_url:
+        raise ValueError("selected trend candidate has no YouTube URL to verify")
+    options = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+        "socket_timeout": 30,
+    }
+    try:
+        with YoutubeDL(options) as ydl:
+            info = ydl.extract_info(source_url, download=False)
+    except DownloadError as exc:
+        raise ValueError(
+            "Could not verify the selected YouTube license with yt-dlp. "
+            "The source remains trend-reference-only; it was not imported."
+        ) from exc
+    license_name = str((info or {}).get("license") or "").strip()
+    if not _is_creative_commons(license_name):
+        raise ValueError(
+            "The selected YouTube source is not verified as Creative Commons Attribution. "
+            "It can be used as a trend reference, but this automatic import refuses it."
+        )
+    return license_name
+
+
 def _identity(item: dict[str, Any]) -> tuple[str, str]:
     provider = str(item.get("provider") or "").strip().lower()
     provider_id = str(item.get("provider_id") or item.get("video_id") or "").strip()
@@ -69,10 +105,7 @@ def _identity(item: dict[str, Any]) -> tuple[str, str]:
     return provider, str(item.get("source_url") or item.get("url") or item.get("file") or "")
 
 
-def merge_source_manifest(
-    source_manifest: Path,
-    imported_clip: dict[str, Any],
-) -> Path:
+def merge_source_manifest(source_manifest: Path, imported_clip: dict[str, Any]) -> Path:
     existing: dict[str, Any] = {}
     if source_manifest.exists():
         try:
@@ -127,15 +160,7 @@ def write_attribution_report(slot_dir: Path, source_manifest: Path) -> Path:
         )
     output = slot_dir / "attribution.json"
     output.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "required": bool(entries),
-                "entries": entries,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
+        json.dumps({"version": 1, "required": bool(entries), "entries": entries}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return output
@@ -162,11 +187,11 @@ def import_trend_candidate(
     report = json.loads(report_path.read_text(encoding="utf-8"))
     candidate = select_candidate(report, rank)
     provider = str(candidate.get("provider") or "").strip().lower()
-    rights_status = str(candidate.get("rights_status") or "").strip()
-    if provider != "youtube" or rights_status != "creative_commons_attribution_required":
-        raise ValueError(
-            "Automatic rights mapping currently accepts only YouTube candidates discovered as Creative Commons Attribution."
-        )
+    if provider != "youtube":
+        raise ValueError("Controlled trend import currently supports YouTube candidates only")
+
+    verified_license = verify_youtube_cc_license(candidate)
+    rights_status = "creative_commons_attribution_required"
 
     animal_cfg = settings.raw.get("animal", {})
     minimum_mean_db = float(animal_cfg.get("min_source_mean_volume_db", -55.0))
@@ -194,12 +219,12 @@ def import_trend_candidate(
     creator = str(candidate.get("channel_title") or "").strip()
     title = str(candidate.get("title") or "").strip()
     source_url = str(candidate.get("url") or "").strip()
-    attribution = f'"{title}" by {creator} — {source_url} — Creative Commons Attribution (CC BY)'
+    attribution = f'"{title}" by {creator} — {source_url} — {verified_license}'
     imported_clip = {
         "file": str(destination.resolve()),
         "source_url": source_url,
         "source_title": title,
-        "license": "Creative Commons Attribution (CC BY)",
+        "license": verified_license,
         "commercial_use_allowed": True,
         "creator": creator,
         "provider": "youtube",
@@ -252,6 +277,7 @@ def main() -> None:
     )
     print(f"Imported UGC: {imported['source_title']}")
     print(f"Creator: {imported['creator']}")
+    print(f"Verified license: {imported['license']}")
     print(f"Source: {imported['source_url']}")
     print(f"Audio mean: {imported['mean_volume_db']} dB")
     print(f"Sources: {source_manifest}")
