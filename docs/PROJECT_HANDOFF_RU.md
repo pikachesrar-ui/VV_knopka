@@ -19,7 +19,7 @@ Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot
 - `.venv` Python `3.11.0`;
 - OpenAI/Pexels/Pixabay keys local `.env`;
 - MPT only for `ai_short`; cats = local FFmpeg;
-- latest user test: **39 passed**;
+- latest user test: **40 passed**;
 - publication gate **PASS**;
 - latest OpenAI ledger **$0.0340 / $10.00**;
 - slot 1 octopus manual QUALITY PASS;
@@ -44,10 +44,10 @@ Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot
 
 Pexels audible gate works, but footage still looks stock-like. User wants current/popular cat clips closer to TikTok/Shorts/UGC aesthetics.
 
-Architecture:
+Architecture intent:
 
 ```text
-trend discovery -> candidate queue -> rights/human gate -> controlled local import -> audio/Luna/highlight gates -> renderer
+trend discovery -> candidate/reference queue -> rights/human gate -> controlled usable footage -> audio/Luna/highlight gates -> renderer
 ```
 
 Do NOT default to raw social scraper/repost.
@@ -57,6 +57,8 @@ Do NOT default to raw social scraper/repost.
 Initial discovery required `YOUTUBE_API_KEY`. User tried Google Cloud but it asked for address/card and explicitly said this does not suit them.
 
 Decision: **Google Cloud/API key is not required/default. Do not tell user to add billing/card/address.**
+
+## 6. YouTube no-key discovery — runtime history and verdict
 
 Dependency:
 
@@ -70,85 +72,114 @@ CLI:
 vv-cat-trends --days 30 --limit 30
 ```
 
-`--backend auto|ytdlp|api`; `auto` uses API only if key already exists, otherwise yt-dlp no-key; no OAuth/account login/media download.
+Backend is yt-dlp no-key by default when no API key exists; no OAuth/account login/media download.
 
-## 6. No-key discovery runtime history
+Runtime fixes already made:
 
-### Compatibility incident: `ytsearchdate`
+1. upstream removed broken `ytsearchdate` -> use ordinary `ytsearchN:`.
+2. flat entries often lacked date -> two-stage discovery: flat ID/URL collection then full metadata hydration (`download=False`).
+3. default query family includes current year:
+   - `cat shorts 2026`;
+   - `funny cat shorts 2026`;
+   - `kitten shorts 2026`;
+   - `viral cat shorts 2026`;
+   - `cat shorts`.
+4. local filters: requested recency, 5..180 sec, ranking by views/day then total views.
+5. rights fail closed: explicit CC -> `[CC]`; missing/unknown -> `[rights?]` trend-reference-only.
 
-First no-key run failed with:
+Latest actual user output:
 
 ```text
-Unsupported url scheme: "ytsearchdate90"
-```
-
-Current yt-dlp removed `ytsearchdate`; fixed to ordinary `ytsearchN:`. Regression test prevents return of `ytsearchdate`.
-
-### Zero-candidate incident after compatibility fix
-
-User then ran:
-
-```text
-39 passed in 0.59s
+40 passed in 0.81s
 OpenAI spent: $0.0340 / $10.00
-auto_publish: False
 publication gate: PASS
-Trend backend: yt-dlp (no Google Cloud, no API key, no account login)
-YouTube cat trend candidates: 0 (CC already identified: 0)
+YouTube cat trend candidates: 5 (CC already identified: 0)
 ```
 
-This was not a YouTube/network error. Root cause: no-key search used `extract_flat="in_playlist"`, and flat search entries often omit `timestamp/upload_date`. Our fail-closed recency filter rejects entries without a trusted date, so all candidates disappeared.
+Candidates:
 
-## 7. Current no-key discovery implementation — HYDRATED v4
+1. `Where are the viral cats now?😭💔` — 55,255 views, ~6,956 views/day;
+2. 23 views;
+3. 7 views;
+4. 5 views;
+5. 2 views.
 
-`discover_ytdlp_cats()` now has two stages:
+**0/5 Creative Commons confirmed.** Therefore YouTube no-key discovery technically works but quality is too weak as the only current-cat source. Do not waste time repeatedly tuning only ytsearch unless a concrete new idea appears.
 
-1. **Flat discovery** — ordinary `ytsearchN:` collects IDs/URLs cheaply, no media download.
-2. **Full metadata hydration** — up to 50 unique candidate URLs get `yt-dlp extract_info(..., download=False)` so we can reliably inspect date/duration/views/license.
-
-Default query family (when CLI query left default), generated with current year:
-
-```text
-cat shorts 2026
-funny cat shorts 2026
-kitten shorts 2026
-viral cat shorts 2026
-cat shorts
-```
-
-Reason: ordinary YouTube search is relevance-oriented, so one generic query can mostly return old viral content; current-year variants improve recall before local recency filtering.
-
-After hydration:
-
-- require publication inside requested lookback (`--days`, default 30);
-- duration 5..180 sec;
-- compute views/day from full metadata;
-- rank views/day then total views;
-- store title, creator/channel, date, views, likes, duration, URL and optional license;
-- explicit Creative Commons -> `[CC]`;
-- missing/unknown license -> `[rights?]`, trend-reference-only;
-- unknown license is never permission to use.
-
-CLI prints before hydration:
-
-```text
-Scanning YouTube search results and hydrating metadata; this can take a minute...
-```
-
-No media is downloaded by discovery.
-
-Report remains:
+Report:
 
 ```text
 runtime/trends/youtube-cat-cc.json
 ```
 
-Two new regression tests cover:
+## 7. Reddit/community trend discovery — IMPLEMENTED
 
-- multi-query current-year default discovery;
-- conversion of flat YouTube video ID into a watch URL suitable for full metadata hydration.
+Reason: use a different community signal for what cat content is actually current/popular, without Google Cloud/API keys.
 
-Expected next local test count after pull: **41 passed**.
+New module:
+
+```text
+src/vv_knopka/reddit_trend_discovery.py
+```
+
+New CLI:
+
+```powershell
+vv-cat-community --days 30 --limit 30
+```
+
+Default communities:
+
+```text
+cats
+WhatsWrongWithYourCat
+OneOrangeBraincell
+CatsAreAssholes
+Catculations
+Catswithjobs
+```
+
+Mechanics:
+
+- reads public Reddit RSS only;
+- no Reddit API key;
+- no Reddit account login;
+- scans both `top/week` and `hot` feeds;
+- `www.reddit.com` first, `old.reddit.com` fallback;
+- parses Atom with Python stdlib;
+- filters by max age;
+- `community_score` = feed rank signal × recency, accumulated if same post appears in multiple feeds;
+- extracts obvious media links/hints when feed HTML exposes them (`v.redd.it`, mp4/webm, YouTube, Imgur/i.redd.it);
+- individual feed errors/rate limits become `diagnostics`, not total failure;
+- report:
+
+```text
+runtime/trends/reddit-cat-trends.json
+```
+
+Rights policy is deliberately closed:
+
+```text
+rights_status = author_permission_required
+import_status = trend_reference_only_until_author_permission
+auto_download = false
+```
+
+A public Reddit post is **not** treated as licensed reusable media. Reddit is currently an inspiration/trend/reference layer only.
+
+Entry point added to `pyproject.toml`:
+
+```text
+vv-cat-community
+```
+
+Three new tests cover:
+
+- public top/week RSS URL;
+- Atom parsing + video media hint + permission-only rights;
+- recency filtering.
+
+Given previous 40 tests, expected local count after pull is around **43 passed**.
 
 ## 8. Controlled UGC import
 
@@ -158,21 +189,7 @@ CLI:
 vv-cat-import 2 --candidate N --file "D:\path\cat.mp4" --confirm-match
 ```
 
-No auto social downloader.
-
-Import behavior:
-
-1. exact local file/candidate confirmation required;
-2. if report has explicit CC, continue;
-3. if `license_unverified`, full yt-dlp metadata lookup of selected URL with `download=False`;
-4. if CC still unverified -> refuse;
-5. if verified -> duration + audible audio gate;
-6. SHA-256, provenance and attribution saved;
-7. copy to `runtime/imports/slot-XX/`;
-8. prepend UGC to `sources.json`, Pexels fills remaining slots;
-9. source manifest change invalidates highlights, so Luna reselects.
-
-Attribution report: `runtime/slots/02/attribution.json`.
+Current automatic import path remains YouTube-only and requires Creative Commons verification. Unverified YouTube candidate gets full yt-dlp metadata check; if CC still unverified -> refuse. Reddit candidates are **not** automatically importable; a separate creator-permission/provenance path would be needed before using their media.
 
 ## 9. Rights / monetization constraint
 
@@ -187,16 +204,13 @@ git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
+.\.venv\Scripts\vv-cat-community.exe --days 30 --limit 30
 ```
 
-Expected test count: around **41 passed**.
-
-Expected discovery start:
+Expected CLI start:
 
 ```text
-Trend backend: yt-dlp (no Google Cloud, no API key, no account login)
-Scanning YouTube search results and hydrating metadata; this can take a minute...
+Community backend: Reddit public RSS (no API key, no account login)
 ```
 
-Ask user for top-10 output or exact error. If hydrated YouTube still gives no useful recent candidates, next fallback should be a separate community/trend discovery source (e.g. Reddit no-key feed/search), while keeping rights import fail-closed. Do not merge Draft PR #1 until explicit pilot quality approval.
+Ask user to send top community references and any `Feed warnings`. Goal: determine whether community trends are substantially more interesting/current than the weak YouTube no-key output. Then choose how to convert trend themes into footage with safe rights/provenance. Do not merge Draft PR #1 until explicit pilot quality approval.
