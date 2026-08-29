@@ -1,118 +1,115 @@
 # VV_knopka — LIVE PROGRESS (RU)
 
-Короткий оперативный статус. Подробный контекст и правила — в `AGENT.md` и `docs/PROJECT_HANDOFF_RU.md`.
+Короткий оперативный статус. Подробный контекст — `AGENT.md` и `docs/PROJECT_HANDOFF_RU.md`.
 
 Последнее обновление: **2026-08-29**.
 
 ## Подтверждено на ПК пользователя
 
 - Project Python: `3.11.0`.
-- `auto_publish = false`.
-- OpenAI / Pexels / Pixabay keys настроены локально.
-- MoneyPrinterTurbo v1.3.5 работает локально на `127.0.0.1:8080`.
-- Slot 1 Russian AI Short — manual QUALITY PASS.
-- После Cat v3 pull пользователь получил **25 passed in 0.77s**.
+- `auto_publish=false`; publication gate = `PASS`.
+- Последний локальный test run до текущей редактуры: **25 passed**.
 - Последний показанный OpenAI ledger: **$0.0281 / $10.00**.
-- Publication gate: **PASS**.
+- Slot 1 Russian AI Short («Почему осьминог меняет цвет во сне») — manual QUALITY PASS.
+- MoneyPrinterTurbo нужен для `ai_short`, но **не нужен для cat/animal pipeline**: котики рендерятся локально через FFmpeg.
 
-## Slot 1 — Russian AI Short: QUALITY PASS
+## Slot 2 cats — результаты review
 
-Тема: «Почему осьминог меняет цвет во сне».
+### v1
 
-Исправлено: silent intermediate, unrelated stock, узкий stock pool, русский CJK font, black bars, per-clip FadeIn. Финальные subtitle settings: size 52, position 74%.
+Случайные первые куски stock clips, почти полная тишина.
 
-## Slot 2 — cats: v1/v2 review
+### v2
 
-Первый montage был слишком случайным и почти немым. Логи показали, что большинство stock clips не имели audio stream, поэтому старый renderer подставлял silence.
+Luna стала выбирать интересные windows, добавились музыка и procedural meow. Стало лучше.
 
-Cat v2 добавил Luna highlight selection, source audio where available, procedural BGM и soft meow. Пользователь сообщил, что стало лучше, но попросил заметнее оформить формат.
+### v3 test
 
-## Cat v3 — текущий формат для теста
+Добавили black title cards и Edge-TTS intro. Пользователь отметил новые проблемы:
 
-Продуктовые решения пользователя:
+- длинное название не помещалось по ширине;
+- голос в начале не нужен;
+- opening black card слишком длинный;
+- synthetic meow хочется заменить реальным;
+- transition cards должны повторять название выпуска, а не Luna-caption;
+- финальная card должна говорить `Спасибо за просмотр` / `Thanks for watching`;
+- transition black card нужна заметнее/дольше;
+- нужно искать именно stock videos с настоящим source audio;
+- background music нужно убрать.
 
-- не использовать `Daily Dose of Cats` — слишком близко к чужому формату;
-- постоянного названия серии пока нет;
-- каждый выпуск имеет **уникальный номер + своё название**: `#001 — <title>`;
-- начало: **чёрная плашка + быстрый мяу + название + короткий Edge-TTS voice intro**;
-- между клипами: **чёрная mini-card ~0.35 сек + короткий текст + быстрый мяу**;
-- procedural meow сокращён примерно с 0.58 до **0.30 сек** и не содержит bass hit;
-- editorial text переносится на black mini-cards вместо постоянного текста поверх cat clip;
-- Luna выбирает лучший 5-секундный момент внутри каждого источника;
-- тихая procedural BGM остаётся; оригинальный source audio сохраняется, если существует;
-- сильные клипы идут раньше по highlight score;
-- будущий cat planner выбирает одну coherent stock-friendly theme на выпуск: toys / boxes / sleepy / reactions / jumps / dramatic stares / playful hunting и т.п.;
-- planner явно запрещён использовать `Daily Dose of Cats` или близкую имитацию.
+## Cat format — текущая редактура
 
-### Языки
+Реализовано в рабочей ветке:
 
-Никакого дублирования одного и того же ролика на RU и EN.
+- **без voiceover**;
+- **без BGM**;
+- intro black card: ~`0.9s`;
+- inter-clip black card: ~`0.75s`;
+- end card: ~`1.0s`;
+- intro и все inter-clip cards показывают одно и то же `#NNN — <episode title>`;
+- end card: RU `Спасибо за просмотр`, EN `Thanks for watching`;
+- длинный title автоматически переносится на строки; номер отделяется на собственную строку;
+- renderer использует UTF-8 `textfile` для FFmpeg drawtext, поэтому длинный кириллический текст больше не должен вылезать за 1080px;
+- text с cat clips убран — клип остаётся чистым;
+- исходный звук клипов нормализуется и сохраняется;
+- animal pipeline требует **audible** source audio: наличие audio stream + проверка `volumedetect`; практически немые дорожки reject;
+- поиск audio stock идёт глубже по Pexels/Pixabay и добавляет запросы `cat meowing`, `cat purring`, `cat playing`, `cat vocalizing`;
+- минимум для рендера: 5 unique audible licensed clips, target: 6;
+- если stock providers не дают 5 подходящих клипов, pipeline fail-closed вместо silent filler;
+- audit: `runtime/slots/02/animal_audio_sources.json`.
 
-Long-run policy: **80% EN / 20% RU** через цикл:
+### Реальный meow
 
-```text
-en, en, en, en, ru
-```
-
-Frozen pilot: slot 2 RU, остальные 6 animal slots EN. Для 7 выпусков это 6/1.
-
-## Cat v3 runtime incident: Edge voice ID
-
-Пользователь успешно дошёл до:
-
-```text
-Highlight edit: runtime/slots/02/highlights.json
-Cat episode: #001 — Кошки и их важные маленькие миссии
-Intro voice: У каждой кошки есть дело. Даже если никто не понимает какое.
-```
-
-Затем рендер остановился до FFmpeg assembly:
+Renderer теперь предпочитает один постоянный пользовательский/лицензированный meow asset:
 
 ```text
-ValueError: Invalid voice 'ru-RU-SvetlanaNeural-Female'.
-RuntimeError: Edge TTS could not synthesize cat intro voice
+runtime/assets/cat-transition-meow.mp3
 ```
 
-Причина: `edge-tts` принимает канонический voice ID `ru-RU-SvetlanaNeural`; суффикс `-Female` относится к человекочитаемым/MPT display labels и библиотекой отвергается. Английский `en-US-AriaNeural-Female` имел тот же потенциальный дефект.
-
-Исправлено в `config/pilot.toml`:
+или путь из `.env`:
 
 ```text
-edge_voice_ru = "ru-RU-SvetlanaNeural"
-edge_voice_en = "en-US-AriaNeural"
+CAT_MEOW_FILE=D:\path\to\meow.mp3
 ```
 
-Добавлен regression test, который запрещает возвращение `-Female/-Male` в pilot Edge IDs.
+Если файла пока нет, остаётся старый procedural sound только как fallback, чтобы renderer не падал.
 
-Важно: `episode.json`, plan, sources и highlight selection уже существуют. **Не перегенерировать их** и не тратить OpenAI повторно.
+Найдены подходящие источники для выбора реального ~1s meow: Mixkit `Sweet kitty meow` и Pixabay `Cat Meow`; пользователь должен выбрать звук на слух и сохранить один файл локально.
+
+## Языки
+
+- никакого RU/EN дубля одного и того же ролика;
+- long-run cadence: `en, en, en, en, ru` = 80/20;
+- frozen pilot: slot 2 RU, остальные animal slots EN.
 
 ## Следующая точка на ПК
+
+После завершения CI:
 
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
+```
+
+Перед render желательно положить выбранный реальный meow в:
+
+```text
+runtime/assets/cat-transition-meow.mp3
+```
+
+Затем:
+
+```powershell
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Повторный `pip install` не нужен, если `edge-tts` уже установлен предыдущей командой.
+Важно: этот запуск может потратить немного Luna budget, потому что старые silent sources будут отброшены и потребуется найти/проверить новые audio-bearing clips. Если подходящих stock clips <5, не ослаблять gate автоматически — сначала обсудить новый источник footage или локальные пользовательские clips.
 
-Не запускать `plan 2` и не удалять `episode.json`, `sources.json`, `highlights.json`.
-
-Ожидаемый output:
+Review output:
 
 ```text
 runtime/ready_for_review/slot-02-ru-animals.mp4
 ```
 
-После просмотра оценить:
-
-1. длительность intro-card;
-2. качество/громкость Edge TTS intro;
-3. заметность 0.35s black mini-cards;
-4. быстрый 0.30s meow;
-5. BGM/source-audio balance;
-6. общий темп;
-7. стоит ли следующим делать новый themed cat episode на английском.
-
-До human review Cat v3 не переходить к auto-publish.
+После просмотра проверить: fit title, длительность intro/transition/end cards, реальный meow, source audio и общий темп. Auto-publish остаётся запрещён.
