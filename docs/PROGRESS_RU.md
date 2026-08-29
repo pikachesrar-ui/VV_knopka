@@ -8,7 +8,7 @@
 
 - Project Python: `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний локальный test run: **39 passed**.
+- Последний локальный test run: **40 passed**.
 - Последний показанный OpenAI ledger: **$0.0340 / $10.00**.
 - Slot 1 RU AI Short — manual QUALITY PASS.
 - Cat pipeline = local FFmpeg; MPT нужен только `ai_short`.
@@ -17,7 +17,7 @@
 
 ## Slot 2 cats
 
-Audible-source gate подтверждён: 6/6 usable Pexels clips с настоящим signal audio, но все они stock, поэтому текущий фокус = более живой UGC/trend sourcing.
+Audible-source gate подтверждён: 6/6 usable Pexels clips с настоящим signal audio, но footage выглядит stock-like. Текущий фокус = более живой UGC/trend sourcing.
 
 Принятый cat format:
 
@@ -30,64 +30,98 @@ Audible-source gate подтверждён: 6/6 usable Pexels clips с наст�
 - original clip audio retained/normalized;
 - long-run languages 80% EN / 20% RU, no duplicate translations.
 
-## Google Cloud больше НЕ blocker
+## Google Cloud не использовать
 
-Пользователю не подходит Google Cloud с адресом/картой. `YOUTUBE_API_KEY` не обязателен. Default no-key backend = `yt-dlp`; без OAuth/account login/media download.
+Пользователю не подходит Google Cloud с адресом/картой. `YOUTUBE_API_KEY` не обязателен. Default YouTube discovery = `yt-dlp` no-key, без OAuth/account login/media download.
 
-## No-key trend discovery — runtime incidents и текущий fix
+## YouTube no-key discovery — работает, но quality слабая
 
-### Incident 1: удалённый `ytsearchdate`
+История fixes:
 
-Первый no-key запуск упал:
+1. `ytsearchdate` удалён upstream -> заменён обычным `ytsearchN:`.
+2. flat search давал 0 из-за отсутствующих дат -> добавлена full metadata hydration без media download.
+3. default search расширен current-year запросами (`cat/funny cat/kitten/viral cat shorts 2026`).
 
-```text
-Unsupported url scheme: "ytsearchdate90"
-```
-
-Актуальный yt-dlp удалил `ytsearchdate`; исправлено на обычный `ytsearchN:` + локальный recent filter.
-
-### Incident 2: ordinary `ytsearch` дал 0 candidates
-
-После первого compatibility fix пользователь подтвердил:
+Последний реальный запуск пользователя:
 
 ```text
-39 passed
+40 passed in 0.81s
 OpenAI spent: $0.0340 / $10.00
-auto_publish: False
 publication gate: PASS
-Trend backend: yt-dlp (no Google Cloud, no API key, no account login)
-YouTube cat trend candidates: 0 (CC already identified: 0)
+YouTube cat trend candidates: 5 (CC already identified: 0)
 ```
 
-Причина: search использовал `extract_flat="in_playlist"`. Плоские YouTube search entries часто не содержат `timestamp/upload_date`; `_candidate_from_ytdlp_entry` fail-closed отбрасывал entries без даты, поэтому поиск сам работал, но все результаты исчезали на локальном фильтре.
+Top выдача:
 
-Текущий fix:
+- один кандидат ~55k views / ~6.9k views/day;
+- остальные 4 имеют 23 / 7 / 5 / 2 views;
+- **0/5 Creative Commons confirmed**;
+- все кандидаты `rights?`, то есть trend-reference-only.
 
-1. flat `ytsearch` используется только для быстрого сбора ID/URL;
-2. затем до 50 уникальных кандидатов получают **full yt-dlp metadata lookup без download**;
-3. только после hydration применяются date/duration/views/license checks;
-4. default discovery расширен несколькими запросами с текущим годом:
-   - `cat shorts 2026`;
-   - `funny cat shorts 2026`;
-   - `kitten shorts 2026`;
-   - `viral cat shorts 2026`;
-   - `cat shorts`;
-5. recency = локальный `timestamp/upload_date` filter;
-6. duration = 5..180 sec;
-7. rank = views/day, затем total views;
-8. rights остаются fail-closed: explicit CC -> `[CC]`, unknown -> `[rights?]` trend-reference-only.
+Вывод: технически YouTube no-key backend работает, но как единственный источник актуальных котов недостаточно качественный. Не тратить время на бесконечный tuning одного `ytsearch`.
 
-Добавлены regression tests на multi-query current-year search и hydration URL из flat video id. Следующий local pytest после pull ожидается **41 passed**.
-
-Report остаётся:
+Report:
 
 ```text
 runtime/trends/youtube-cat-cc.json
 ```
 
+## Reddit/community trend discovery — ДОБАВЛЕНО
+
+Новый CLI:
+
+```powershell
+vv-cat-community --days 30 --limit 30
+```
+
+Module:
+
+```text
+src/vv_knopka/reddit_trend_discovery.py
+```
+
+Default communities:
+
+- `r/cats`;
+- `r/WhatsWrongWithYourCat`;
+- `r/OneOrangeBraincell`;
+- `r/CatsAreAssholes`;
+- `r/Catculations`;
+- `r/Catswithjobs`.
+
+Discovery:
+
+- public Reddit RSS only;
+- no Reddit API key;
+- no account login;
+- `top/week` + `hot` feeds;
+- `www.reddit.com` with `old.reddit.com` fallback;
+- public feed rank + recency -> `community_score`;
+- duplicate post seen in several feeds accumulates signal;
+- extracts obvious media links/hints (`v.redd.it`, mp4/webm, YouTube, Imgur/i.redd.it) when RSS contains them;
+- writes `runtime/trends/reddit-cat-trends.json`;
+- failed/rate-limited feeds are stored in `diagnostics` instead of killing whole discovery.
+
+Rights are intentionally fail-closed:
+
+```text
+rights_status = author_permission_required
+import_status = trend_reference_only_until_author_permission
+```
+
+Public Reddit post **не означает** разрешение на reuse. Этот слой нужен, чтобы понять, какие cat themes/scenes/memes реально актуальны, и затем искать/получать footage с понятными правами.
+
+Новый entry point в `pyproject.toml`:
+
+```text
+vv-cat-community
+```
+
+Добавлены 3 tests на RSS URL, Atom parsing/media hint и old-entry filtering. После pull ожидается около **43 passed**.
+
 ## Controlled UGC import
 
-`vv-cat-import` работает с no-key report. Unverified candidate при import получает full yt-dlp license lookup; если Creative Commons всё ещё не подтверждён — import refuses. Затем duration/audio/SHA-256/provenance/attribution gates; UGC prepends `sources.json`, Pexels только дозаполняет remaining slots; highlights invalidated automatically.
+`vv-cat-import` пока принимает только YouTube-кандидаты, где Creative Commons реально подтверждён. Unverified -> full yt-dlp license check -> refuse если CC не доказан. Reddit автоматически в import не пускается без отдельного permission workflow.
 
 ## Следующая точка на ПК
 
@@ -96,13 +130,7 @@ git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
+.\.venv\Scripts\vv-cat-community.exe --days 30 --limit 30
 ```
 
-Discovery теперь печатает:
-
-```text
-Scanning YouTube search results and hydrating metadata; this can take a minute...
-```
-
-Это нормально: metadata hydration делает дополнительные read-only YouTube requests, но media не скачивает. После запуска прислать top-10 или exact error. Если и hydrated YouTube search не даст полезной выдачи, следующий fallback — Reddit/community discovery без Google Cloud.
+Прислать top community references и `Feed warnings`, если они будут. Goal: проверить, даёт ли Reddit заметно более живые/current cat ideas, чем YouTube no-key. После этого решать, как связывать trend reference с legally usable footage.
