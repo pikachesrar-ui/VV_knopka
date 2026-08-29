@@ -19,12 +19,12 @@ Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot
 - `.venv` Python `3.11.0`;
 - OpenAI/Pexels/Pixabay keys local `.env`;
 - MPT only for `ai_short`; cats = local FFmpeg;
-- latest user test: **40 passed**;
+- latest user test: **43 passed**;
 - publication gate **PASS**;
 - latest OpenAI ledger **$0.0340 / $10.00**;
 - slot 1 octopus manual QUALITY PASS;
 - real user meow works;
-- slot 2 audible gate found 6/6 Pexels clips with real audio;
+- slot 2 audible gate previously found 6/6 Pexels clips with real audio;
 - **Impact title-card style approved**.
 
 ## 3. Cat format — approved checkpoint
@@ -40,89 +40,53 @@ Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot
 - Windows card font pinned to `C:\Windows\Fonts\impact.ttf`, sizes 84/78/82;
 - never use `Daily Dose of Cats` or close imitation.
 
-## 4. Why UGC/trend sourcing exists
+## 4. Why trend/community sourcing exists
 
-Pexels audible gate works, but footage still looks stock-like. User wants current/popular cat clips closer to TikTok/Shorts/UGC aesthetics.
+The stock audio gate works, but old slot 2 footage still looks like generic Pexels stock. User wants current/popular cat content closer to real Shorts/TikTok/community aesthetics.
 
-Architecture intent:
+Safe architecture:
 
 ```text
-trend discovery -> candidate/reference queue -> rights/human gate -> controlled usable footage -> audio/Luna/highlight gates -> renderer
+public trend/reference discovery -> theme extraction -> licensed-footage search -> source/audio/Luna gates -> highlight edit -> renderer
 ```
 
 Do NOT default to raw social scraper/repost.
 
 ## 5. Google Cloud rejected by user
 
-Initial discovery required `YOUTUBE_API_KEY`. User tried Google Cloud but it asked for address/card and explicitly said this does not suit them.
+Initial YouTube discovery required `YOUTUBE_API_KEY`. User tried Google Cloud but it asked for address/card and explicitly said this does not suit them.
 
 Decision: **Google Cloud/API key is not required/default. Do not tell user to add billing/card/address.**
 
-## 6. YouTube no-key discovery — runtime history and verdict
+## 6. YouTube no-key discovery — working but weak
 
-Dependency:
-
-```text
-yt-dlp>=2026.1,<2027
-```
-
-CLI:
-
-```powershell
-vv-cat-trends --days 30 --limit 30
-```
-
-Backend is yt-dlp no-key by default when no API key exists; no OAuth/account login/media download.
+Dependency: `yt-dlp>=2026.1,<2027`.
+CLI: `vv-cat-trends --days 30 --limit 30`.
+No OAuth/account login/media download.
 
 Runtime fixes already made:
 
-1. upstream removed broken `ytsearchdate` -> use ordinary `ytsearchN:`.
-2. flat entries often lacked date -> two-stage discovery: flat ID/URL collection then full metadata hydration (`download=False`).
-3. default query family includes current year:
-   - `cat shorts 2026`;
-   - `funny cat shorts 2026`;
-   - `kitten shorts 2026`;
-   - `viral cat shorts 2026`;
-   - `cat shorts`.
-4. local filters: requested recency, 5..180 sec, ranking by views/day then total views.
-5. rights fail closed: explicit CC -> `[CC]`; missing/unknown -> `[rights?]` trend-reference-only.
+1. removed broken `ytsearchdate` usage -> ordinary `ytsearchN:`;
+2. flat search results lacked dates -> added full metadata hydration (`download=False`);
+3. current-year multi-query search added;
+4. local recency/duration filters + views/day ranking;
+5. rights fail closed.
 
 Latest actual user output:
 
 ```text
 40 passed in 0.81s
-OpenAI spent: $0.0340 / $10.00
-publication gate: PASS
 YouTube cat trend candidates: 5 (CC already identified: 0)
 ```
 
-Candidates:
+Only one candidate had meaningful traction (~55k views / ~6.9k views/day), other 4 had 23/7/5/2 views. **0/5 Creative Commons confirmed.** Verdict: YouTube no-key discovery technically works but is not good enough as the only trend source. Keep it as a secondary signal.
 
-1. `Where are the viral cats now?😭💔` — 55,255 views, ~6,956 views/day;
-2. 23 views;
-3. 7 views;
-4. 5 views;
-5. 2 views.
+Report: `runtime/trends/youtube-cat-cc.json`.
 
-**0/5 Creative Commons confirmed.** Therefore YouTube no-key discovery technically works but quality is too weak as the only current-cat source. Do not waste time repeatedly tuning only ytsearch unless a concrete new idea appears.
+## 7. Reddit/community discovery — locally confirmed useful
 
-Report:
-
-```text
-runtime/trends/youtube-cat-cc.json
-```
-
-## 7. Reddit/community trend discovery — IMPLEMENTED
-
-Reason: use a different community signal for what cat content is actually current/popular, without Google Cloud/API keys.
-
-New module:
-
-```text
-src/vv_knopka/reddit_trend_discovery.py
-```
-
-New CLI:
+Module: `src/vv_knopka/reddit_trend_discovery.py`.
+CLI:
 
 ```powershell
 vv-cat-community --days 30 --limit 30
@@ -130,34 +94,37 @@ vv-cat-community --days 30 --limit 30
 
 Default communities:
 
-```text
-cats
-WhatsWrongWithYourCat
-OneOrangeBraincell
-CatsAreAssholes
-Catculations
-Catswithjobs
-```
+- cats
+- WhatsWrongWithYourCat
+- OneOrangeBraincell
+- CatsAreAssholes
+- Catculations
+- Catswithjobs
 
-Mechanics:
+Mechanics: public Reddit RSS (`top/week` + `hot`), no API key/login, www + old fallback, rank/recency community score, feed diagnostics instead of total failure, media hint extraction only for reference.
 
-- reads public Reddit RSS only;
-- no Reddit API key;
-- no Reddit account login;
-- scans both `top/week` and `hot` feeds;
-- `www.reddit.com` first, `old.reddit.com` fallback;
-- parses Atom with Python stdlib;
-- filters by max age;
-- `community_score` = feed rank signal × recency, accumulated if same post appears in multiple feeds;
-- extracts obvious media links/hints when feed HTML exposes them (`v.redd.it`, mp4/webm, YouTube, Imgur/i.redd.it);
-- individual feed errors/rate limits become `diagnostics`, not total failure;
-- report:
+Actual user run:
 
 ```text
-runtime/trends/reddit-cat-trends.json
+43 passed in 0.54s
+Reddit cat community candidates: 30
+Feed warnings: 1
 ```
 
-Rights policy is deliberately closed:
+Actual top references included:
+
+1. Cat saw the hoop and understood the assignment — r/Catculations;
+2. Potraits with my three new babies — r/cats;
+3. Trying to watch TV — r/CatsAreAssholes;
+4. Supermodel — r/Catswithjobs;
+5. Hired this cleaning lady but she's doing a terrible job — r/Catswithjobs;
+6. Dolly with a little orange — r/OneOrangeBraincell;
+7. My cat won’t stop bringing in nuts?? — r/WhatsWrongWithYourCat;
+8. Not a spa… Disrespectful! — r/CatsAreAssholes;
+9. Every. Single. Day! — r/CatsAreAssholes;
+10. Whenever I flip my cat over on my lap his self-cleaning mode is triggered. — r/WhatsWrongWithYourCat.
+
+Rights remain:
 
 ```text
 rights_status = author_permission_required
@@ -165,37 +132,139 @@ import_status = trend_reference_only_until_author_permission
 auto_download = false
 ```
 
-A public Reddit post is **not** treated as licensed reusable media. Reddit is currently an inspiration/trend/reference layer only.
+Reddit is now the primary **trend brain**, not a reusable-media provider.
 
-Entry point added to `pyproject.toml`:
+Report: `runtime/trends/reddit-cat-trends.json`.
+
+## 8. Trend → Theme layer — IMPLEMENTED
+
+New module:
 
 ```text
-vv-cat-community
+src/vv_knopka/cat_theme.py
 ```
 
-Three new tests cover:
-
-- public top/week RSS URL;
-- Atom parsing + video media hint + permission-only rights;
-- recency filtering.
-
-Given previous 40 tests, expected local count after pull is around **43 passed**.
-
-## 8. Controlled UGC import
-
-CLI:
+New entry point:
 
 ```powershell
-vv-cat-import 2 --candidate N --file "D:\path\cat.mp4" --confirm-match
+vv-cat-theme <animal-slot>
 ```
 
-Current automatic import path remains YouTube-only and requires Creative Commons verification. Unverified YouTube candidate gets full yt-dlp metadata check; if CC still unverified -> refuse. Reddit candidates are **not** automatically importable; a separate creator-permission/provenance path would be needed before using their media.
+Default report input:
 
-## 9. Rights / monetization constraint
+```text
+runtime/trends/reddit-cat-trends.json
+```
 
-Creative Commons/permission does not solve YouTube reused-content monetization by itself. Minimal social compilations remain risky, so keep substantive montage/editorial identity, provenance and human review.
+For current slot 2:
 
-## 10. Next local checkpoint
+```powershell
+vv-cat-theme 2
+```
+
+No OpenAI writer call is used for theme extraction; ranking is deterministic and free.
+
+Current theme taxonomy:
+
+- `cat_mischief`: interruptions / disrespect / household sabotage;
+- `important_jobs`: jobs / assignments / supervision;
+- `weird_cat_logic`: odd habits / objects / self-cleaning style behavior;
+- `orange_chaos`: orange-cat chaos;
+- `cat_calculations`: jumps / hoops / balance / catches;
+- `main_character_cats`: posing / model / dramatic stare behavior;
+- fallback `current_cat_chaos`.
+
+Scoring combines each Reddit candidate's `community_score`, keyword matches, subreddit fit and a repeat-signal bonus. This intentionally favors repeated community patterns over a single isolated reference.
+
+Generated `trend-theme.json` contains:
+
+- selected `theme_id` + stable `theme_signature`;
+- localized episode title;
+- localized editorial angle;
+- 6-8 EN stock search terms anchored on exact word `cat`;
+- localized scene prompts;
+- ranked themes;
+- evidence rows with Reddit title/subreddit/url/community score;
+- explicit rights policy: Reddit media not auto imported; final footage must pass existing license/provenance/audio gates.
+
+Output for slot 2:
+
+```text
+runtime/slots/02/trend-theme.json
+```
+
+Optional manual theme override exists:
+
+```powershell
+vv-cat-theme 2 --theme weird_cat_logic
+```
+
+## 9. render-animal theme integration — IMPLEMENTED
+
+`src/vv_knopka/cli.py` now detects `runtime/slots/XX/trend-theme.json`.
+
+Behavior:
+
+1. If normal `plan.json` exists, theme overrides title/hook/search terms/scene prompts in-memory.
+2. If plan is absent, a complete animal plan can be built from theme without OpenAI writer API.
+3. Effective themed plan is written to:
+
+```text
+runtime/slots/XX/effective-plan.json
+```
+
+4. Theme affects highlight editorial context and episode title.
+5. Most importantly, theme affects source search terms, so it is not just cosmetic.
+
+## 10. Theme-aware source cache invalidation
+
+Critical implementation detail: old Pexels clips must not silently survive a new trend theme.
+
+`prepare_theme_source_refresh()`:
+
+- compares current `theme_id` + `theme_signature` with active `sources.json`;
+- if different, archives old source manifest as `sources-before-theme-<hash>.json`;
+- archives old generic `ai_materials.json` as `ai_materials-before-theme-<hash>.json` and removes only the active audit file;
+- does **not** delete actual media files;
+- writes an empty active source manifest so the next `ensure_audio_animal_sources()` must perform a fresh themed search.
+
+After successful source gate, `stamp_source_manifest_theme()` writes:
+
+- `trend_theme_id`;
+- `trend_theme_signature`;
+- `trend_theme_search_terms`.
+
+Therefore:
+
+- new/different theme -> fresh stock search;
+- same theme -> cached themed sources can be reused;
+- source manifest changes still invalidate highlight signature automatically.
+
+## 11. Controlled UGC import
+
+`vv-cat-import` remains YouTube-only for automatic rights mapping and requires actual Creative Commons verification. Reddit candidates are not automatically importable without a separate creator-permission provenance path.
+
+## 12. Rights / monetization constraints
+
+- Public Reddit post is not permission to reuse media.
+- YouTube `rights?` is not permission; CC must be verified.
+- Pexels/Pixabay clips must preserve commercial-use metadata/provenance.
+- Cat sources must pass real-audio gate.
+- Human review remains mandatory.
+- Creative Commons/permission does not by itself solve YouTube reused-content monetization; editorial transformation still matters.
+
+## 13. Tests added for theme layer
+
+New `tests/test_cat_theme.py` covers:
+
+- repeated mischief signal beating unrelated reference;
+- localized title + cat-anchored stock queries;
+- building/overriding a cat plan without writer API;
+- changed-theme source archive/reset + same-signature cache reuse.
+
+Given confirmed 43 tests before theme layer, expected next local count is around **47 passed**.
+
+## 14. Next local checkpoint
 
 Run:
 
@@ -204,13 +273,22 @@ git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv-cat-community.exe --days 30 --limit 30
+.\.venv\Scripts\vv-cat-theme.exe 2
 ```
 
-Expected CLI start:
+First inspect `vv-cat-theme 2` output: selected theme, title, evidence and search terms. If it looks coherent, then:
 
-```text
-Community backend: Reddit public RSS (no API key, no account login)
+```powershell
+.\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Ask user to send top community references and any `Feed warnings`. Goal: determine whether community trends are substantially more interesting/current than the weak YouTube no-key output. Then choose how to convert trend themes into footage with safe rights/provenance. Do not merge Draft PR #1 until explicit pilot quality approval.
+Expected first themed render behavior:
+
+- console says old stock cache is archived / fresh themed search forced;
+- Luna/source search may spend a small additional amount from the existing `$10` cap;
+- old generic Pexels clips are not silently reused;
+- final review should check whether footage actually matches selected community-informed theme while retaining real source audio.
+
+If themed audible stock finds fewer than 5 usable clips, do not weaken the gate automatically; inspect `runtime/slots/02/animal_audio_sources.json` and decide next source strategy.
+
+Do not merge Draft PR #1 until explicit pilot quality approval.
