@@ -5,8 +5,10 @@ import json
 
 from dotenv import load_dotenv
 
-from .animal_compilation import render_compilation, write_stock_sources_manifest
+from .animal_compilation import write_stock_sources_manifest
+from .animal_episode import build_episode_metadata
 from .animal_highlights import select_highlights
+from .animal_v3 import render_cat_v3
 from .budget import BudgetLedger
 from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
@@ -208,13 +210,27 @@ def main() -> None:
         )
         print(f"Highlight edit: {highlight_manifest}")
 
+        episode_manifest = build_episode_metadata(
+            settings,
+            slot=slot.slot,
+            language=slot.language,
+            plan=content,
+            highlight_manifest=highlight_manifest,
+            output=slot_dir / "episode.json",
+        )
+        episode_data = json.loads(episode_manifest.read_text(encoding="utf-8"))
+        print(f"Cat episode: {episode_data['display_title']}")
+        print(f"Intro voice: {episode_data['intro_voice']}")
+
         output = settings.runtime_dir / "ready_for_review" / f"slot-{slot.slot:02d}-{slot.language}-animals.mp4"
         print(
-            render_compilation(
+            render_cat_v3(
                 settings,
                 source_manifest,
+                highlight_manifest,
+                episode_manifest,
                 output,
-                highlight_manifest=highlight_manifest,
+                language=slot.language,
             )
         )
         return
