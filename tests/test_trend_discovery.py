@@ -4,6 +4,7 @@ from vv_knopka.trend_discovery import (
     _candidate_from_ytdlp_entry,
     _parse_youtube_duration,
     _views_per_day,
+    _ytdlp_search_target,
     youtube_search_params,
 )
 
@@ -36,6 +37,11 @@ def test_views_per_day_favors_fast_recent_growth():
     fast = _views_per_day(500_000, "2026-08-27T20:00:00Z", now=now)
     older = _views_per_day(700_000, "2026-07-30T20:00:00Z", now=now)
     assert fast > older
+
+
+def test_no_key_search_uses_supported_ytsearch_prefix():
+    assert _ytdlp_search_target("cat kitten shorts", 90) == "ytsearch90:cat kitten shorts"
+    assert "ytsearchdate" not in _ytdlp_search_target("cat", 10)
 
 
 def test_no_key_candidate_keeps_unverified_rights_closed():
