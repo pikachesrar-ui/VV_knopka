@@ -8,7 +8,8 @@
 
 - Project Python: `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний показанный OpenAI ledger: **$0.0281 / $10.00**.
+- Последний локальный test run: **36 passed**.
+- Последний показанный OpenAI ledger: **$0.0340 / $10.00**.
 - Slot 1 Russian AI Short («Почему осьминог меняет цвет во сне») — manual QUALITY PASS.
 - Cat/animal pipeline рендерится локально через FFmpeg; MoneyPrinterTurbo нужен только для `ai_short`.
 - Пользовательский real meow успешно подхватывается.
@@ -120,18 +121,32 @@ Discovery и ingest разделены намеренно.
 - long-run animal cadence: `en, en, en, en, ru`;
 - frozen pilot: slot 2 RU, остальные animal slots EN.
 
-## Следующая точка на ПК
+## Текущий blocker / следующая точка на ПК
 
-Из-за нового entry point один раз:
+Локальная установка entry points и тесты уже подтверждены:
 
-```powershell
-git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe status
+```text
+36 passed
+publication gate: PASS
+OpenAI spent: $0.0340 / $10.00
 ```
 
-Затем discovery:
+Первый `vv-cat-trends` остановился только потому, что **`YOUTUBE_API_KEY` ещё не настроен**.
+
+Следующий шаг:
+
+1. В Google Cloud создать/выбрать project.
+2. Enable **YouTube Data API v3**.
+3. Создать standard API key и ограничить его этой API.
+4. Добавить в локальный `.env`:
+
+```text
+YOUTUBE_API_KEY=...
+```
+
+Секрет не коммитить и не присылать в чат.
+
+После этого:
 
 ```powershell
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
