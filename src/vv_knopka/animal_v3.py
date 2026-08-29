@@ -20,6 +20,9 @@ from .animal_compilation import (
 from .settings import Settings
 
 
+_MEOW_SUFFIXES = (".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus")
+
+
 def _quick_meow_samples(sample_rate: int = 48000, variant: int = 0) -> array:
     """Fallback-only short bright chirp; real meow asset is preferred."""
     duration = 0.30
@@ -51,30 +54,94 @@ def _generate_quick_meow(path: Path, variant: int = 0) -> Path:
     return path
 
 
+def _candidate_meow_paths(settings: Settings) -> list[Path]:
+    """Return deterministic candidate paths for a persistent real transition meow."""
+    animal_cfg = settings.raw.get("animal", {})
+    raw_values = [
+        os.getenv("CAT_MEOW_FILE", "").strip(),
+        str(animal_cfg.get("meow_file", "runtime/assets/cat-transition-meow.mp3")).strip(),
+    ]
+    candidates: list[Path] = []
+
+    def add(path: Path) -> None:
+        resolved = path if path.is_absolute() else (settings.root / path).resolve()
+        if resolved not in candidates:
+            candidates.append(resolved)
+
+    for value in raw_values:
+        if not value:
+            continue
+        exact = Path(value)
+        add(exact)
+        # If the configured extension does not match the downloaded file, try the
+        # same base name with every supported audio extension.
+        stem = exact.with_suffix("")
+        for suffix in _MEOW_SUFFIXES:
+            add(stem.with_suffix(suffix))
+
+    for directory in (settings.root / "runtime" / "assets", settings.root):
+        for stem in ("cat-transition-meow", "cat-meow", "meow"):
+            for suffix in _MEOW_SUFFIXES:
+                add(directory / f"{stem}{suffix}")
+        if directory.exists():
+            # Last-resort friendly discovery for downloaded files such as
+            # "sweet-kitty-meow-12345.mp3". Sort for deterministic selection.
+            for path in sorted(directory.iterdir(), key=lambda item: item.name.casefold()):
+                if (
+                    path.is_file()
+                    and path.suffix.lower() in _MEOW_SUFFIXES
+                    and "meow" in path.stem.casefold()
+                ):
+                    add(path)
+    return candidates
+
+
 def _resolve_meow(settings: Settings, work: Path) -> tuple[Path, bool]:
     """Use one persistent real meow asset when supplied, otherwise fallback."""
+    for candidate in _candidate_meow_paths(settings):
+        if candidate.exists() and candidate.is_file() and candidate.stat().st_size > 0:
+            return candidate, False
+    fallback = _generate_quick_meow(work / "fallback-quick-meow.wav")
+    return fallback, True
+
+
+def _cat_card_font(settings: Settings) -> Path | None:
+    """Prefer a heavier, less generic local font without redistributing font files."""
     animal_cfg = settings.raw.get("animal", {})
-    configured = os.getenv("CAT_MEOW_FILE", "").strip() or str(
-        animal_cfg.get("meow_file", "runtime/assets/cat-transition-meow.mp3")
+    configured = os.getenv("CAT_CARD_FONT", "").strip() or str(
+        animal_cfg.get("card_font_file", "")
     ).strip()
     if configured:
         candidate = Path(configured)
         if not candidate.is_absolute():
             candidate = (settings.root / candidate).resolve()
         if candidate.exists() and candidate.stat().st_size > 0:
-            return candidate, False
-    fallback = _generate_quick_meow(work / "fallback-quick-meow.wav")
-    return fallback, True
+            return candidate
+
+    if os.name == "nt":
+        fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+        # Segoe UI Black is installed on modern Windows and supports Cyrillic.
+        # Arial Rounded / Trebuchet are preferred when present for a friendlier feel.
+        for name in (
+            "ARLRDBD.TTF",
+            "segoeuibl.ttf",
+            "trebucbd.ttf",
+            "impact.ttf",
+            "arialbd.ttf",
+        ):
+            path = fonts / name
+            if path.exists():
+                return path
+    return _system_font()
 
 
-def _wrap_card_text(text: str, *, width: int = 22) -> str:
-    """Wrap title cards to phone-safe lines instead of letting drawtext overflow."""
+def _wrap_card_text(text: str, *, width: int = 18) -> str:
+    """Wrap title cards to phone-safe centered lines instead of overflowing."""
     clean = " ".join(str(text or "").replace("\n", " ").split())
     if not clean:
         return ""
 
     lines: list[str] = []
-    # Number and title are more legible when the episode number gets its own line.
     if clean.startswith("#") and " — " in clean:
         number, title = clean.split(" — ", 1)
         lines.append(number.strip())
@@ -100,6 +167,54 @@ def _wrap_card_text(text: str, *, width: int = 22) -> str:
     return "\n".join(lines[:4])
 
 
+def _card_video_filter(
+    *,
+    output: Path,
+    text: str,
+    font: Path,
+    font_size: int,
+    wrap_chars: int,
+) -> str:
+    """Render each title line separately so every line is actually centered."""
+    lines = _wrap_card_text(text, width=wrap_chars).splitlines() or [""]
+    is_episode = bool(lines and lines[0].startswith("#"))
+    title_lines = lines[1:] if is_episode else lines
+    number_size = max(48, int(font_size * 0.68))
+    title_size = font_size
+    gap = max(24, int(font_size * 0.30))
+
+    sizes = ([number_size] if is_episode else []) + [title_size for _ in title_lines]
+    if not sizes:
+        sizes = [title_size]
+        title_lines = [""]
+    total_height = sum(sizes) + gap * max(len(sizes) - 1, 0)
+    current_y = max(80, int((1920 - total_height) / 2))
+    escaped_font = _escape_filter_path(font)
+    filters: list[str] = []
+
+    render_lines: list[tuple[str, int, bool]] = []
+    if is_episode:
+        render_lines.append((lines[0], number_size, True))
+    render_lines.extend((line, title_size, False) for line in title_lines)
+
+    for index, (line, size, is_number) in enumerate(render_lines):
+        text_file = output.with_name(f"{output.stem}-line-{index}.txt")
+        text_file.write_text(line, encoding="utf-8")
+        escaped_text_file = _escape_filter_path(text_file)
+        common = (
+            f"drawtext=fontfile='{escaped_font}':textfile='{escaped_text_file}':"
+            f"fontsize={size}:x=(w-text_w)/2:y={current_y}"
+        )
+        if is_number:
+            # Small white badge makes the episode number visually distinct.
+            common += ":fontcolor=black:box=1:boxcolor=white@1:boxborderw=14"
+        else:
+            common += ":fontcolor=white:borderw=2:bordercolor=black@0.55"
+        filters.append(common)
+        current_y += size + gap
+    return ",".join(filters)
+
+
 def _render_black_card(
     *,
     output: Path,
@@ -112,16 +227,12 @@ def _render_black_card(
     wrap_chars: int,
 ) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
-    wrapped = _wrap_card_text(text, width=wrap_chars)
-    text_file = output.with_suffix(".txt")
-    text_file.write_text(wrapped, encoding="utf-8")
-
-    escaped_font = _escape_filter_path(font)
-    escaped_text_file = _escape_filter_path(text_file)
-    video_filter = (
-        f"drawtext=fontfile='{escaped_font}':textfile='{escaped_text_file}':"
-        f"fontcolor=white:fontsize={font_size}:line_spacing=18:borderw=2:bordercolor=black@0.5:"
-        "x=(w-text_w)/2:y=(h-text_h)/2"
+    video_filter = _card_video_filter(
+        output=output,
+        text=text,
+        font=font,
+        font_size=font_size,
+        wrap_chars=wrap_chars,
     )
     audio_filter = (
         f"[1:a]atrim=0:{duration:.3f},asetpts=N/SR/TB,volume={meow_volume:.3f},"
@@ -274,9 +385,10 @@ def render_cat_v3(
     if len(order) < 3:
         raise RuntimeError("Cat renderer needs at least three selected highlights")
 
-    font = _system_font()
+    font = _cat_card_font(settings)
     if font is None:
         raise RuntimeError("No suitable system font found for Cat title cards")
+    print(f"Cat card font: {font}")
 
     animal_cfg = settings.raw.get("animal", {})
     audio_cfg = settings.raw.get("audio", {})
@@ -288,19 +400,19 @@ def render_cat_v3(
     source_audio_volume = float(animal_cfg.get("source_audio_volume", 1.0))
     lufs = float(audio_cfg.get("compilation_lufs", -16.0))
     peak = float(audio_cfg.get("true_peak_db", -1.5))
-    title_font_size = int(animal_cfg.get("title_font_size", 64))
-    transition_font_size = int(animal_cfg.get("transition_font_size", 58))
-    end_font_size = int(animal_cfg.get("end_font_size", 64))
-    wrap_chars = int(animal_cfg.get("card_wrap_chars", 22))
+    title_font_size = int(animal_cfg.get("title_font_size", 84))
+    transition_font_size = int(animal_cfg.get("transition_font_size", 78))
+    end_font_size = int(animal_cfg.get("end_font_size", 82))
+    wrap_chars = int(animal_cfg.get("card_wrap_chars", 18))
     require_audio = bool(animal_cfg.get("require_source_audio", True))
 
-    work = settings.runtime_dir / "tmp" / (output.stem + "-v4")
+    work = settings.runtime_dir / "tmp" / (output.stem + "-v5")
     work.mkdir(parents=True, exist_ok=True)
     meow, fallback_meow = _resolve_meow(settings, work)
     if fallback_meow:
         print(
             "Real cat meow asset not found; using procedural fallback. "
-            "Place a chosen sound at runtime/assets/cat-transition-meow.mp3 or set CAT_MEOW_FILE."
+            "Put any meow-named audio file in runtime/assets or set CAT_MEOW_FILE."
         )
     else:
         print(f"Cat meow asset: {meow}")
