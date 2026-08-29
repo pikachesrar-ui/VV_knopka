@@ -10,6 +10,12 @@ from .animal_episode import build_episode_metadata
 from .animal_highlights import select_highlights
 from .animal_v3 import render_cat_v3
 from .budget import BudgetLedger
+from .cat_theme import (
+    apply_theme_to_plan,
+    build_theme_only_plan,
+    prepare_theme_source_refresh,
+    stamp_source_manifest_theme,
+)
 from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
 from .material_fallback import CuratedMaterialFallbackError, load_duration_sufficient_materials
@@ -174,10 +180,34 @@ def main() -> None:
         if slot.pipeline != "animal_compilation":
             raise SystemExit("render-animal can only be used on animal_compilation slots")
         plan_path = slot_dir / "plan.json"
-        if not plan_path.exists():
-            raise SystemExit(f"missing {plan_path}; run `vv plan {slot.slot} --topic cats` first")
-        content = json.loads(plan_path.read_text(encoding="utf-8"))
+        theme_path = slot_dir / "trend-theme.json"
+        if not plan_path.exists() and not theme_path.exists():
+            raise SystemExit(
+                f"missing {plan_path} and {theme_path}; run `vv plan {slot.slot} --topic cats` "
+                f"or `vv-cat-theme {slot.slot}` first"
+            )
+
+        content: dict = {}
+        if plan_path.exists():
+            content = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        theme_payload = None
+        if theme_path.exists():
+            theme_payload = json.loads(theme_path.read_text(encoding="utf-8"))
+            if not content:
+                content = build_theme_only_plan(theme_payload)
+            content = apply_theme_to_plan(content, theme_payload)
+            effective_plan = slot_dir / "effective-plan.json"
+            effective_plan.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(
+                f"Trend theme: {theme_payload.get('theme_id')} | "
+                f"title={content.get('title')} | effective plan: {effective_plan}"
+            )
+
         source_manifest = slot_dir / "sources.json"
+        if theme_payload is not None:
+            if prepare_theme_source_refresh(source_manifest, slot_dir, theme_payload):
+                print("Trend theme changed: archived old active stock cache and forcing a fresh themed source search.")
 
         # Cat compilations are fully local FFmpeg renders. MoneyPrinterTurbo does
         # not need to be running. Before editing, however, require stock files
@@ -190,6 +220,8 @@ def main() -> None:
             source_manifest=source_manifest,
             ledger=ledger,
         )
+        if theme_payload is not None:
+            stamp_source_manifest_theme(source_manifest, theme_payload)
         source_data = json.loads(source_manifest.read_text(encoding="utf-8"))
         print(f"Audible licensed animal sources: {len(source_data.get('clips', []))}")
         print(f"Audio source audit: {slot_dir / 'animal_audio_sources.json'}")
