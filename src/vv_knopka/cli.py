@@ -5,7 +5,7 @@ import json
 
 from dotenv import load_dotenv
 
-from .animal_compilation import write_stock_sources_manifest
+from .animal_audio_sources import ensure_audio_animal_sources
 from .animal_episode import build_episode_metadata
 from .animal_highlights import select_highlights
 from .animal_v3 import render_cat_v3
@@ -179,24 +179,20 @@ def main() -> None:
         content = json.loads(plan_path.read_text(encoding="utf-8"))
         source_manifest = slot_dir / "sources.json"
 
-        if not source_manifest.exists():
-            materials = _prepare_ai_materials(
-                settings,
-                content,
-                slot=slot.slot,
-                slot_dir=slot_dir,
-                ledger=ledger,
-            )
-            animal_cfg = settings.raw.get("animal", {})
-            write_stock_sources_manifest(
-                settings,
-                materials,
-                source_manifest,
-                max_clips=int(animal_cfg.get("material_count", 6)),
-                min_unique_clips=int(animal_cfg.get("min_unique_materials", 5)),
-            )
-            print(f"Auto-curated licensed animal sources: {source_manifest}")
-            print(f"Material audit: {slot_dir / 'ai_materials.json'}")
+        # Cat compilations are fully local FFmpeg renders. MoneyPrinterTurbo does
+        # not need to be running. Before editing, however, require stock files
+        # with genuine audible source audio; silent Pexels/Pixabay clips are rejected.
+        source_manifest = ensure_audio_animal_sources(
+            settings,
+            content,
+            slot=slot.slot,
+            slot_dir=slot_dir,
+            source_manifest=source_manifest,
+            ledger=ledger,
+        )
+        source_data = json.loads(source_manifest.read_text(encoding="utf-8"))
+        print(f"Audible licensed animal sources: {len(source_data.get('clips', []))}")
+        print(f"Audio source audit: {slot_dir / 'animal_audio_sources.json'}")
 
         animal_cfg = settings.raw.get("animal", {})
         highlight_manifest = select_highlights(
@@ -220,7 +216,7 @@ def main() -> None:
         )
         episode_data = json.loads(episode_manifest.read_text(encoding="utf-8"))
         print(f"Cat episode: {episode_data['display_title']}")
-        print(f"Intro voice: {episode_data['intro_voice']}")
+        print(f"End card: {episode_data['end_text']}")
 
         output = settings.runtime_dir / "ready_for_review" / f"slot-{slot.slot:02d}-{slot.language}-animals.mp4"
         print(
