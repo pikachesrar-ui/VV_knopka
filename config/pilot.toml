@@ -40,25 +40,32 @@ subtitle_stroke_color = "#000000"
 subtitle_stroke_width = 2.2
 
 [animal]
-# Cat v3: unique numbered title, intro voice, highlight clips and visible black-card cuts.
+# Cat format: local FFmpeg renderer. MoneyPrinterTurbo is not used for this pipeline.
 clip_seconds = 5
 material_count = 6
 min_unique_materials = 5
 # Frozen pilot keeps slot 2 RU and the remaining six cat slots EN. Long-run production uses this exact 80/20 cycle.
 language_cycle = ["en", "en", "en", "en", "ru"]
-intro_card_seconds = 1.8
-transition_card_seconds = 0.35
-title_font_size = 72
-transition_font_size = 64
-intro_voice_enabled = true
-intro_voice_delay_seconds = 0.22
-source_audio_volume = 0.82
-# Quiet procedural backing music; no low-frequency hits.
-bgm_volume = 0.42
-# Animal-only cut sound. Global transition_sfx stays locked to none by publication gate.
+# Short opening, more visible inter-clip card, and a dedicated closing card.
+intro_card_seconds = 0.9
+transition_card_seconds = 0.75
+end_card_seconds = 1.0
+title_font_size = 64
+transition_font_size = 58
+end_font_size = 64
+card_wrap_chars = 22
+# Cat clips must carry actual source audio; a technically present but effectively silent track is rejected.
+require_source_audio = true
+min_source_mean_volume_db = -55.0
+source_audio_volume = 1.0
+# Search deeper because stock libraries often publish silent footage.
+audio_pexels_candidates = 60
+audio_pixabay_candidates = 80
+# Put one chosen real meow here and it will be reused on every intro/transition/end card.
+# CAT_MEOW_FILE in .env can override this path.
+meow_file = "runtime/assets/cat-transition-meow.mp3"
+meow_volume = 0.90
 transition_sfx = "soft_meow"
-# Faster ~0.30s procedural meow on intro and every black mini-card.
-meow_volume = 0.82
 
 [materials]
 ai_material_count = 8
@@ -76,13 +83,12 @@ vision_max_estimated_cost_per_call_usd = 0.03
 highlight_vision_max_estimated_cost_usd = 0.05
 
 [audio]
-# Global transition SFX remain disabled. Animal-only soft_meow is scoped under [animal].
+# Global transition SFX remain disabled. Animal-only meow is scoped under [animal].
 transition_sfx = "none"
 forbidden_transition_tags = ["bass", "bass_drop", "impact", "boom", "sub_drop"]
 compilation_lufs = -16.0
 true_peak_db = -1.5
-# Use canonical edge-tts voice IDs. Human-readable MPT labels such as
-# `*-Female`/`*-Male` are display metadata and are rejected by edge-tts itself.
+# These remain for MoneyPrinterTurbo AI shorts; the cat renderer has no voiceover.
 edge_voice_en = "en-US-AriaNeural"
 edge_voice_ru = "ru-RU-SvetlanaNeural"
 
