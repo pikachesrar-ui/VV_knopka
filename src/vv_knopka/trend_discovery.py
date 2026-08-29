@@ -16,6 +16,7 @@ from .settings import load_settings
 
 YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+PETS_TOPIC_ID = "/m/068hy"
 
 
 def _parse_youtube_duration(value: str) -> float:
@@ -61,6 +62,7 @@ def youtube_search_params(
         "part": "snippet",
         "type": "video",
         "q": query,
+        "topicId": PETS_TOPIC_ID,
         "order": "viewCount",
         "publishedAfter": published_after.isoformat().replace("+00:00", "Z"),
         "maxResults": max(1, min(int(limit), 50)),
@@ -74,7 +76,7 @@ def youtube_search_params(
 def discover_youtube_cc_cats(
     *,
     api_key: str,
-    query: str = "funny cat kitten",
+    query: str = "cat|kitten",
     days: int = 30,
     limit: int = 30,
     now: datetime | None = None,
@@ -144,7 +146,7 @@ def discover_youtube_cc_cats(
                 "like_count": like_count,
                 "views_per_day": round(velocity, 1),
                 "duration_seconds": duration_seconds,
-                "license": "YouTube Creative Commons",
+                "license": "YouTube Creative Commons Attribution",
                 "rights_status": "creative_commons_attribution_required",
                 "attribution_required": True,
                 "import_status": "manual_review_required",
@@ -159,7 +161,10 @@ def discover_youtube_cc_cats(
             str(item.get("published_at") or ""),
         )
     )
-    return candidates[: max(1, int(limit))]
+    ranked = candidates[: max(1, int(limit))]
+    for rank, item in enumerate(ranked, 1):
+        item["trend_rank"] = rank
+    return ranked
 
 
 def write_discovery_report(
@@ -171,18 +176,20 @@ def write_discovery_report(
 ) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "version": 1,
+        "version": 2,
         "source": "youtube_creative_commons",
         "query": query,
+        "topic_id": PETS_TOPIC_ID,
         "lookback_days": int(days),
+        "discovered_at": datetime.now(timezone.utc).isoformat(),
         "candidate_count": len(candidates),
         "policy": {
             "purpose": "trend discovery only",
             "auto_download": False,
             "human_review_required": True,
             "note": (
-                "Creative Commons licensing helps with source rights, but YouTube reused-content "
-                "monetization rules still require substantive original editing/value."
+                "Creative Commons Attribution helps with source rights, but attribution is required and "
+                "YouTube reused-content monetization rules still require substantive original editing/value."
             ),
         },
         "candidates": candidates,
@@ -197,7 +204,7 @@ def main() -> None:
     parser.add_argument("--config", default="config/pilot.toml")
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--limit", type=int, default=30)
-    parser.add_argument("--query", default="funny cat kitten")
+    parser.add_argument("--query", default="cat|kitten")
     args = parser.parse_args()
 
     settings = load_settings(args.config)
@@ -223,10 +230,17 @@ def main() -> None:
     print(f"YouTube CC cat candidates: {len(candidates)}")
     print(output)
     if candidates:
-        top = candidates[0]
+        print("Top current candidates:")
+        for candidate in candidates[:10]:
+            print(
+                f"[{int(candidate['trend_rank']):02d}] "
+                f"{float(candidate['views_per_day']):,.0f} views/day | "
+                f"{int(candidate['view_count']):,} views | "
+                f"{candidate['title']} | {candidate['url']}"
+            )
         print(
-            "Top candidate: "
-            f"{top['title']} | {top['view_count']} views | {top['views_per_day']:.0f} views/day | {top['url']}"
+            "To import a reviewed candidate, obtain the exact licensed source file locally and run: "
+            "vv-cat-import <slot> --candidate <N> --file <path> --confirm-match"
         )
 
 
