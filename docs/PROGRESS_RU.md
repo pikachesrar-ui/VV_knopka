@@ -4,118 +4,92 @@
 
 Последнее обновление: **2026-08-29**.
 
-## Подтверждённая среда
+## Подтверждено на ПК пользователя
 
-- Windows, project Python `3.11.0`.
-- `auto_publish=false`.
-- OpenAI/Pexels/Pixabay keys локально в `.env`.
-- MoneyPrinterTurbo v1.3.5 установлен локально, API `127.0.0.1:8080`.
-- Последний пользовательский ledger: **$0.0268 / $10.00**.
+- Project Python: `3.11.0`.
+- `auto_publish = false`; publication gate должен оставаться `PASS`.
+- OpenAI / Pexels / Pixabay keys настроены локально.
+- MoneyPrinterTurbo v1.3.5 работает локально на `127.0.0.1:8080`.
+- Slot 1 Russian AI Short — manual QUALITY PASS.
+- Последний показанный OpenAI ledger: `$0.0268 / $10.00` до Cat v3.
 
 ## Slot 1 — Russian AI Short: QUALITY PASS
 
 Тема: «Почему осьминог меняет цвет во сне».
 
-Подтверждено пользователем: итоговая версия нравится.
+Исправлено: silent intermediate, unrelated stock, узкий stock pool, русский CJK font, black bars, per-clip FadeIn. Финальные subtitle settings: size 52, position 74%.
 
-Зафиксированные quality-настройки:
+## Slot 2 — cats: v1/v2 review
 
-- final MPT video, не silent intermediate;
-- Pexels + Pixabay + Luna visual relevance gate;
-- duration fallback для узких stock-тем;
-- 9:16 blur-fill;
-- Windows Cyrillic font;
-- subtitle size `52`;
-- subtitle custom position `74%`;
-- MPT per-clip FadeIn выключен.
+Первый montage был слишком случайным и почти немым. Логи показали, что большинство stock clips не имели audio stream, поэтому старый renderer подставлял silence.
 
-## Slot 2 — Russian cats compilation: v1 REVIEW FAIL, v2 в работе
+Cat v2 добавил Luna highlight selection, source audio where available, procedural BGM и soft meow. Пользователь сообщил, что стало лучше, но попросил заметнее оформить формат.
 
-Первая компиляция успешно отрендерилась, но пользователь отметил:
+## Cat v3 — текущий формат для теста
 
-- фактически нет слышимого звука;
-- показываются случайные первые моменты клипов;
-- ролик скучный;
-- пользователь хочет приятный `meow` на переходах вместо неприятного bass hit.
+Продуктовые решения пользователя:
 
-Лог подтвердил первопричину тишины: большинство выбранных stock clips не имели audio stream; старый renderer подставлял `anullsrc`, поэтому финальный AAC был почти полностью silent.
+- не использовать `Daily Dose of Cats` — считается слишком близким к чужому формату;
+- постоянного названия серии пока нет;
+- каждый выпуск имеет **уникальный номер + своё название**: `#001 — <title>`;
+- начало: **чёрная плашка + быстрый мяу + название + короткий Edge-TTS voice intro**;
+- между клипами: **чёрная mini-card ~0.35 сек + короткий текст + быстрый мяу**;
+- procedural meow сокращён примерно с 0.58 до **0.30 сек** и не содержит bass hit;
+- текст больше не обязан висеть поверх самого cat clip — mini-card несёт editorial text;
+- Luna по-прежнему выбирает лучший 5-секундный момент внутри каждого источника;
+- тихая procedural BGM остаётся поверх ролика; оригинальный source audio сохраняется, если существует;
+- сильные клипы идут раньше по highlight score;
+- будущий cat planner выбирает **одну coherent stock-friendly theme на выпуск**: toys / boxes / sleepy / reactions / jumps / dramatic stares / playful hunting и т.п.;
+- planner явно запрещён использовать `Daily Dose of Cats` или близкую имитацию.
 
-### Cat montage v2
+### Языки
 
-Реализовано:
+Никакого дублирования одного и того же ролика на RU и EN.
 
-1. `sources.json` переиспользуется, заново искать котов не нужно.
-2. Для каждого source clip строятся до 4 candidate windows по всей длине.
-3. На каждый candidate создаётся 3-frame contact sheet.
-4. GPT-5.6 Luna выбирает лучший action/cute/funny момент, пишет короткую подпись и задаёт порядок клипов.
-5. Renderer использует выбранный `start`, а не первые 5 секунд.
-6. Сохраняется оригинальный source audio, если он есть.
-7. На весь ролик добавляется тихий процедурный playful BGM.
-8. На каждом cut добавляется короткий процедурный soft meow (3 pitch variants).
-9. Никаких bass/drop/impact/boom SFX.
-10. Короткая caption выводится поверх каждого highlight.
-
-### Реальный FAIL после первой попытки v2
-
-Пользователь выполнил pull/test/render и получил:
+Long-run policy: **80% EN / 20% RU** через цикл:
 
 ```text
-1 failed, 21 passed
-publication gate: FAIL
-OpenAI spent: $0.0268 / $10.00
-HTTP 403 Forbidden /v1/responses
+en, en, en, en, ru
 ```
 
-Причины разделены:
+Frozen pilot остаётся как был: slot 2 RU, остальные 6 animal slots EN. Для выборки из 7 это 6/1 и является ближайшим целым приближением к 80/20.
 
-- publication gate FAIL был нашим config bug: глобальный `[audio].transition_sfx` ошибочно поменяли с `none` на `soft_meow`;
-- 403 появился на новом большом highlight vision request с множеством локальных Base64 contact sheets.
+## Новые Cat v3 файлы
 
-### Исправления 2026-08-29
+- `src/vv_knopka/animal_episode.py` — episode numbering, unique title, intro line, transition-card metadata, 80/20 production cadence.
+- `src/vv_knopka/animal_v3.py` — Edge TTS intro, black cards, quick meows, highlight clip render, final BGM mix.
+- `runtime/slots/02/episode.json` — создаётся при render.
 
-- глобальный `[audio].transition_sfx` снова **`none`**;
-- animal-only `[animal].transition_sfx = "soft_meow"`;
-- старый publication gate не ослаблялся;
-- highlight contact sheets уменьшены, чтобы снизить Base64 payload;
-- основной one-request highlight review сохранён;
-- если основной request получает HTTP 403, код автоматически переключается на per-clip fallback: максимум 4 маленьких images/request;
-- если даже per-clip fallback получает 403, CLI выводит безопасный `message/type/code/param` из OpenAI error body, не показывая API key;
-- failed 403 не записывается в usage ledger как успешный inference.
+`edge-tts>=7,<8` добавлен как dependency самого VV_knopka.
 
-OpenAI docs на 2026-08-29 подтверждают, что Responses API поддерживает Base64 image input и multiple images; GPT-5.6 поддерживает image input. Поэтому формат не является запрещённым сам по себе.
+## Следующая точка на ПК
 
-## Slot 3 — English AI Short
-
-Первый plan выбрал stock-poor `superb lyrebird` и был fail-closed из-за только 2 approved sources. Planner после этого ограничен broad stock-friendly anchors, stale stock cache стал anchor-aware.
-
-Пользователь решил пока остановить работу над English slot и сначала довести котиков.
-
-## Точная следующая точка
-
-На ПК пользователя:
+После pull нужно один раз синхронизировать dependencies, потому что добавлен `edge-tts`:
 
 ```powershell
 git pull
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-`plan 2` заново НЕ запускать. `sources.json` НЕ удалять.
+**Не запускать `plan 2` заново для первого Cat v3 теста.** Используем уже существующие `plan.json`, `sources.json` и cached highlight edit, чтобы проверить именно новый формат без ненужного stock/API расхода.
 
-Если render успешно создаст `highlights.json`, затем:
-
-```powershell
-.\.venv\Scripts\vv.exe status
-Get-Content .\runtime\slots\02\highlights.json -Raw
-```
-
-Review output:
+При render создастся/обновится:
 
 ```text
+runtime/slots/02/episode.json
 runtime/ready_for_review/slot-02-ru-animals.mp4
 ```
 
-Проверить глазами/на слух: качество выбранных моментов, captions, BGM volume, synthetic meow quality, source audio.
+После просмотра оценить:
 
-Автопубликация остаётся запрещённой до human review.
+1. длительность intro-card;
+2. качество/громкость Edge TTS intro;
+3. достаточно ли заметны 0.35s black mini-cards;
+4. нравится ли более быстрый 0.30s meow;
+5. BGM/source-audio balance;
+6. нужно ли затем сделать следующий новый themed cat episode на английском.
+
+До human review Cat v3 не переходить к auto-publish.
