@@ -7,7 +7,6 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 
@@ -27,6 +26,7 @@ _PROVIDER_LICENSES = {
     "pexels": "Pexels License",
     "pixabay": "Pixabay Content License",
 }
+_TARGET_SHORT_ASPECT = 9.0 / 16.0
 
 
 def _ffprobe_binary() -> str:
@@ -63,6 +63,62 @@ def has_audio_stream(path_or_url: str | Path, *, timeout: float = 25.0) -> bool 
     if completed.returncode != 0:
         return None
     return bool(completed.stdout.strip())
+
+
+def video_dimensions(path_or_url: str | Path, *, timeout: float = 25.0) -> tuple[int, int] | None:
+    """Return the first video stream width/height, or None when it cannot be trusted."""
+    try:
+        completed = subprocess.run(
+            [
+                _ffprobe_binary(),
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=p=0:s=x",
+                str(path_or_url),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    match = re.search(r"(\d+)x(\d+)", completed.stdout.strip())
+    if not match:
+        return None
+    width, height = int(match.group(1)), int(match.group(2))
+    if width <= 0 or height <= 0:
+        return None
+    return width, height
+
+
+def is_short_portrait(width: int, height: int, *, tolerance: float = 0.11) -> bool:
+    """Accept portrait footage close enough to 9:16 for a small full-frame crop.
+
+    9:16 is 0.5625 in width/height terms. The default tolerance also accepts
+    common 3:5 and 2:3 portrait phone footage, while rejecting 4:5/square and
+    every landscape source. This avoids the visibly-horizontal blur-fill look.
+    """
+    width = int(width or 0)
+    height = int(height or 0)
+    if width <= 0 or height <= 0 or width >= height:
+        return False
+    return abs((width / height) - _TARGET_SHORT_ASPECT) <= max(float(tolerance), 0.0)
+
+
+def _file_info_is_short_portrait(file_info: dict[str, Any], *, tolerance: float) -> bool:
+    return is_short_portrait(
+        int(file_info.get("width") or 0),
+        int(file_info.get("height") or 0),
+        tolerance=tolerance,
+    )
 
 
 def mean_audio_volume_db(path: Path, *, seconds: float = 8.0) -> float | None:
@@ -121,15 +177,16 @@ def _collect_pexels_audio_candidates(
     max_candidates: int,
     clip_seconds: int,
     anchor: str,
+    aspect_tolerance: float,
 ) -> list[dict[str, Any]]:
-    """Search Pexels without portrait-only filtering to maximize audio-bearing options."""
+    """Search Pexels for audible candidates while refusing horizontal footage."""
     candidates: list[dict[str, Any]] = []
     seen_ids: set[int] = set()
     for query in queries:
         response = client.get(
             "https://api.pexels.com/videos/search",
             headers={"Authorization": api_key},
-            params={"query": query, "per_page": per_page},
+            params={"query": query, "orientation": "portrait", "per_page": per_page},
         )
         response.raise_for_status()
         for video in (response.json()).get("videos") or []:
@@ -141,7 +198,11 @@ def _collect_pexels_audio_candidates(
                 continue
             file_info = choose_pexels_file(video)
             thumbnail_url = str(video.get("image") or "").strip()
-            if not file_info or not thumbnail_url:
+            if (
+                not file_info
+                or not thumbnail_url
+                or not _file_info_is_short_portrait(file_info, tolerance=aspect_tolerance)
+            ):
                 continue
             page_url = str(video.get("url") or "")
             creator = video.get("user") or {}
@@ -194,6 +255,8 @@ def _clip_from_cached_info(local_dir: Path, info: dict[str, Any]) -> dict[str, A
         "duration": float(info.get("duration") or 0.0),
         "vision_confidence": info.get("vision_confidence"),
         "vision_reason": info.get("vision_reason"),
+        "source_width": int(info.get("width") or 0),
+        "source_height": int(info.get("height") or 0),
     }
 
 
@@ -203,6 +266,7 @@ def _existing_audio_clips(
     *,
     local_dir: Path,
     minimum_mean_db: float,
+    aspect_tolerance: float,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     candidates: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -240,6 +304,20 @@ def _existing_audio_clips(
             path = (source_manifest.parent / path).resolve()
         if not path.exists():
             continue
+
+        dimensions = video_dimensions(path)
+        if dimensions is None or not is_short_portrait(*dimensions, tolerance=aspect_tolerance):
+            rejected.append(
+                {
+                    "provider": item.get("provider"),
+                    "provider_id": item.get("provider_id"),
+                    "file": str(path),
+                    "reason": "source is not vertical 9:16-ish footage",
+                    "dimensions": list(dimensions) if dimensions else None,
+                }
+            )
+            continue
+
         audible, mean_db = has_audible_audio(path, minimum_mean_db=minimum_mean_db)
         if not audible:
             rejected.append(
@@ -252,9 +330,13 @@ def _existing_audio_clips(
                 }
             )
             continue
+        width, height = dimensions
         item["file"] = str(path)
         item["has_audio"] = True
         item["mean_volume_db"] = mean_db
+        item["source_width"] = width
+        item["source_height"] = height
+        item["source_aspect_ratio"] = round(width / height, 6)
         accepted.append(item)
     return accepted, rejected
 
@@ -267,8 +349,18 @@ def _candidate_to_audio_clip(
     local_dir: Path,
     client: httpx.Client,
     minimum_mean_db: float,
+    aspect_tolerance: float,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    remote_probe = has_audio_stream(str(candidate["file_info"]["link"]))
+    file_info = candidate.get("file_info") or {}
+    if not _file_info_is_short_portrait(file_info, tolerance=aspect_tolerance):
+        return None, {
+            "provider": candidate.get("provider"),
+            "provider_id": candidate.get("id"),
+            "reason": "candidate metadata is not vertical 9:16-ish footage",
+            "dimensions": [int(file_info.get("width") or 0), int(file_info.get("height") or 0)],
+        }
+
+    remote_probe = has_audio_stream(str(file_info["link"]))
     if remote_probe is False:
         return None, {
             "provider": candidate.get("provider"),
@@ -284,6 +376,17 @@ def _candidate_to_audio_clip(
         download_client=client,
     )
     path = local_dir / str(material["url"])
+
+    dimensions = video_dimensions(path)
+    if dimensions is None or not is_short_portrait(*dimensions, tolerance=aspect_tolerance):
+        return None, {
+            "provider": candidate.get("provider"),
+            "provider_id": candidate.get("id"),
+            "file": str(path),
+            "reason": "downloaded file is not vertical 9:16-ish footage",
+            "dimensions": list(dimensions) if dimensions else None,
+        }
+
     audible, mean_db = has_audible_audio(path, minimum_mean_db=minimum_mean_db)
     if not audible:
         return None, {
@@ -294,6 +397,7 @@ def _candidate_to_audio_clip(
             "mean_volume_db": mean_db,
         }
 
+    width, height = dimensions
     provider = str(candidate["provider"]).lower()
     clip = {
         "file": str(path.resolve()),
@@ -308,13 +412,17 @@ def _candidate_to_audio_clip(
         "vision_reason": source.get("vision_reason"),
         "has_audio": True,
         "mean_volume_db": mean_db,
+        "source_width": width,
+        "source_height": height,
+        "source_aspect_ratio": round(width / height, 6),
     }
     return clip, {
         "provider": provider,
         "provider_id": clip["provider_id"],
         "file": str(path),
-        "reason": "accepted audible source",
+        "reason": "accepted audible vertical source",
         "mean_volume_db": mean_db,
+        "dimensions": [width, height],
     }
 
 
@@ -327,13 +435,14 @@ def ensure_audio_animal_sources(
     source_manifest: Path,
     ledger: BudgetLedger,
 ) -> Path:
-    """Ensure animal compilation sources are licensed, visually relevant and audible."""
+    """Ensure cat sources are licensed, visually relevant, audible and vertical."""
     animal_cfg = settings.raw.get("animal", {})
     materials_cfg = settings.raw.get("materials", {})
     target_count = int(animal_cfg.get("material_count", 6))
     min_unique = int(animal_cfg.get("min_unique_materials", 5))
     clip_seconds = int(float(animal_cfg.get("clip_seconds", 5)))
     minimum_mean_db = float(animal_cfg.get("min_source_mean_volume_db", -55.0))
+    aspect_tolerance = float(animal_cfg.get("source_aspect_tolerance", 0.11))
     max_pexels = int(animal_cfg.get("audio_pexels_candidates", 60))
     max_pixabay = int(animal_cfg.get("audio_pixabay_candidates", 80))
     pexels_per_page = int(materials_cfg.get("pexels_per_page", 40))
@@ -357,6 +466,7 @@ def ensure_audio_animal_sources(
         old_audit,
         local_dir=local_dir,
         minimum_mean_db=minimum_mean_db,
+        aspect_tolerance=aspect_tolerance,
     )
     accepted = accepted[:target_count]
     seen = {_clip_identity(item) for item in accepted}
@@ -367,7 +477,7 @@ def ensure_audio_animal_sources(
         f"{anchor} meowing",
         f"{anchor} purring",
         f"{anchor} playing",
-        f"{anchor} vocalizing",
+        f"{anchor} interacting",
         anchor,
     ]
     queries = list(dict.fromkeys(anchored + audio_queries))
@@ -375,6 +485,8 @@ def ensure_audio_animal_sources(
     stats: dict[str, Any] = {
         "reused_audio_sources": len(accepted),
         "minimum_mean_volume_db": minimum_mean_db,
+        "target_aspect": "9:16",
+        "source_aspect_tolerance": aspect_tolerance,
         "pexels": {"candidates": 0, "vision_reviewed": 0, "vision_approved": 0, "audio_accepted": 0},
         "pixabay": {"candidates": 0, "vision_reviewed": 0, "vision_approved": 0, "audio_accepted": 0},
     }
@@ -387,6 +499,7 @@ def ensure_audio_animal_sources(
             candidate
             for candidate in candidates
             if (provider, str(candidate.get("id") or "")) not in seen
+            and _file_info_is_short_portrait(candidate.get("file_info") or {}, tolerance=aspect_tolerance)
         ]
         if not candidates:
             return
@@ -399,7 +512,7 @@ def ensure_audio_animal_sources(
             batch_size=batch_size,
             minimum_confidence=min_confidence,
             # Audio presence is only knowable after probing/downloading, so review
-            # the available pool instead of stopping after the first six visuals.
+            # the available vertical pool instead of stopping after the first six visuals.
             needed=len(candidates) + 1,
         )
         stats[provider]["candidates"] = len(candidates)
@@ -419,6 +532,7 @@ def ensure_audio_animal_sources(
                     local_dir=local_dir,
                     client=download_client,
                     minimum_mean_db=minimum_mean_db,
+                    aspect_tolerance=aspect_tolerance,
                 )
                 rejected.append(audit_row) if clip is None else None
                 seen.add(identity)
@@ -430,7 +544,7 @@ def ensure_audio_animal_sources(
     if len(accepted) < target_count:
         pexels_key = os.getenv("PEXELS_API_KEY", "").strip()
         if not pexels_key:
-            raise RuntimeError("PEXELS_API_KEY is not set; cannot search audible cat stock")
+            raise RuntimeError("PEXELS_API_KEY is not set; cannot search audible vertical cat stock")
         with httpx.Client(timeout=60, follow_redirects=True) as client:
             pexels_candidates = _collect_pexels_audio_candidates(
                 client=client,
@@ -440,6 +554,7 @@ def ensure_audio_animal_sources(
                 max_candidates=max_pexels,
                 clip_seconds=clip_seconds,
                 anchor=anchor,
+                aspect_tolerance=aspect_tolerance,
             )
         consume("pexels", pexels_candidates)
 
@@ -460,13 +575,15 @@ def ensure_audio_animal_sources(
 
     audit_path = slot_dir / "animal_audio_sources.json"
     audit = {
-        "version": 1,
+        "version": 2,
         "slot": slot,
         "visual_anchor": anchor,
         "required_minimum": min_unique,
         "target": target_count,
         "selected": len(accepted),
         "queries": queries,
+        "target_aspect": "9:16",
+        "source_aspect_tolerance": aspect_tolerance,
         "stats": stats,
         "rejected_or_tested": rejected,
         "selected_sources": accepted,
@@ -475,16 +592,19 @@ def ensure_audio_animal_sources(
 
     if len(accepted) < min_unique:
         raise RuntimeError(
-            f"Audible-source gate found only {len(accepted)}/{min_unique} usable cat clips with real audio. "
-            f"See {audit_path}. Pexels/Pixabay often distribute silent stock; refusing to build another mostly-silent montage."
+            f"Vertical audible-source gate found only {len(accepted)}/{min_unique} usable cat clips. "
+            f"See {audit_path}. Refusing landscape/non-9:16-ish or effectively silent footage."
         )
 
     selected = accepted[:target_count]
     source_manifest.write_text(
         json.dumps(
             {
-                "source_policy": "vision-approved licensed stock with audible source audio",
+                "source_policy": "vision-approved licensed vertical stock with audible source audio",
                 "require_audible_audio": True,
+                "require_vertical_short_source": True,
+                "target_aspect": "9:16",
+                "source_aspect_tolerance": aspect_tolerance,
                 "minimum_mean_volume_db": minimum_mean_db,
                 "clips": selected,
             },
