@@ -19,6 +19,7 @@ dev = ["pytest>=8,<9"]
 [project.scripts]
 vv = "vv_knopka.cli:main"
 vv-cat-trends = "vv_knopka.trend_discovery:main"
+vv-cat-community = "vv_knopka.reddit_trend_discovery:main"
 vv-cat-import = "vv_knopka.trend_import:main"
 
 [tool.setuptools.packages.find]
