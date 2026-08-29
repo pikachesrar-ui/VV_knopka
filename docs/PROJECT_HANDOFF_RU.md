@@ -40,13 +40,11 @@
 - OpenAI/Pexels/Pixabay keys локально в `.env`;
 - MoneyPrinterTurbo v1.3.5 установлен отдельно;
 - MPT API работает на `127.0.0.1:8080`;
-- последний показанный OpenAI ledger: `$0.0268 / $10.00` до Cat v3.
+- после Cat v3 pull пользователь получил **25 passed in 0.77s**;
+- последний показанный OpenAI ledger: **$0.0281 / $10.00**;
+- publication gate: **PASS**.
 
-После Cat v3 в `pyproject.toml` добавлен `edge-tts>=7,<8`; после следующего `git pull` пользователь должен один раз выполнить:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-```
+`edge-tts>=7,<8` уже добавлен в `pyproject.toml` и был установлен пользователем перед первым Cat v3 render.
 
 ## 4. AI short architecture
 
@@ -109,7 +107,7 @@ en, en, en, en, ru
 
 то есть 80% EN / 20% RU originals.
 
-Frozen pilot сохраняется: среди 7 animal slots один RU (slot 2) и шесть EN, что является ближайшим целым приближением к 80/20 для семи выпусков.
+Frozen pilot сохраняется: среди 7 animal slots один RU (slot 2) и шесть EN.
 
 ### Cat v3 implementation
 
@@ -126,11 +124,11 @@ Frozen pilot сохраняется: среди 7 animal slots один RU (slot
 
 - Edge TTS intro voice (`+8%` rate);
 - intro black card ~1.8s, автоматически удлиняется если voice длиннее;
-- procedural quick meow ~0.30s (старый был ~0.58s);
+- procedural quick meow ~0.30s;
 - transition black card ~0.35s;
 - title font ~72, transition text ~64;
 - clips остаются 9:16 blur-fill + sharp foreground;
-- text убран с самих cat clips, чтобы картинка была чище;
+- text убран с самих cat clips;
 - source audio normalized/kept where present;
 - silent clips получают silence, но общий BGM и card meows обеспечивают ненулевой звук;
 - quiet procedural BGM mixed over full timeline;
@@ -154,33 +152,58 @@ Frozen pilot сохраняется: среди 7 animal slots один RU (slot
 На первом Cat v2 highlight request был 403. Исправлено:
 
 - preview images уменьшены;
-- общий запрос при 403 автоматически fallback на one-clip-at-a-time (до 4 images/request);
-- provider error теперь показывается без API key;
-- global publication gate снова требует `[audio] transition_sfx="none"`; animal meow живёт отдельно под `[animal]`.
+- общий запрос при 403 автоматически fallback на one-clip-at-a-time;
+- provider error показывается без API key;
+- global publication gate требует `[audio] transition_sfx="none"`; animal meow живёт отдельно под `[animal]`.
 
-Пользователь после fixes сообщил, что Cat v2 уже лучше, поэтому highlight selection/cache считается рабочим.
+Highlight selection/cache после fixes считается рабочим.
 
-## 8. Точная текущая точка
+## 8. Cat v3 Edge TTS incident — исправлено
 
-Цель: **перерендерить slot 2 в Cat v3**, не тратясь повторно на plan/source search/highlight selection.
+Первый Cat v3 render дошёл до episode metadata:
+
+```text
+Highlight edit: runtime/slots/02/highlights.json
+Cat episode: #001 — Кошки и их важные маленькие миссии
+Intro voice: У каждой кошки есть дело. Даже если никто не понимает какое.
+```
+
+Затем остановился:
+
+```text
+ValueError: Invalid voice 'ru-RU-SvetlanaNeural-Female'.
+RuntimeError: Edge TTS could not synthesize cat intro voice
+```
+
+Причина: config использовал MPT-style display label с суффиксом `-Female`, а Python package `edge-tts` принимает канонический voice ID без этого суффикса.
+
+Исправлено:
+
+```text
+edge_voice_ru = "ru-RU-SvetlanaNeural"
+edge_voice_en = "en-US-AriaNeural"
+```
+
+Regression test теперь проверяет оба значения и запрещает `-Female/-Male`.
+
+Важно: ошибка произошла **до нового OpenAI вызова и до финальной сборки**. Существующие `plan.json`, `sources.json`, `highlights.json`, `episode.json` надо переиспользовать; не перегенерировать.
+
+## 9. Точная текущая точка
+
+Цель: повторить slot 2 Cat v3 render после canonical Edge voice fix.
 
 На ПК:
 
 ```powershell
 git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Не запускать `plan 2` заново перед этим тестом.
+Повторный `pip install` не нужен, если `edge-tts` уже установлен.
 
-Expected extra runtime file:
-
-```text
-runtime/slots/02/episode.json
-```
+Не запускать `plan 2`; не удалять `sources.json`, `highlights.json`, `episode.json`.
 
 Review output:
 
