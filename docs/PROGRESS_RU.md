@@ -8,16 +8,14 @@
 
 - Project Python: `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний локальный test run до текущей редактуры: **25 passed**.
 - Последний показанный OpenAI ledger: **$0.0281 / $10.00**.
 - Slot 1 Russian AI Short («Почему осьминог меняет цвет во сне») — manual QUALITY PASS.
-- MoneyPrinterTurbo нужен для `ai_short`, но **не нужен для cat/animal pipeline**: котики рендерятся локально через FFmpeg.
+- Cat/animal pipeline рендерится локально через FFmpeg; MoneyPrinterTurbo нужен только для `ai_short`.
+- Пользовательский real meow теперь успешно подхватывается.
 
-## Slot 2 cats — подтверждённый audio sourcing
+## Slot 2 cats — audible sourcing подтверждён
 
-Пользователь прислал `animal_audio_sources.json` после нового source-audio gate.
-
-Результат:
+Пользователь прислал `animal_audio_sources.json`:
 
 - target = 6;
 - selected = **6**;
@@ -25,122 +23,96 @@
 - Luna vision-approved = 54;
 - audible accepted = 6;
 - Pixabay не понадобился;
-- десятки stock clips были отброшены как `remote file has no audio stream` или `missing/effectively silent audio`;
-- принятые clips имеют измеренный `mean_volume_db` примерно от `-54.5` до `-12.2 dB`.
+- десятки файлов reject как no audio / effectively silent;
+- accepted mean volume примерно `-54.5..-12.2 dB`.
 
-То есть audible-source gate реально работает и больше не должен молча собирать почти немой montage.
+Audio-source gate работает как задумано.
 
 ## Последний визуальный review
 
-После предыдущей редактуры пользователь отметил:
+Новый badge `#001` выглядит нормально, но русская строка превратилась в квадраты. Причина: предыдущий decorative font fallback выбрал font без Cyrillic glyphs.
 
-- fit текста уже лучше;
-- title-card всё ещё выглядит слишком просто/скучно;
-- текст хочется крупнее;
-- пользовательский meow не был подхвачен;
-- Pexels footage всё ещё выглядит слишком «stock»;
-- хочется уметь находить актуальные пользовательские/viral cat clips из TikTok/Shorts/других площадок.
+### Fix в ветке
 
-## Cat card — текущая редактура в ветке
-
-Реализовано:
-
-- title size: **84**;
-- transition title size: **78**;
-- end size: **82**;
-- wrap target: ~18 chars;
-- каждая строка теперь рендерится отдельным FFmpeg `drawtext`, поэтому строки центрируются **индивидуально**, а не левым краем внутри общего блока;
-- `#NNN` оформляется отдельным белым badge с чёрным номером;
-- renderer предпочитает более тяжёлый локальный Windows font (Arial Rounded MT Bold / Segoe UI Black / Trebuchet Bold / Impact fallback), без коммита/распространения font files;
-- можно переопределить локальный font через `CAT_CARD_FONT` или `[animal].card_font_file`.
-
-## Meow fix
-
-Причина прошлого failure: renderer ожидал слишком точное имя `runtime/assets/cat-transition-meow.mp3`.
-
-Теперь он автоматически пробует:
-
-- `CAT_MEOW_FILE`;
-- configured `meow_file`;
-- тот же basename с `.mp3/.wav/.m4a/.aac/.ogg/.flac/.opus`;
-- `runtime/assets/cat-transition-meow.*`;
-- `runtime/assets/cat-meow.*`;
-- `runtime/assets/meow.*`;
-- любой audio file с `meow` в имени в `runtime/assets`;
-- те же friendly names в корне repo как дополнительный fallback.
-
-При render обязательно печатается:
+Для Windows pilot теперь явно закреплён:
 
 ```text
-Cat meow asset: <actual path>
+C:\Windows\Fonts\seguibl.ttf
 ```
 
-или явное сообщение о procedural fallback.
+Это **Segoe UI Black**; Microsoft документирует у Segoe UI поддержку Cyrillic. На Linux CI этого пути нет, поэтому renderer использует системный fallback.
 
-## Trend / UGC sourcing — исследование
+Текущие card settings:
 
-Цель пользователя: уйти от ощущения stock footage и учитывать популярные сейчас cat clips.
-
-Решение: **разделить discovery и ingest**.
-
-### Discovery можно расширить
-
-Можно собирать candidates из:
-
-- TikTok;
-- YouTube / Shorts;
-- Instagram / Reels;
-- Reddit и других публичных источников.
-
-Хранить: source URL, creator, publish time, views/likes/shares when available, topic/theme, rights status.
-
-### Но default auto-download/repost нельзя делать без rights gate
-
-- Official TikTok Display API читает public videos только авторизованного пользователя, а не весь TikTok.
-- TikTok Research API умеет query public videos + metrics, но доступ предназначен для approved non-profit research use; это не нормальный production API для нашего канала.
-- YouTube Data API умеет искать `videoLicense=creativeCommon`, что полезно как один clean discovery signal.
-- YouTube monetization policy отдельно предупреждает о reused content: compilations из других social platforms с минимальной трансформацией могут быть неeligible даже при разрешении автора.
-
-Поэтому рекомендуемый следующий слой: `trend_discovery` создаёт очередь candidates, но в renderer идут только clips с explicit reusable license / creator permission / owned upload. Direct social scraper не становится default.
-
-Для по-настоящему viral licensed UGC позже можно отдельно оценить коммерческие licensing providers (не подключать без explicit user decision, т.к. pilot запрещает новые paid providers).
-
-## Текущий cat format
-
+- intro title size 84;
+- transition title 78;
+- end 82;
+- wrap ~18 chars;
+- `#NNN` — отдельный white badge;
+- строки центрируются отдельно;
+- real meow используется на intro / transitions / end;
 - no voiceover;
-- no BGM;
-- intro black card ~0.9s;
-- transition black card ~0.75s;
-- end card ~1.0s;
-- intro + transitions показывают один `#NNN — title`;
-- end: `Спасибо за просмотр` / `Thanks for watching`;
-- исходный clip audio сохраняется и нормализуется;
-- minimum 5 unique audible licensed clips, target 6;
-- real meow preferred; procedural only fail-safe.
+- no BGM.
+
+## Current/viral cat discovery — первый практический слой реализован
+
+Добавлен `src/vv_knopka/trend_discovery.py` и CLI:
+
+```powershell
+vv-cat-trends --days 30 --limit 30
+```
+
+Нужен локальный `.env` key:
+
+```text
+YOUTUBE_API_KEY=...
+```
+
+Что делает discovery:
+
+- YouTube Data API;
+- только `type=video`;
+- только `videoLicense=creativeCommon`;
+- только `videoDuration=short`;
+- только recent window (`publishedAfter`);
+- search order = `viewCount`;
+- после получения stats пересортировывает по **views/day**, чтобы свежий быстро растущий ролик поднимался выше;
+- сохраняет author/channel, title, published_at, views, likes, duration, license и rights metadata;
+- output: `runtime/trends/youtube-cat-cc.json`.
+
+Важно: это пока **discovery only**. Auto-download = false, import_status = manual_review_required. Причины:
+
+1. YouTube API даёт metadata, не media file;
+2. Creative Commons помогает с source rights, но attribution обязателен;
+3. YouTube reused-content policy отдельно требует substantive original editing/value;
+4. TikTok global public search не подходит как обычный production API: Display API работает с authorized creator, broad Query Videos относится к Research Tools.
+
+Следующий этап после просмотра списка candidates — сделать controlled `trend import`: выбранный/разрешённый файл добавляется в source manifest с attribution/provenance и затем проходит Luna/audio/highlight gates. Не делать raw social scraper default-путём.
 
 ## Языки
 
-- никакого RU/EN дубля одного и того же ролика;
-- long-run cadence: `en, en, en, en, ru` = 80/20;
+- без RU/EN дублей;
+- long-run animal cadence: `en, en, en, en, ru`;
 - frozen pilot: slot 2 RU, остальные animal slots EN.
 
 ## Следующая точка на ПК
 
+Из-за нового console entry point один раз переустановить editable package:
+
 ```powershell
 git pull
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-При render обратить внимание на строки:
+Проверить в логе:
 
 ```text
-Cat card font: ...
-Cat meow asset: ...
+Cat card font: C:\Windows\Fonts\seguibl.ttf
+Cat meow asset: <реальный файл пользователя>
 ```
-
-Если вместо второй строки виден procedural fallback, прислать точное имя/путь локального meow file.
 
 Review output:
 
@@ -148,4 +120,10 @@ Review output:
 runtime/ready_for_review/slot-02-ru-animals.mp4
 ```
 
-После этого решить, делаем ли отдельный `trend_discovery` слой (первый практичный provider — YouTube discovery + Creative Commons/rights metadata, TikTok/Instagram как discovery URLs without automatic ingest).
+После подтверждения текста можно включать trend discovery. Если `YOUTUBE_API_KEY` уже есть:
+
+```powershell
+.\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
+```
+
+Если ключа нет — сначала создать обычный YouTube Data API v3 key в Google Cloud; никаких новых платных media providers в pilot не добавлять.
