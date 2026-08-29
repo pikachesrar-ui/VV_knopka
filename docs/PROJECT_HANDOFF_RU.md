@@ -2,7 +2,7 @@
 
 Актуальный контекст для нового чата. GitHub — source of truth для кода/commit/CI; этот файл хранит продуктовые решения и точку продолжения.
 
-Последнее содержательное обновление: **2026-08-29**.
+Последнее содержательное обновление: **2026-08-30**.
 
 ## 1. Frozen pilot
 
@@ -19,7 +19,7 @@ Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot
 - `.venv` Python `3.11.0`;
 - OpenAI/Pexels/Pixabay keys local `.env`;
 - MPT only for `ai_short`; cats = local FFmpeg;
-- latest user test before compatibility fix: **38 passed**;
+- latest user test: **39 passed**;
 - publication gate **PASS**;
 - latest OpenAI ledger **$0.0340 / $10.00**;
 - slot 1 octopus manual QUALITY PASS;
@@ -58,7 +58,7 @@ Initial discovery required `YOUTUBE_API_KEY`. User tried Google Cloud but it ask
 
 Decision: **Google Cloud/API key is not required/default. Do not tell user to add billing/card/address.**
 
-`pyproject.toml` now includes:
+Dependency:
 
 ```text
 yt-dlp>=2026.1,<2027
@@ -72,41 +72,85 @@ vv-cat-trends --days 30 --limit 30
 
 `--backend auto|ytdlp|api`; `auto` uses API only if key already exists, otherwise yt-dlp no-key; no OAuth/account login/media download.
 
-## 6. No-key discovery compatibility incident
+## 6. No-key discovery runtime history
 
-First no-key run on user's current yt-dlp failed with:
+### Compatibility incident: `ytsearchdate`
+
+First no-key run failed with:
 
 ```text
 Unsupported url scheme: "ytsearchdate90"
 ```
 
-Root cause verified from current upstream yt-dlp: `ytsearchdate` support was removed in Feb 2026 because it was broken. `ytsearchN:` remains supported.
+Current yt-dlp removed `ytsearchdate`; fixed to ordinary `ytsearchN:`. Regression test prevents return of `ytsearchdate`.
 
-Fix committed:
+### Zero-candidate incident after compatibility fix
 
-- new helper `_ytdlp_search_target()` returns `ytsearchN:<query>`;
-- no-key discovery now scans ordinary search results and locally filters requested recency using `timestamp/upload_date`;
+User then ran:
+
+```text
+39 passed in 0.59s
+OpenAI spent: $0.0340 / $10.00
+auto_publish: False
+publication gate: PASS
+Trend backend: yt-dlp (no Google Cloud, no API key, no account login)
+YouTube cat trend candidates: 0 (CC already identified: 0)
+```
+
+This was not a YouTube/network error. Root cause: no-key search used `extract_flat="in_playlist"`, and flat search entries often omit `timestamp/upload_date`. Our fail-closed recency filter rejects entries without a trusted date, so all candidates disappeared.
+
+## 7. Current no-key discovery implementation — HYDRATED v4
+
+`discover_ytdlp_cats()` now has two stages:
+
+1. **Flat discovery** — ordinary `ytsearchN:` collects IDs/URLs cheaply, no media download.
+2. **Full metadata hydration** — up to 50 unique candidate URLs get `yt-dlp extract_info(..., download=False)` so we can reliably inspect date/duration/views/license.
+
+Default query family (when CLI query left default), generated with current year:
+
+```text
+cat shorts 2026
+funny cat shorts 2026
+kitten shorts 2026
+viral cat shorts 2026
+cat shorts
+```
+
+Reason: ordinary YouTube search is relevance-oriented, so one generic query can mostly return old viral content; current-year variants improve recall before local recency filtering.
+
+After hydration:
+
+- require publication inside requested lookback (`--days`, default 30);
 - duration 5..180 sec;
-- rank by views/day, then total views;
-- regression test asserts `ytsearchdate` is never generated.
+- compute views/day from full metadata;
+- rank views/day then total views;
+- store title, creator/channel, date, views, likes, duration, URL and optional license;
+- explicit Creative Commons -> `[CC]`;
+- missing/unknown license -> `[rights?]`, trend-reference-only;
+- unknown license is never permission to use.
 
-Expected next local test count: **39 passed**.
+CLI prints before hydration:
 
-Report:
+```text
+Scanning YouTube search results and hydrating metadata; this can take a minute...
+```
+
+No media is downloaded by discovery.
+
+Report remains:
 
 ```text
 runtime/trends/youtube-cat-cc.json
 ```
 
-Top-10 labels `[CC]` or `[rights?]`.
+Two new regression tests cover:
 
-Rights fail closed:
+- multi-query current-year default discovery;
+- conversion of flat YouTube video ID into a watch URL suitable for full metadata hydration.
 
-- explicit Creative Commons metadata -> `creative_commons_attribution_required`;
-- missing/unknown license -> `license_unverified`, trend-reference-only;
-- unknown license is never permission to use.
+Expected next local test count after pull: **41 passed**.
 
-## 7. Controlled UGC import
+## 8. Controlled UGC import
 
 CLI:
 
@@ -130,11 +174,11 @@ Import behavior:
 
 Attribution report: `runtime/slots/02/attribution.json`.
 
-## 8. Rights / monetization constraint
+## 9. Rights / monetization constraint
 
 Creative Commons/permission does not solve YouTube reused-content monetization by itself. Minimal social compilations remain risky, so keep substantive montage/editorial identity, provenance and human review.
 
-## 9. Next local checkpoint
+## 10. Next local checkpoint
 
 Run:
 
@@ -146,10 +190,13 @@ git pull
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
 ```
 
-Expected backend line:
+Expected test count: around **41 passed**.
+
+Expected discovery start:
 
 ```text
 Trend backend: yt-dlp (no Google Cloud, no API key, no account login)
+Scanning YouTube search results and hydrating metadata; this can take a minute...
 ```
 
-Ask user for top-10 output. If ordinary `ytsearch` also fails, debug exact yt-dlp output first; fallback candidate is Reddit RSS no-key discovery. Do not merge Draft PR #1 until explicit pilot quality approval.
+Ask user for top-10 output or exact error. If hydrated YouTube still gives no useful recent candidates, next fallback should be a separate community/trend discovery source (e.g. Reddit no-key feed/search), while keeping rights import fail-closed. Do not merge Draft PR #1 until explicit pilot quality approval.
