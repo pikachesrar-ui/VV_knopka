@@ -8,7 +8,7 @@ from vv_knopka.animal_episode import (
     build_episode_metadata,
     scheduled_animal_language,
 )
-from vv_knopka.animal_v3 import _generate_quick_meow
+from vv_knopka.animal_v3 import _generate_quick_meow, _wrap_card_text
 from vv_knopka.settings import Settings
 
 
@@ -33,7 +33,7 @@ def test_animal_episode_number_and_80_20_cycle(tmp_path):
     ]
 
 
-def test_episode_metadata_numbers_title_and_blocks_daily_dose_phrase(tmp_path):
+def test_episode_metadata_repeats_title_on_transitions_and_has_localized_end(tmp_path):
     settings = _settings(tmp_path)
     highlights = tmp_path / "highlights.json"
     highlights.write_text(
@@ -60,8 +60,21 @@ def test_episode_metadata_numbers_title_and_blocks_daily_dose_phrase(tmp_path):
     )
     data = json.loads(output.read_text(encoding="utf-8"))
     assert data["display_title"] == "#001 — Кото-хаос"
-    assert data["intro_voice"] == "Коты снова что-то задумали."
-    assert [item["text"] for item in data["transition_cards"]] == ["Лазер победил", "Почти поймал"]
+    assert "intro_voice" not in data
+    assert data["end_text"] == "Спасибо за просмотр"
+    assert [item["text"] for item in data["transition_cards"]] == [
+        "#001 — Кото-хаос",
+        "#001 — Кото-хаос",
+    ]
+
+
+def test_long_numbered_title_wraps_inside_phone_card():
+    wrapped = _wrap_card_text("#001 — Кошки и их важные маленькие миссии", width=22)
+    lines = wrapped.splitlines()
+    assert lines[0] == "#001"
+    assert 2 <= len(lines) <= 4
+    assert max(len(line) for line in lines) <= 22
+    assert "маленькие" in wrapped
 
 
 def test_quick_meow_is_short_and_non_silent(tmp_path):
@@ -74,11 +87,12 @@ def test_quick_meow_is_short_and_non_silent(tmp_path):
     assert max(abs(int(value)) for value in values) > 100
 
 
-def test_pilot_uses_canonical_edge_tts_voice_ids():
+def test_pilot_uses_canonical_edge_tts_voice_ids_for_mpt_ai_shorts():
     config_path = Path(__file__).resolve().parents[1] / "config" / "pilot.toml"
     with config_path.open("rb") as handle:
         config = tomllib.load(handle)
     assert config["audio"]["edge_voice_ru"] == "ru-RU-SvetlanaNeural"
     assert config["audio"]["edge_voice_en"] == "en-US-AriaNeural"
-    assert not config["audio"]["edge_voice_ru"].endswith(("-Female", "-Male"))
-    assert not config["audio"]["edge_voice_en"].endswith(("-Female", "-Male"))
+    assert config["animal"]["intro_card_seconds"] < config["animal"]["transition_card_seconds"] + 0.3
+    assert config["animal"]["require_source_audio"] is True
+    assert "bgm_volume" not in config["animal"]
