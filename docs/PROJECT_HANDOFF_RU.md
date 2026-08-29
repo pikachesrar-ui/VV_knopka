@@ -32,8 +32,8 @@ Pilot:
 - cat renderer = local FFmpeg;
 - последний показанный OpenAI ledger: `$0.0281 / $10.00`;
 - slot 1 octopus = manual QUALITY PASS;
-- real user meow asset теперь успешно используется;
-- audible-source gate slot 2 нашёл 6/6 usable Pexels clips с реальным signal audio;
+- real user meow asset успешно используется;
+- audible-source gate slot 2 нашёл 6/6 usable Pexels clips с real signal audio;
 - **Impact title-card style одобрен пользователем и считается принятым checkpoint**.
 
 ## 3. AI short architecture
@@ -50,7 +50,7 @@ Terra plan -> Pexels/Pixabay -> Luna relevance gate -> local stock -> MPT -> Edg
 - no BGM;
 - real meow on cards;
 - intro short (~0.9s);
-- transitions more visible (~0.75s);
+- transitions ~0.75s;
 - end ~1.0s;
 - intro + transitions repeat one `#NNN — title`;
 - end = RU `Спасибо за просмотр` / EN `Thanks for watching`;
@@ -63,15 +63,13 @@ Terra plan -> Pexels/Pixabay -> Luna relevance gate -> local stock -> MPT -> Edg
 
 ## 5. Title-card style — APPROVED
 
-После нескольких итераций пользователь одобрил **Impact** как основной шрифт карточек.
-
 Windows pilot pin:
 
 ```text
 C:\Windows\Fonts\impact.ttf
 ```
 
-Текущие размеры:
+Current sizes:
 - intro 84;
 - transition 78;
 - end 82;
@@ -79,25 +77,19 @@ C:\Windows\Fonts\impact.ttf
 - `#NNN` white badge;
 - each title line centered separately.
 
-Impact поддерживает кириллицу на Windows-машине пользователя и визуально устраивает пользователя. **Не возвращаться к Segoe UI Black / Arial Rounded / другим font experiments без новой явной причины.**
+Impact визуально принят пользователем. Не возвращаться к font experiments без новой явной причины.
 
 ## 6. Real meow resolver
 
-Resolver поддерживает:
+Resolver поддерживает `.env` `CAT_MEOW_FILE`, config `meow_file`, несколько audio extensions и friendly meow filenames в `runtime/assets`.
 
-- `.env` `CAT_MEOW_FILE`;
-- config `meow_file`;
-- `.mp3/.wav/.m4a/.aac/.ogg/.flac/.opus`;
-- friendly filenames `cat-transition-meow`, `cat-meow`, `meow`;
-- любой audio file с `meow` в имени в `runtime/assets`.
-
-Renderer печатает фактически выбранный path:
+Renderer печатает:
 
 ```text
 Cat meow asset: ...
 ```
 
-Пользователь подтвердил, что его звук теперь подставляется.
+Пользователь подтвердил, что его реальный звук теперь подставляется.
 
 ## 7. Audible stock gate — confirmed
 
@@ -110,79 +102,105 @@ Cat meow asset: ...
 - Luna approved 54;
 - audio accepted 6;
 - Pixabay 0;
-- many files rejected as no audio/effectively silent;
 - accepted signal mean roughly `-54.5..-12.2 dB`.
 
-То есть source-audio gate работает, но все accepted sources = Pexels, поэтому footage всё ещё ощущается stock-like.
+Gate работает, но все accepted = Pexels, поэтому footage всё ещё stock-like.
 
-## 8. Current/viral cat discovery — НОВОЕ
-
-Пользователь хочет больше актуального UGC / popular cat footage, а не только stock libraries.
+## 8. Current/viral cat discovery — IMPLEMENTED
 
 Архитектура:
 
 ```text
-trend discovery -> candidate queue -> rights/human gate -> controlled import -> Luna/audio/highlight gates -> renderer
+trend discovery -> candidate queue -> human/rights gate -> controlled local import -> audio/Luna/highlight gates -> renderer
 ```
 
-Не делать raw TikTok/Instagram scraper default-путём.
+### YouTube Creative Commons discovery
 
-### YouTube Creative Commons discovery реализован
-
-Новый module:
+Module:
 
 ```text
 src/vv_knopka/trend_discovery.py
 ```
 
-Новый console command:
+CLI:
 
 ```powershell
 vv-cat-trends --days 30 --limit 30
 ```
 
-Требует локальный `.env`:
+Requires:
 
 ```text
 YOUTUBE_API_KEY=...
 ```
 
-Search filters:
+Discovery v2:
 
-- `type=video`;
+- YouTube Data API;
+- default query `cat|kitten`;
+- topic `Pets` (`/m/068hy`);
 - `videoLicense=creativeCommon`;
 - `videoDuration=short`;
-- `publishedAfter` recent window;
-- API search order `viewCount`;
-- after video statistics fetch rank by `views/day` to favor fast recent growth.
+- recent `publishedAfter`;
+- API order `viewCount`;
+- then local sort by **views/day**;
+- output `runtime/trends/youtube-cat-cc.json`;
+- CLI prints top-10 ranked candidates `[01]`, `[02]`, etc.;
+- candidate metadata: URL, video id, title, channel, publish time, views, likes, duration, CC attribution status.
 
-Report:
+No media auto-download.
+
+## 9. Controlled UGC import — IMPLEMENTED
+
+Module:
 
 ```text
-runtime/trends/youtube-cat-cc.json
+src/vv_knopka/trend_import.py
 ```
 
-Candidate metadata includes URL, video id, title, channel, published date, views, likes, duration, license, attribution-required flag and import status.
+CLI example:
 
-**No automatic download yet**. `auto_download=false`, `manual_review_required`.
+```powershell
+vv-cat-import 2 --candidate 3 --file "D:\Downloads\cat.mp4" --confirm-match
+```
 
-Reasons:
-- YouTube API exposes metadata, not media file;
-- CC helps rights but requires attribution;
-- YouTube reused-content policy is separate from copyright and expects substantive original transformation;
-- broad TikTok Query Videos belongs to Research Tools for qualifying research; normal Display API reads authorized creator videos, not global trend search.
+Behavior:
 
-Next implementation after candidate quality review: controlled import of a user-approved/licensed local file into our provenance manifest. That file then passes the same audio + Luna + highlight checks as stock.
+- `--candidate` = 1-based rank from latest `youtube-cat-cc.json`;
+- explicit `--confirm-match` is mandatory: human confirms local file is exactly selected source;
+- automatic rights mapping currently only for report candidates marked YouTube Creative Commons Attribution;
+- verifies local file exists;
+- verifies duration >= configured cat clip duration;
+- verifies real audible audio using same `volumedetect` gate;
+- computes SHA-256;
+- copies into `runtime/imports/slot-XX/`;
+- writes provider/source/title/creator/CC BY license/metrics-at-discovery;
+- flags `ugc=true`, `human_approved=true`, `attribution_required=true`;
+- creates attribution string;
+- prepends UGC source into `runtime/slots/XX/sources.json` so UGC gets priority over Pexels;
+- creates `runtime/slots/XX/attribution.json`;
+- next `render-animal` reuses imported UGC first and stock only fills remaining positions to target 6;
+- source manifest change invalidates old highlight signature, so Luna reselects highlights for the new mix.
 
-## 9. YouTube monetization constraint
+New console entry point in `pyproject.toml`:
 
-YouTube explicitly treats minimally transformed compilations from other social websites as reused-content risk, even where permission exists. Therefore viral UGC must not become raw repost compilation. Keep meaningful editing/editorial identity and human review.
+```text
+vv-cat-import
+```
 
-## 10. Next local checkpoint
+## 10. Rights / monetization constraint
 
-Visual card/meow format is accepted enough for now. Next focus = **current/UGC cat sourcing**.
+Keep discovery separate from ingest.
 
-Because `vv-cat-trends` is a new console entry point, if not yet installed locally:
+- YouTube Creative Commons upload = Creative Commons Attribution / CC BY-style reuse with attribution required.
+- CC rights do **not** solve YouTube reused-content monetization policy by themselves.
+- Minimal compilations / social reposts remain monetization risk even with permission.
+- Current workflow therefore keeps `auto_download=false`, explicit human match confirmation, provenance, attribution and substantive editing/highlight selection.
+- Do not make raw TikTok/Instagram scraper a default source. Broad TikTok query is not a normal production API path.
+
+## 11. Next local checkpoint
+
+Because two console entry points now exist, run once after pull:
 
 ```powershell
 git pull
@@ -191,16 +209,32 @@ git pull
 .\.venv\Scripts\vv.exe status
 ```
 
-Then, if `YOUTUBE_API_KEY` is configured:
+Then configure `YOUTUBE_API_KEY` if not already present and run:
 
 ```powershell
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
 ```
 
-Inspect:
+Inspect terminal top-10 and/or:
 
 ```text
 runtime/trends/youtube-cat-cc.json
 ```
 
-If candidate quality is useful, implement controlled import next. Do not merge Draft PR #1 until the relevant pilot quality checkpoint is explicitly approved.
+If candidate N is actually useful, obtain exactly that CC source file locally and:
+
+```powershell
+.\.venv\Scripts\vv-cat-import.exe 2 --candidate N --file "D:\path\cat.mp4" --confirm-match
+.\.venv\Scripts\vv.exe render-animal 2
+```
+
+Then inspect:
+
+```text
+runtime/slots/02/sources.json
+runtime/slots/02/attribution.json
+runtime/slots/02/highlights.json
+runtime/ready_for_review/slot-02-ru-animals.mp4
+```
+
+Goal of next review: determine whether current/UGC candidate quality materially removes the Pexels-stock feel while preserving rights/provenance and source audio. Do not merge Draft PR #1 until relevant pilot quality checkpoint is explicitly approved.
