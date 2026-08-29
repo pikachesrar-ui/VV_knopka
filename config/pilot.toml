@@ -50,9 +50,9 @@ language_cycle = ["en", "en", "en", "en", "ru"]
 intro_card_seconds = 0.9
 transition_card_seconds = 0.75
 end_card_seconds = 1.0
-# Windows pilot: Microsoft documents Segoe UI Black (seguibl.ttf) as Cyrillic-capable.
+# Windows pilot: Impact is bold/condensed and Microsoft documents Cyrillic support.
 # On non-Windows CI this path is absent and renderer falls back to the local system font.
-card_font_file = 'C:\Windows\Fonts\seguibl.ttf'
+card_font_file = 'C:\Windows\Fonts\impact.ttf'
 title_font_size = 84
 transition_font_size = 78
 end_font_size = 82
