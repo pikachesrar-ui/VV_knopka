@@ -11,7 +11,7 @@
 - Последний показанный OpenAI ledger: **$0.0281 / $10.00**.
 - Slot 1 Russian AI Short («Почему осьминог меняет цвет во сне») — manual QUALITY PASS.
 - Cat/animal pipeline рендерится локально через FFmpeg; MoneyPrinterTurbo нужен только для `ai_short`.
-- Пользовательский real meow теперь успешно подхватывается.
+- Пользовательский real meow успешно подхватывается.
 - **Impact title-card style принят пользователем; шрифт больше не менять без новой причины.**
 
 ## Slot 2 cats — audible sourcing подтверждён
@@ -24,69 +24,95 @@
 - Luna vision-approved = 54;
 - audible accepted = 6;
 - Pixabay не понадобился;
-- десятки файлов reject как no audio / effectively silent;
 - accepted mean volume примерно `-54.5..-12.2 dB`.
 
-Audio-source gate работает как задумано.
+Audio-source gate работает, но все 6 accepted clips = Pexels, поэтому footage выглядит stock-like.
 
-## Title card — текущий принятый стиль
+## Title card — принятый стиль
 
-После экспериментов со шрифтами пользователь одобрил вариант с **Impact**.
-
-Для Windows pilot закреплён:
+Windows pilot:
 
 ```text
 C:\Windows\Fonts\impact.ttf
 ```
 
-Текущие card settings:
-
-- intro title size 84;
+- intro title 84;
 - transition title 78;
 - end 82;
 - wrap ~18 chars;
-- `#NNN` — отдельный white badge;
+- `#NNN` — white badge;
 - строки центрируются отдельно;
-- real meow используется на intro / transitions / end;
+- real meow на intro / transitions / end;
 - no voiceover;
 - no BGM.
 
-Этот визуальный стиль считается принятым checkpoint; не возвращаться к Segoe/Arial Rounded без новой причины.
+## Current/viral cat discovery — реализовано
 
-## Current/viral cat discovery — первый практический слой реализован
-
-Добавлен `src/vv_knopka/trend_discovery.py` и CLI:
+CLI:
 
 ```powershell
 vv-cat-trends --days 30 --limit 30
 ```
 
-Нужен локальный `.env` key:
+Нужен `.env`:
 
 ```text
 YOUTUBE_API_KEY=...
 ```
 
-Что делает discovery:
+Discovery v2:
 
 - YouTube Data API;
-- только `type=video`;
-- только `videoLicense=creativeCommon`;
-- только `videoDuration=short`;
-- только recent window (`publishedAfter`);
-- search order = `viewCount`;
-- после получения stats пересортировывает по **views/day**, чтобы свежий быстро растущий ролик поднимался выше;
-- сохраняет author/channel, title, published_at, views, likes, duration, license и rights metadata;
-- output: `runtime/trends/youtube-cat-cc.json`.
+- query default `cat|kitten`;
+- topic `Pets` (`/m/068hy`);
+- `videoLicense=creativeCommon`;
+- `videoDuration=short`;
+- recent `publishedAfter` window;
+- API sort by `viewCount`, затем локальная сортировка по **views/day**;
+- report: `runtime/trends/youtube-cat-cc.json`;
+- CLI печатает top-10 с номерами `[01]`, `[02]`, ...;
+- каждый candidate содержит creator/channel, publish time, views, likes, duration, CC rights metadata и attribution requirement.
 
-Важно: это пока **discovery only**. Auto-download = false, import_status = manual_review_required. Причины:
+## Controlled UGC import — реализовано
 
-1. YouTube API даёт metadata, не media file;
-2. Creative Commons помогает с source rights, но attribution обязателен;
-3. YouTube reused-content policy отдельно требует substantive original editing/value;
-4. TikTok global public search не подходит как обычный production API: Display API работает с authorized creator, broad Query Videos относится к Research Tools.
+Новый CLI:
 
-Следующий этап после просмотра списка candidates — сделать controlled `trend import`: выбранный/разрешённый файл добавляется в source manifest с attribution/provenance и затем проходит Luna/audio/highlight gates. Не делать raw social scraper default-путём.
+```powershell
+vv-cat-import 2 --candidate 3 --file "D:\Downloads\cat.mp4" --confirm-match
+```
+
+Почему local-file step намеренный: YouTube Data API даёт metadata, а не media; default workflow не превращается в social downloader/scraper.
+
+Import делает:
+
+- требует explicit `--confirm-match`, что local file = именно выбранный candidate;
+- пока auto-rights mapping принимает только YouTube Creative Commons Attribution candidates из нашего report;
+- проверяет minimum clip duration;
+- проверяет реальную audible audio дорожку тем же gate (`volumedetect`);
+- SHA-256 файла;
+- копирует в `runtime/imports/slot-XX/`;
+- сохраняет title, creator, source URL, CC BY license, views/views-per-day-at-discovery;
+- ставит `ugc=true`, `human_approved=true`, `attribution_required=true`;
+- генерирует attribution string/report;
+- prepends imported UGC в `runtime/slots/XX/sources.json`, поэтому он имеет приоритет над старым Pexels;
+- stock source logic затем только дозаполняет оставшиеся места до target 6;
+- изменение `sources.json` автоматически инвалидирует старый `highlights.json`, поэтому Luna выберет highlight заново для нового набора.
+
+Attribution report:
+
+```text
+runtime/slots/02/attribution.json
+```
+
+## Rights / monetization policy
+
+Discovery и ingest разделены намеренно.
+
+- YouTube Creative Commons = attribution required.
+- CC license помогает с copyright rights, но reused-content policy отдельна.
+- Минимально изменённые compilations / social reposts остаются monetization risk.
+- Поэтому `auto_download=false`, human review остаётся обязательным, а imported UGC должен проходить наш монтаж/highlight/audio pipeline.
+- TikTok/Instagram не становились default auto-ingest: официальный broad TikTok search не подходит как обычный production API.
 
 ## Языки
 
@@ -96,9 +122,7 @@ YOUTUBE_API_KEY=...
 
 ## Следующая точка на ПК
 
-Текущий визуальный стиль уже принят, поэтому следующий продуктовый этап — **актуальные/UGC коты**.
-
-Если новый console entry point ещё не установлен локально:
+Из-за нового entry point один раз:
 
 ```powershell
 git pull
@@ -107,16 +131,17 @@ git pull
 .\.venv\Scripts\vv.exe status
 ```
 
-Если `YOUTUBE_API_KEY` уже есть:
+Затем discovery:
 
 ```powershell
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
 ```
 
-Report:
+Если quality выдачи нормальная, выбрать candidate, получить именно этот CC source file локально и импортировать:
 
-```text
-runtime/trends/youtube-cat-cc.json
+```powershell
+.\.venv\Scripts\vv-cat-import.exe 2 --candidate 3 --file "D:\path\cat.mp4" --confirm-match
+.\.venv\Scripts\vv.exe render-animal 2
 ```
 
-После просмотра candidate quality решить controlled import. Никаких новых платных media providers в pilot без explicit решения пользователя.
+После первого report/import проверить candidate quality, attribution и насколько UGC реально убирает ощущение Pexels-stock. Никаких новых платных media providers без explicit решения пользователя.
