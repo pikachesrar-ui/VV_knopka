@@ -21,7 +21,7 @@ Editorial umbrella: **Animals / Nature Curiosities**.
 Two content pipelines:
 
 - `ai_short`: original animal/nature fact/story Short generated with AI assistance and rendered through MoneyPrinterTurbo.
-- `animal_compilation`: cute/funny animal compilation with meaningful editorial framing and local FFmpeg assembly.
+- `animal_compilation`: cute/funny cat/animal compilation with editorial framing and local FFmpeg assembly.
 
 ## 3. Frozen pilot scope
 
@@ -40,8 +40,15 @@ Until the user explicitly changes it:
 
 ## 4. Animal compilation rules
 
+- Cat/animal renderer is **local FFmpeg** and does not require MoneyPrinterTurbo to be running.
 - No loud bass/drop/impact/boom transition SFX.
-- Prefer micro-fades, natural audio continuity, silence, or very soft transition treatment.
+- Current cat format uses one short meow on black title cards; user wants one fixed **real** meow asset rather than a synthetic sound.
+- No background music in the current cat format.
+- No voiceover in the current cat format.
+- Intro and inter-clip black cards repeat the unique numbered episode title; end card is localized `Спасибо за просмотр` / `Thanks for watching`.
+- Long card text must wrap safely inside 1080x1920; do not regress to one-line overflow.
+- Cat stock must have **audible source audio**, not merely a technically present silent stream. Current gate probes audio and rejects effectively silent clips.
+- If fewer than 5 relevant licensed audible clips are available, fail closed rather than silently relaxing the rule.
 - Do not implement a raw social-media repost scraper as the default workflow.
 - Every accepted clip must retain source/provenance metadata.
 - Commercial-use permission/licensing must be explicitly represented before a clip passes the source gate.
@@ -60,10 +67,11 @@ Until the user explicitly changes it:
 - `VV_knopka` is our orchestration/business-logic repository.
 - Do not vendor or fork the entire MoneyPrinterTurbo codebase into Git history unless there is a strong, documented reason.
 - A local ignored checkout at `MoneyPrinterTurbo/` is allowed for runtime integration.
-- Integrate with current MoneyPrinterTurbo through its local API where practical.
+- Integrate with current MoneyPrinterTurbo through its local API for `ai_short` where practical.
 - MoneyPrinterTurbo currently exposes `/api/v1/videos` and task-status endpoints; verify upstream before making compatibility-sensitive changes.
-- Edge TTS is the preferred free/default TTS for the pilot unless testing shows a quality blocker.
+- Edge TTS remains the preferred free/default TTS for AI shorts; cat compilation currently has no voiceover.
 - Keep secrets out of Git. `.env`/local config must never be committed.
+- Binary meow asset should stay local/ignored (`runtime/assets/...`) or be referenced via `CAT_MEOW_FILE`; do not commit third-party sound binaries by default.
 
 ## 7. Git workflow
 
@@ -80,16 +88,23 @@ Rules:
 
 ## 8. Current milestone
 
-Slot 1 (Russian `ai_short`, octopus) has received manual **QUALITY PASS** after sound, relevance, subtitle, aspect-ratio, and transition fixes.
+Slot 1 (Russian `ai_short`, octopus) has received manual **QUALITY PASS**.
 
-The immediate milestone is now:
+Current work is intentionally focused on slot 2 cats before returning to slot 3:
 
-1. Produce **slot 2: Russian `animal_compilation` about cats** from source-tracked licensed stock.
-2. Human-review montage pacing, audio, framing, and transition feel.
-3. Produce **slot 3: first English `ai_short`** using the proven slot-1 quality stack.
-4. Human-review slot 3 voice/subtitles/footage and fact claims.
-5. Only then decide what additional style layer is needed before producing the remaining pilot videos.
+1. Re-render **slot 2 Russian cat compilation** with safe wrapped title cards, no voice, no BGM, longer black transitions and localized end card.
+2. Use one chosen real meow asset when available.
+3. Require 5-6 licensed relevant stock clips with genuine source audio; inspect `animal_audio_sources.json` if the gate cannot find enough.
+4. Human-review title fit, timing, meow, source audio and pacing.
+5. Only after cat format is accepted, return to the first English AI short / remaining pilot.
 
-## 9. Context persistence rule
+## 9. Language policy for cats
+
+- Never publish a translated duplicate of the same cat episode.
+- Long-run original-content cadence: `en, en, en, en, ru` (80% EN / 20% RU).
+- Frozen pilot remains slot 2 RU and the other six animal slots EN.
+- Do not use `Daily Dose of Cats` or a close imitation as the series/title phrase.
+
+## 10. Context persistence rule
 
 At the end of every substantial work session, update the handoff/progress docs so a fresh chat can resume from GitHub without relying on conversational memory.
