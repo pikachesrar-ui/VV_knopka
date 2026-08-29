@@ -122,6 +122,11 @@ def _candidate_from_ytdlp_entry(
     }
 
 
+def _ytdlp_search_target(query: str, scan_count: int) -> str:
+    """Use ytsearch, which remains supported after ytsearchdate was removed in 2026."""
+    return f"ytsearch{max(1, int(scan_count))}:{query}"
+
+
 def youtube_search_params(
     *,
     api_key: str,
@@ -234,7 +239,7 @@ def discover_ytdlp_cats(
     }
     try:
         with YoutubeDL(options) as ydl:
-            result = ydl.extract_info(f"ytsearchdate{scan_count}:{query}", download=False)
+            result = ydl.extract_info(_ytdlp_search_target(query, scan_count), download=False)
     except DownloadError as exc:
         raise RuntimeError(
             "No-key YouTube search failed. Update the project environment and retry; "
