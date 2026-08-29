@@ -122,11 +122,6 @@ def _candidate_from_ytdlp_entry(
     }
 
 
-def _ytdlp_search_target(query: str, scan_count: int) -> str:
-    """Use ytsearch, which remains supported after ytsearchdate was removed in 2026."""
-    return f"ytsearch{max(1, int(scan_count))}:{query}"
-
-
 def youtube_search_params(
     *,
     api_key: str,
@@ -219,6 +214,44 @@ def discover_youtube_cc_cats(
     return _rank_candidates(candidates, limit)
 
 
+def _ytdlp_search_queries(query: str, *, now: datetime) -> list[str]:
+    requested = str(query or "").strip()
+    if requested and requested != "cat kitten shorts":
+        return [requested]
+    year = now.year
+    return [
+        f"cat shorts {year}",
+        f"funny cat shorts {year}",
+        f"kitten shorts {year}",
+        f"viral cat shorts {year}",
+        "cat shorts",
+    ]
+
+
+def _flat_search_target(entry: dict[str, Any]) -> tuple[str, str] | None:
+    video_id = str(entry.get("id") or "").strip()
+    webpage_url = str(entry.get("webpage_url") or "").strip()
+    raw_url = str(entry.get("url") or "").strip()
+    if webpage_url.startswith(("https://", "http://")):
+        return video_id or webpage_url, webpage_url
+    if raw_url.startswith(("https://", "http://")):
+        return video_id or raw_url, raw_url
+    if video_id:
+        return video_id, f"https://www.youtube.com/watch?v={video_id}"
+    return None
+
+
+def _flat_entry_might_be_short(entry: dict[str, Any], *, max_seconds: float = 180.0) -> bool:
+    duration = entry.get("duration")
+    if duration in (None, ""):
+        return True
+    try:
+        seconds = float(duration)
+    except (TypeError, ValueError):
+        return True
+    return 0 < seconds <= max_seconds
+
+
 def discover_ytdlp_cats(
     *,
     query: str = "cat kitten shorts",
@@ -226,33 +259,68 @@ def discover_ytdlp_cats(
     limit: int = 30,
     now: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    """No-key YouTube trend discovery through yt-dlp search metadata; does not download media."""
+    """No-key YouTube discovery using flat search followed by full metadata hydration."""
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     cutoff = current - timedelta(days=max(int(days), 1))
-    scan_count = max(50, min(max(int(limit), 1) * 3, 100))
-    options = {
+    queries = _ytdlp_search_queries(query, now=current)
+    per_query = max(12, min(20, max(int(limit), 1)))
+    hydrate_limit = max(24, min(max(int(limit), 1) + 20, 50))
+
+    search_options = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": "in_playlist",
         "socket_timeout": 30,
+        "noplaylist": True,
     }
+    targets: list[tuple[str, str]] = []
+    seen: set[str] = set()
     try:
-        with YoutubeDL(options) as ydl:
-            result = ydl.extract_info(_ytdlp_search_target(query, scan_count), download=False)
+        with YoutubeDL(search_options) as ydl:
+            for search_query in queries:
+                result = ydl.extract_info(f"ytsearch{per_query}:{search_query}", download=False)
+                for raw in (result or {}).get("entries", []) or []:
+                    if not isinstance(raw, dict) or not _flat_entry_might_be_short(raw):
+                        continue
+                    target = _flat_search_target(raw)
+                    if target is None:
+                        continue
+                    identity, url = target
+                    if identity in seen:
+                        continue
+                    seen.add(identity)
+                    targets.append((identity, url))
     except DownloadError as exc:
         raise RuntimeError(
             "No-key YouTube search failed. Update the project environment and retry; "
             "do not log a personal YouTube account into yt-dlp for this workflow."
         ) from exc
 
+    metadata_options = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "socket_timeout": 30,
+        "noplaylist": True,
+    }
     candidates: list[dict[str, Any]] = []
-    for raw in (result or {}).get("entries", []) or []:
-        if not isinstance(raw, dict):
-            continue
-        candidate = _candidate_from_ytdlp_entry(raw, now=current, cutoff=cutoff)
-        if candidate:
-            candidates.append(candidate)
+    metadata_attempts = 0
+    with YoutubeDL(metadata_options) as ydl:
+        for _, url in targets:
+            if metadata_attempts >= hydrate_limit:
+                break
+            metadata_attempts += 1
+            try:
+                full = ydl.extract_info(url, download=False)
+            except DownloadError:
+                continue
+            if not isinstance(full, dict):
+                continue
+            candidate = _candidate_from_ytdlp_entry(full, now=current, cutoff=cutoff)
+            if candidate:
+                candidates.append(candidate)
+
     return _rank_candidates(candidates, limit)
 
 
@@ -280,7 +348,7 @@ def write_discovery_report(
 ) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "version": 3,
+        "version": 4,
         "source": "youtube_trend_discovery",
         "backend": backend,
         "query": query,
@@ -292,9 +360,10 @@ def write_discovery_report(
             "auto_download": False,
             "human_review_required": True,
             "note": (
-                "The no-key yt-dlp backend is best-effort. License metadata may be absent; "
-                "unverified candidates are trend references only until rights are verified. "
-                "Creative Commons rights do not remove YouTube reused-content risk."
+                "The no-key yt-dlp backend is best-effort. Search results are hydrated with full metadata before "
+                "date/duration/ranking checks. License metadata may still be absent; unverified candidates are "
+                "trend references only until rights are verified. Creative Commons rights do not remove "
+                "YouTube reused-content risk."
             ),
         },
         "candidates": candidates,
@@ -333,13 +402,14 @@ def main() -> None:
         backend_label = "youtube_data_api"
         print("Trend backend: YouTube Data API (exact Creative Commons filter)")
     else:
+        print("Trend backend: yt-dlp (no Google Cloud, no API key, no account login)")
+        print("Scanning YouTube search results and hydrating metadata; this can take a minute...")
         candidates = discover_ytdlp_cats(
             query=args.query,
             days=max(args.days, 1),
             limit=max(args.limit, 1),
         )
         backend_label = "yt_dlp_no_key"
-        print("Trend backend: yt-dlp (no Google Cloud, no API key, no account login)")
 
     output = settings.runtime_dir / "trends" / "youtube-cat-cc.json"
     write_discovery_report(
