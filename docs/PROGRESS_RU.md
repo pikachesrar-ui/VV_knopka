@@ -12,6 +12,7 @@
 - Slot 1 Russian AI Short («Почему осьминог меняет цвет во сне») — manual QUALITY PASS.
 - Cat/animal pipeline рендерится локально через FFmpeg; MoneyPrinterTurbo нужен только для `ai_short`.
 - Пользовательский real meow теперь успешно подхватывается.
+- **Impact title-card style принят пользователем; шрифт больше не менять без новой причины.**
 
 ## Slot 2 cats — audible sourcing подтверждён
 
@@ -28,19 +29,15 @@
 
 Audio-source gate работает как задумано.
 
-## Последний визуальный review
+## Title card — текущий принятый стиль
 
-Новый badge `#001` выглядит нормально, но русская строка превратилась в квадраты. Причина: предыдущий decorative font fallback выбрал font без Cyrillic glyphs.
+После экспериментов со шрифтами пользователь одобрил вариант с **Impact**.
 
-### Fix в ветке
-
-Для Windows pilot теперь явно закреплён:
+Для Windows pilot закреплён:
 
 ```text
-C:\Windows\Fonts\seguibl.ttf
+C:\Windows\Fonts\impact.ttf
 ```
-
-Это **Segoe UI Black**; Microsoft документирует у Segoe UI поддержку Cyrillic. На Linux CI этого пути нет, поэтому renderer использует системный fallback.
 
 Текущие card settings:
 
@@ -53,6 +50,8 @@ C:\Windows\Fonts\seguibl.ttf
 - real meow используется на intro / transitions / end;
 - no voiceover;
 - no BGM.
+
+Этот визуальный стиль считается принятым checkpoint; не возвращаться к Segoe/Arial Rounded без новой причины.
 
 ## Current/viral cat discovery — первый практический слой реализован
 
@@ -97,33 +96,27 @@ YOUTUBE_API_KEY=...
 
 ## Следующая точка на ПК
 
-Из-за нового console entry point один раз переустановить editable package:
+Текущий визуальный стиль уже принят, поэтому следующий продуктовый этап — **актуальные/UGC коты**.
+
+Если новый console entry point ещё не установлен локально:
 
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Проверить в логе:
-
-```text
-Cat card font: C:\Windows\Fonts\seguibl.ttf
-Cat meow asset: <реальный файл пользователя>
-```
-
-Review output:
-
-```text
-runtime/ready_for_review/slot-02-ru-animals.mp4
-```
-
-После подтверждения текста можно включать trend discovery. Если `YOUTUBE_API_KEY` уже есть:
+Если `YOUTUBE_API_KEY` уже есть:
 
 ```powershell
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
 ```
 
-Если ключа нет — сначала создать обычный YouTube Data API v3 key в Google Cloud; никаких новых платных media providers в pilot не добавлять.
+Report:
+
+```text
+runtime/trends/youtube-cat-cc.json
+```
+
+После просмотра candidate quality решить controlled import. Никаких новых платных media providers в pilot без explicit решения пользователя.
