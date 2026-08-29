@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -23,12 +22,7 @@ def animal_episode_number(settings: Settings, slot: int) -> int:
 
 
 def scheduled_animal_language(settings: Settings, episode_number: int) -> str:
-    """Return the long-run 80/20 EN/RU cadence for future cat episodes.
-
-    The frozen 15-video pilot keeps its existing slot languages. This helper is
-    the production cadence after the pilot: four English originals, then one
-    Russian original. We never translate/repost the same episode into both.
-    """
+    """Return the long-run 80/20 EN/RU cadence for future cat episodes."""
     cycle = list(settings.raw.get("animal", {}).get("language_cycle", ["en", "en", "en", "en", "ru"]))
     if not cycle:
         cycle = ["en", "en", "en", "en", "ru"]
@@ -41,21 +35,10 @@ def _clean_title(value: str, *, episode_number: int, language: str) -> str:
     lowered = title.casefold()
     if not title or any(phrase in lowered for phrase in _FORBIDDEN_SERIES_PHRASES):
         title = "Кото-хаос" if language == "ru" else "Cat Chaos"
-    # Keep the black title card readable on a phone. The unique episode number
-    # guarantees the displayed title cannot duplicate even if a future phrase repeats.
-    if len(title) > 38:
-        title = title[:35].rstrip(" -—:|,.!?") + "…"
+    # Renderer wraps title cards safely; keep more of the actual generated title.
+    if len(title) > 52:
+        title = title[:49].rsplit(" ", 1)[0].rstrip(" -—:|,.!?") + "…"
     return f"#{episode_number:03d} — {title}"
-
-
-def _clean_intro(value: str, *, language: str) -> str:
-    text = " ".join(str(value or "").replace("\n", " ").split())
-    if not text:
-        return "Смотрим, что сегодня устроили коты." if language == "ru" else "Let's see what the cats are up to."
-    # Edge TTS intro should stay brief enough for the opening card.
-    if len(text) > 105:
-        text = text[:102].rsplit(" ", 1)[0].rstrip(" ,;:-") + "."
-    return text
 
 
 def build_episode_metadata(
@@ -75,29 +58,31 @@ def build_episode_metadata(
     }
     order = [int(value) for value in highlights.get("order", []) if int(value) in selections]
     episode = animal_episode_number(settings, slot)
+    display_title = _clean_title(
+        str(plan.get("title") or ""),
+        episode_number=episode,
+        language=language,
+    )
 
-    cards: list[dict[str, Any]] = []
-    for sequence, clip_index in enumerate(order, start=1):
-        caption = " ".join(str(selections[clip_index].get("caption") or "").split())
-        if not caption:
-            caption = "Следующий котик" if language == "ru" else "Next cat"
-        cards.append(
-            {
-                "sequence": sequence,
-                "clip_index": clip_index,
-                "text": caption[:64],
-            }
-        )
+    # Product decision: every inter-clip black card repeats the episode title.
+    cards = [
+        {
+            "sequence": sequence,
+            "clip_index": clip_index,
+            "text": display_title,
+        }
+        for sequence, clip_index in enumerate(order, start=1)
+    ]
 
     payload = {
-        "version": 1,
+        "version": 2,
         "episode_number": episode,
         "pilot_language": language,
         "production_language_cadence": "80% en / 20% ru; no duplicate translations",
         "scheduled_language_after_pilot": scheduled_animal_language(settings, episode),
-        "display_title": _clean_title(str(plan.get("title") or ""), episode_number=episode, language=language),
-        "intro_voice": _clean_intro(str(plan.get("hook") or ""), language=language),
+        "display_title": display_title,
         "transition_cards": cards,
+        "end_text": "Спасибо за просмотр" if language == "ru" else "Thanks for watching",
         "forbidden_series_phrases": list(_FORBIDDEN_SERIES_PHRASES),
     }
     output.parent.mkdir(parents=True, exist_ok=True)
