@@ -1,5 +1,7 @@
 import json
+import tomllib
 import wave
+from pathlib import Path
 
 from vv_knopka.animal_episode import (
     animal_episode_number,
@@ -70,3 +72,13 @@ def test_quick_meow_is_short_and_non_silent(tmp_path):
     values = memoryview(raw).cast("h")
     assert 0.28 <= duration <= 0.31
     assert max(abs(int(value)) for value in values) > 100
+
+
+def test_pilot_uses_canonical_edge_tts_voice_ids():
+    config_path = Path(__file__).resolve().parents[1] / "config" / "pilot.toml"
+    with config_path.open("rb") as handle:
+        config = tomllib.load(handle)
+    assert config["audio"]["edge_voice_ru"] == "ru-RU-SvetlanaNeural"
+    assert config["audio"]["edge_voice_en"] == "en-US-AriaNeural"
+    assert not config["audio"]["edge_voice_ru"].endswith(("-Female", "-Male"))
+    assert not config["audio"]["edge_voice_en"].endswith(("-Female", "-Male"))
