@@ -31,7 +31,7 @@ Pilot:
 - MoneyPrinterTurbo v1.3.5 установлен отдельно;
 - MPT API работает, но **animal/cat renderer MPT не использует**;
 - cat videos рендерятся локально через FFmpeg;
-- последний локальный test run перед текущими изменениями: `25 passed`;
+- последний подтверждённый локальный run перед текущей style-edit: `25 passed`, publication gate PASS;
 - последний показанный OpenAI ledger: `$0.0281 / $10.00`;
 - slot 1 («Почему осьминог меняет цвет во сне») — manual QUALITY PASS.
 
@@ -44,88 +44,97 @@ Terra plan -> Pexels/Pixabay -> GPT-5.6 Luna relevance gate -> local stock -> MP
 ## 4. Cat pipeline history
 
 ### v1
-
-6 stock clips, первые куски, почти без звука. Большинство Pexels/Pixabay файлов вообще не имели audio stream.
+6 stock clips, первые куски, почти без звука.
 
 ### v2
+Luna выбирает highlights, source audio where available + BGM + procedural meow. Стало лучше, но montage всё ещё выглядел случайным.
 
-Luna выбирала лучший 5s window, добавлены source audio where available, procedural BGM и procedural meow. Пользователь: стало лучше, но всё ещё слишком похоже на случайную нарезку.
+### v3
+Black cards + unique numbered title + Edge voice. Review: title overflow, voice/long intro не нужны.
 
-### v3 test
+### Текущая редактура
+Пользователь хочет:
 
-Добавлены black cards + unique numbered title + Edge-TTS intro. Пользователь после просмотра попросил новую редактуру:
+- no voiceover;
+- no BGM;
+- intro короткий;
+- transition black card заметнее/дольше;
+- intro + transitions показывают один title;
+- end `Спасибо за просмотр` / `Thanks for watching`;
+- настоящий постоянный meow;
+- только clips с настоящим source audio;
+- title text крупнее и визуально интереснее;
+- footage меньше должно выглядеть как stock;
+- в перспективе искать popular/current user cat videos из TikTok/Shorts/etc.
 
-1. голос убрать;
-2. opening black screen заметно сократить;
-3. длинный title не помещался — нужен safe wrap;
-4. transition black screen сделать длиннее;
-5. на intro и каждом transition показывать **одно и то же название short**, а не отдельные captions;
-6. в конце отдельная `Спасибо за просмотр` / `Thanks for watching` card;
-7. synthetic meow заменить одним реальным постоянным sample;
-8. искать footage именно с настоящим source audio;
-9. BGM убрать полностью.
+## 5. Cat renderer — актуальная реализация
 
-## 5. Cat format — АКТУАЛЬНАЯ реализация
+`src/vv_knopka/animal_v3.py`:
 
-### Cards / montage
-
-`src/vv_knopka/animal_v3.py` теперь:
-
-- **без voiceover**;
-- **без background music**;
-- intro card ~`0.9s`;
-- transition card ~`0.75s`;
-- end card ~`1.0s`;
-- intro + все inter-clip cards: `#NNN — <episode title>`;
-- end RU: `Спасибо за просмотр`;
-- end EN: `Thanks for watching`;
-- title text автоматически wrap по словам; episode number выносится на отдельную строку;
-- drawtext читает UTF-8 `textfile`, а не вставляет длинную строку inline;
+- local FFmpeg only;
+- no voice;
+- no BGM;
+- intro ~0.9s;
+- transition ~0.75s;
+- end ~1.0s;
 - cat clips без overlay text;
-- clip audio нормализуется и остаётся единственным постоянным звуковым слоем между transitions.
+- source audio нормализуется;
+- title sizes: intro **84**, transition **78**, end **82**;
+- wrap ~18 chars;
+- каждая строка title рендерится отдельным `drawtext`, поэтому индивидуально центрируется;
+- `#NNN` оформляется отдельным белым badge с чёрным номером;
+- предпочитается более тяжёлый локальный Windows font: Arial Rounded MT Bold / Segoe UI Black / Trebuchet Bold / Impact fallback;
+- local font можно переопределить `CAT_CARD_FONT` или `[animal].card_font_file`; font files не коммитить/не распространять.
 
-`src/vv_knopka/animal_episode.py` version 2:
+`src/vv_knopka/animal_episode.py`:
 
-- stable episode number;
-- unique display title;
-- blocked `Daily Dose of Cats` / close exact phrase;
-- transition card metadata повторяет display title;
+- stable episode numbering;
+- unique `#NNN — title`;
+- запрещено `Daily Dose of Cats`;
+- transitions повторяют display title;
 - localized end text;
-- `intro_voice` удалён.
+- intro voice metadata удалён.
 
-### Real meow asset
+## 6. Real meow — текущая политика
 
-Renderer ищет в порядке:
+Предыдущий meow не подхватился, потому что resolver ожидал слишком точное имя/extension.
 
-1. `.env` `CAT_MEOW_FILE=<absolute-or-relative-path>`;
-2. config default:
-   `runtime/assets/cat-transition-meow.mp3`;
-3. только если файла нет — procedural ~0.30s fallback.
+Теперь `_resolve_meow` пробует:
 
-Цель: пользователь один раз выбирает приятный реальный meow и дальше один и тот же файл используется во всех cat episodes.
+1. `CAT_MEOW_FILE`;
+2. configured `meow_file`;
+3. тот же basename с `.mp3/.wav/.m4a/.aac/.ogg/.flac/.opus`;
+4. `runtime/assets/cat-transition-meow.*`;
+5. `runtime/assets/cat-meow.*`;
+6. `runtime/assets/meow.*`;
+7. любой audio file с `meow` в имени в `runtime/assets`;
+8. friendly meow names в корне repo как дополнительный fallback.
 
-Найдены бесплатные варианты для выбора на слух:
-- Mixkit `Sweet kitty meow` (~1s), Mixkit разрешает sound effects в YouTube и коммерческих проектах;
-- Pixabay `Cat Meow` (~1s), free under Pixabay Content License.
+Renderer печатает:
 
-Не commit binary sound file в repo. Хранить локально в ignored runtime или указывать через `.env`.
+```text
+Cat meow asset: <actual path>
+```
 
-## 6. Audible stock gate — НОВОЕ
+Если real file не найден — явный procedural fallback message.
 
-`src/vv_knopka/animal_audio_sources.py` добавляет отдельную политику для animal pipeline.
+## 7. Audible stock gate — подтверждён на ПК
 
-При `vv render-animal <slot>` теперь до highlight selection:
+Пользователь прислал `animal_audio_sources.json` после запуска gate.
 
-- повторно проверяются уже скачанные sources и `ai_materials.json`;
-- source обязан иметь audio stream;
-- FFmpeg `volumedetect` проверяет, что дорожка не фактически silent;
-- threshold default: mean volume > `-55 dB`;
-- старые silent sources reject;
-- затем поиск идёт глубже по Pexels и Pixabay;
-- дополнительные sound-oriented queries: `cat meowing`, `cat purring`, `cat playing`, `cat vocalizing`;
-- Luna всё равно проверяет визуальную релевантность;
-- target = 6 unique clips, hard minimum = 5;
-- если <5 audible licensed relevant clips, pipeline **fail-closed**, не собирает silent filler.
+Подтверждено:
+
+- required minimum = 5;
+- target = 6;
+- **selected = 6**;
+- Pexels candidates = 60;
+- vision-approved = 54;
+- audio-accepted = 6;
+- Pixabay не понадобился;
+- множество Pexels clips reject как no audio stream / effectively silent;
+- accepted mean volumes примерно от `-54.5 dB` до `-12.2 dB`.
+
+То есть audio gate работает: source обязан иметь stream и `volumedetect` signal выше default `-55 dB`.
 
 Audit:
 
@@ -133,61 +142,77 @@ Audit:
 runtime/slots/02/animal_audio_sources.json
 ```
 
-Новый `sources.json` содержит только accepted audible clips и `mean_volume_db` metadata.
+## 8. Trend / UGC sourcing — важное направление
 
-Важно: stock libraries часто распространяют video без original audio. Первый запуск нового gate может не найти 5 файлов. В таком случае не ослаблять gate без решения пользователя; варианты дальше: другой licensed provider или user-supplied/local cat footage.
+Пользователь хочет меньше stock-looking footage и больше актуальных viral/user clips.
 
-## 7. Cat titles / language policy
+Архитектурное решение: **discovery отдельно от ingest**.
 
-- Не использовать `Daily Dose of Cats`.
-- Постоянного series name пока нет.
-- Каждый выпуск: unique `#NNN — title`.
-- Future cat planner: 2-4 word original title, одна coherent stock-friendly theme на episode.
-- Дубли RU/EN запрещены.
-- Long-run cadence: `en, en, en, en, ru` (80/20 originals).
-- Frozen pilot: slot 2 RU, остальные animal slots EN.
+### Discovery candidates
 
-## 8. MoneyPrinterTurbo note
+Можно собирать URLs/metadata из:
 
-Если пользователь говорит, что MPT/браузер были закрыты, но cat video всё равно отрендерился — это **ожидаемо**. `render-animal` = local FFmpeg pipeline. MPT API нужен только для `render-ai`.
+- TikTok;
+- YouTube / Shorts;
+- Instagram / Reels;
+- Reddit;
+- других публичных источников.
 
-## 9. Следующая точка
+Хранить: URL, creator, publish time, views/likes/shares if available, topic, rights status.
 
-После текущего CI пользователь должен:
+### Rights gate обязателен
+
+Не превращать default workflow в автоматический TikTok/social downloader.
+
+Почему:
+
+- TikTok Display API читает videos только у авторизованного user; это не global trending search.
+- TikTok Research API умеет query public videos/metrics, но intended for approved non-profit research, не production sourcing.
+- YouTube Data API умеет `videoLicense=creativeCommon`; это один из clean discovery signals.
+- YouTube reused-content policy прямо относит короткие compilations из других social media с минимальной трансформацией к monetization risk; permission itself не гарантирует eligibility.
+
+Рекомендуемый future module:
+
+```text
+trend_discovery -> candidate queue -> rights/license/permission gate -> download/ingest -> Luna highlight -> renderer
+```
+
+TikTok/Instagram links могут входить в discovery queue, но не auto-ingest без explicit reusable rights. Для viral licensed UGC можно позже оценить paid licensing providers, но frozen pilot запрещает подключать новый paid provider без explicit user decision.
+
+## 9. Language policy
+
+- никаких RU/EN дублей одного ролика;
+- long-run cadence: `en, en, en, en, ru` = 80/20 originals;
+- frozen pilot: slot 2 RU, остальные animal slots EN.
+
+## 10. MoneyPrinterTurbo note
+
+Если MPT/browser закрыты, но `render-animal` работает — это ожидаемо. MPT нужен только `render-ai`.
+
+## 11. Следующая точка
+
+На ПК:
 
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-```
-
-Для реального meow создать, например:
-
-```powershell
-New-Item -ItemType Directory -Force .\runtime\assets
-```
-
-и положить выбранный MP3 как:
-
-```text
-runtime\assets\cat-transition-meow.mp3
-```
-
-Затем:
-
-```powershell
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Этот render может потратить немного Luna budget на новые audio-bearing sources/highlights. `plan 2` заново не нужен.
-
-Expected:
+Проверить console lines:
 
 ```text
-runtime/slots/02/animal_audio_sources.json
-runtime/slots/02/highlights.json
-runtime/slots/02/episode.json
+Cat card font: ...
+Cat meow asset: ...
+```
+
+Если meow снова fallback — прислать точное имя и полный local path выбранного sound file.
+
+Expected review output:
+
+```text
 runtime/ready_for_review/slot-02-ru-animals.mp4
 ```
 
-После просмотра оценить только формат: title fit, timings, real meow, source audio, clip quality. Auto-publish остаётся запрещён.
+После style review решить: внедрять `trend_discovery` первым этапом через YouTube/Creative Commons + public social URL queue, либо сначала ещё раз довести card/meow.
