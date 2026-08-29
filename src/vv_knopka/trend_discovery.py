@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 
 from .settings import load_settings
 
@@ -191,6 +192,7 @@ def write_discovery_report(
 
 
 def main() -> None:
+    load_dotenv()
     parser = argparse.ArgumentParser(prog="vv-cat-trends")
     parser.add_argument("--config", default="config/pilot.toml")
     parser.add_argument("--days", type=int, default=30)
