@@ -17,6 +17,7 @@ dev = ["pytest>=8,<9"]
 
 [project.scripts]
 vv = "vv_knopka.cli:main"
+vv-cat-trends = "vv_knopka.trend_discovery:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
