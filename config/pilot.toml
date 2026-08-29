@@ -50,13 +50,13 @@ language_cycle = ["en", "en", "en", "en", "ru"]
 intro_card_seconds = 0.9
 transition_card_seconds = 0.75
 end_card_seconds = 1.0
-# Bigger, punchier cards. The renderer prefers a heavier local Windows font and centers every line independently.
+# Windows pilot: Microsoft documents Segoe UI Black (seguibl.ttf) as Cyrillic-capable.
+# On non-Windows CI this path is absent and renderer falls back to the local system font.
+card_font_file = 'C:\Windows\Fonts\seguibl.ttf'
 title_font_size = 84
 transition_font_size = 78
 end_font_size = 82
 card_wrap_chars = 18
-# Optional local font override; CAT_CARD_FONT can override this without committing a font file.
-card_font_file = ""
 # Cat clips must carry actual source audio; a technically present but effectively silent track is rejected.
 require_source_audio = true
 min_source_mean_volume_db = -55.0
@@ -65,7 +65,6 @@ source_audio_volume = 1.0
 audio_pexels_candidates = 60
 audio_pixabay_candidates = 80
 # Put one chosen real meow here and it will be reused on every intro/transition/end card.
-# The renderer also auto-discovers cat-transition-meow.*, cat-meow.*, meow.*, or any *meow* audio file in runtime/assets.
 # CAT_MEOW_FILE in .env can override this path.
 meow_file = "runtime/assets/cat-transition-meow.mp3"
 meow_volume = 0.90
