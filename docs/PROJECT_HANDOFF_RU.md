@@ -16,192 +16,170 @@
 - 8 × `ai_short`;
 - 7 × `animal_compilation`;
 - slot 1 = русский AI Short;
-- slot 2 = русская cat compilation;
+- slot 2 = русский cat compilation test;
 - остальные 13 = English;
-- пока один YouTube-канал;
+- пока один YouTube channel;
 - OpenAI hard budget = **$10**;
 - `auto_publish=false`;
 - human review обязателен;
-- outputs только в `runtime/ready_for_review`;
-- не добавлять новые платные providers без отдельного решения пользователя;
-- animal cuts: никакого loud bass/drop/impact/boom;
-- provenance/source/license обязательны;
-- raw social repost pipeline не является default.
+- output только в `runtime/ready_for_review`;
+- не добавлять новые платные providers без отдельного решения пользователя.
 
 ## 2. Git workflow
 
 - default branch: `main`;
 - рабочая ветка: `mvp/pilot-scaffold`;
-- draft PR #1: `MVP: review-first 15-Short pilot scaffold`;
-- PR не merge без отдельного решения пользователя;
+- draft PR #1 открыт и не merge без отдельного решения пользователя;
 - новый чат сначала читает `AGENT.md`, этот файл и `docs/PROGRESS_RU.md`, затем проверяет live GitHub state/CI.
 
-## 3. Локальная среда пользователя
+## 3. Подтверждённая локальная среда
 
 Путь: `D:\KiraS\VV_knopka`.
 
-- Python `3.11.0`;
-- OpenAI/Pexels/Pixabay keys в локальном `.env`;
-- MoneyPrinterTurbo v1.3.5 в ignored `MoneyPrinterTurbo`;
-- MPT API `127.0.0.1:8080`;
-- последний известный OpenAI ledger после cat-plan/vision: **$0.0268 / $10.00**.
+- `.venv` Python `3.11.0`;
+- OpenAI/Pexels/Pixabay keys локально в `.env`;
+- MoneyPrinterTurbo v1.3.5 установлен отдельно;
+- MPT API работает на `127.0.0.1:8080`;
+- последний показанный OpenAI ledger: `$0.0268 / $10.00` до Cat v3.
 
-## 4. AI Short architecture
-
-Terra structured plan -> stock-friendly visual anchor -> Pexels/Pixabay -> GPT-5.6 Luna visual relevance -> local approved stock -> MPT local-material render -> Edge TTS/subtitles -> review MP4.
-
-Quality/safety fixes:
-
-- final MPT `videos` preferred over silent `combined_videos`;
-- visual anchor required;
-- visual confidence >= 0.72;
-- duration-based fallback for narrow topics;
-- curated mode can reuse non-overlapping segments of long approved sources;
-- landscape stock -> 9:16 blur-fill;
-- Russian subtitles -> local Windows Cyrillic font;
-- subtitle size/position = `52 / 74%`;
-- per-segment MPT FadeIn disabled;
-- material cache tied to visual anchor;
-- automatic topics restricted to broad stock-friendly animals after `superb lyrebird` stock failure.
-
-## 5. Slot 1 — Russian AI Short: MANUAL QUALITY PASS
-
-Тема: «Почему осьминог меняет цвет во сне».
-
-Реальные fixes прошли через несколько review cycles: silent final download, unrelated stock, narrow stock availability, CJK font, black bars, per-clip fade. Пользователь после последней версии сказал: **«Этот результат мне нравится»**.
-
-Slot 1 считается QUALITY PASS.
-
-## 6. Slot 2 — Russian cats: current priority
-
-Пользователь решил пока остановиться на котиках и не продолжать English slot, пока cat format не станет интереснее.
-
-### v1 result
-
-Команды:
+После Cat v3 в `pyproject.toml` добавлен `edge-tts>=7,<8`; после следующего `git pull` пользователь должен один раз выполнить:
 
 ```powershell
-.\.venv\Scripts\vv.exe plan 2 --topic cats
-.\.venv\Scripts\vv.exe render-animal 2
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-v1 успешно нашёл 6 licensed/vision-approved cat clips и отрендерил 30 sec montage.
+## 4. AI short architecture
 
-Пользовательский review:
+Terra plan -> Pexels/Pixabay -> GPT-5.6 Luna relevance gate -> local approved stock -> MPT local render -> Edge TTS/subtitles -> review output.
 
-- звука практически нет;
-- просто случайные моменты;
-- хотелось более интересную нарезку;
-- вместо неприятного bass transition пользователь хочет приятный **meow**.
+Ключевые fixes:
 
-Лог подтвердил: большинство stock videos вообще не имели audio stream. Renderer подставлял `anullsrc`, поэтому AAC track существовал, но был почти silent.
+- скачивать final MPT `videos`, а не silent `combined_videos`;
+- anchor-aware stock cache;
+- Luna visual relevance gate;
+- duration fallback для narrow stock topics;
+- landscape blur-fill;
+- Russian Windows Cyrillic font;
+- subtitles size 52 / position 74%;
+- per-segment FadeIn disabled;
+- automatic AI topics ограничены stock-friendly animals.
 
-### Cat montage v2 design
+Slot 1 («Почему осьминог меняет цвет во сне») получил manual QUALITY PASS.
 
-Используем уже существующий `runtime/slots/02/sources.json`; заново stock не ищем.
+## 5. Cat compilation history
 
-Pipeline:
+### v1
 
-1. Для каждого cat source берём до 4 candidate windows по всей длине, а не только начало.
-2. Для каждого candidate делаем компактный 3-frame contact sheet.
-3. GPT-5.6 Luna vision выбирает cutest/funniest/action moment.
-4. Luna пишет short RU caption (<=5 words).
-5. Luna/heuristic ordering ставит сильнейший moment первым.
-6. Renderer starts each clip at chosen timestamp.
-7. Original source audio сохраняется/нормализуется, если stream есть.
-8. Silent sources получают silent bed, чтобы FFmpeg не падал.
-9. Поверх всего видео генерируется локальный quiet playful BGM.
-10. На каждом cut добавляется локальный procedural soft meow; три pitch variants.
-11. Никакого bass/drop/impact/boom.
-12. Captions рисуются локальным system font.
-13. 9:16 blur-fill сохраняется.
+6 stock clips × первые ~5 секунд. Почти без звука, потому что большинство Pexels clips не имели audio stream. Результат выглядел случайной нарезкой.
 
-Процедурные BGM/meow генерируются локально кодом и не используют внешний copyrighted asset.
+### v2
 
-### Первый v2 запуск — реальные ошибки
+Добавлено:
 
-Пользователь получил:
+- Luna выбирает лучший window внутри каждого source video;
+- клипы сортируются по интересности;
+- короткие подписи;
+- source audio where available;
+- procedural BGM;
+- procedural meow transitions.
+
+Стало лучше, но пользователь попросил более заметный и узнаваемый формат.
+
+## 6. Cat v3 — АКТУАЛЬНЫЙ дизайн
+
+Пользователь подтвердил:
+
+- **НЕ использовать `Daily Dose of Cats`** и близкие имитации;
+- постоянное название серии пока не нужно;
+- каждый выпуск имеет уникальный номер и название: `#001 — <episode title>`;
+- opening: чёрный фон + быстрый мяу + название + короткий voice intro;
+- между каждым clip: чёрная mini-card + короткий текст + быстрый мяу;
+- intro voice включён для теста;
+- тематика выпусков должна быть более связной, а не «random cats».
+
+### Языковая политика
+
+Не делать один и тот же ролик в двух языковых версиях.
+
+Long-run production cadence:
 
 ```text
-1 failed, 21 passed
-publication gate: FAIL
-OpenAI spent: $0.0268 / $10.00
-HTTP 403 Forbidden https://api.openai.com/v1/responses
+en, en, en, en, ru
 ```
 
-#### Publication gate bug
+то есть 80% EN / 20% RU originals.
 
-Причина: `[audio].transition_sfx` ошибочно был переключён с `none` на `soft_meow`, а frozen publication gate требует global transition SFX = none.
+Frozen pilot сохраняется: среди 7 animal slots один RU (slot 2) и шесть EN, что является ближайшим целым приближением к 80/20 для семи выпусков.
 
-Исправлено без ослабления gate:
+### Cat v3 implementation
 
-```toml
-[audio]
-transition_sfx = "none"
+`src/vv_knopka/animal_episode.py`:
 
-[animal]
-transition_sfx = "soft_meow"
-```
+- stable episode numbering по animal slots;
+- display title `#NNN — title`;
+- если planner вдруг вернёт `Daily Dose of Cats`, title автоматически заменяется (`Cat Chaos` / `Кото-хаос`);
+- intro line из plan hook с ограничением длины;
+- transition card text берётся из Luna-selected captions;
+- production language cycle 4 EN : 1 RU.
 
-То есть общий safety invariant остаётся прежним, meow scoped only to animal pipeline.
+`src/vv_knopka/animal_v3.py`:
 
-#### Highlight vision HTTP 403
+- Edge TTS intro voice (`+8%` rate);
+- intro black card ~1.8s, автоматически удлиняется если voice длиннее;
+- procedural quick meow ~0.30s (старый был ~0.58s);
+- transition black card ~0.35s;
+- title font ~72, transition text ~64;
+- clips остаются 9:16 blur-fill + sharp foreground;
+- text убран с самих cat clips, чтобы картинка была чище;
+- source audio normalized/kept where present;
+- silent clips получают silence, но общий BGM и card meows обеспечивают ненулевой звук;
+- quiet procedural BGM mixed over full timeline;
+- никаких bass/drop/impact/boom.
 
-До этого тот же OpenAI key и GPT-5.6 Luna успешно работали для stock thumbnail vision. Новый 403 появился на одном большом request с множеством локальных Base64 contact sheets.
+`config/pilot.toml` содержит Cat v3 timings/volumes и language cycle.
 
-Актуальная OpenAI docs (2026-08-29) подтверждает:
+### Planner для будущих cat episodes
 
-- Responses API поддерживает `input_image`;
-- Base64 data URL разрешён;
-- multiple images разрешены;
-- GPT-5.6 Luna поддерживает image input.
+При `vv plan <animal-slot> --topic cats` planner должен:
 
-Поэтому формат сам по себе не запрещён.
+- visual_anchor=`cat`;
+- выбрать **одну** coherent stock-friendly тему выпуска (toys, boxes, sleepy, reactions, jumps, dramatic stares, playful hunting и т.п.);
+- все search terms отражают эту тему;
+- short original title 2-5 words;
+- hook короткий и voice-friendly;
+- запрещена фраза `Daily Dose of Cats` и близкая имитация.
 
-Implemented recovery:
+## 7. OpenAI highlight 403 history
 
-- contact sheets уменьшены, чтобы payload был легче;
-- сначала пробуем общий request;
-- если именно HTTP 403, автоматически fallback на **one clip per request**, максимум 4 images/request;
-- usage каждого успешного fallback-call идёт в тот же $10 ledger;
-- если даже маленький request получает 403, приложение выводит безопасные OpenAI `message/type/code/param`, не API key;
-- failed 403 не записывается как успешный usage record;
-- `highlights.json` cache version поднят, чтобы старый incomplete state не считался готовым.
+На первом Cat v2 highlight request был 403. Исправлено:
 
-## 7. Slot 3 — English AI Short: paused
+- preview images уменьшены;
+- общий запрос при 403 автоматически fallback на one-clip-at-a-time (до 4 images/request);
+- provider error теперь показывается без API key;
+- global publication gate снова требует `[audio] transition_sfx="none"`; animal meow живёт отдельно под `[animal]`.
 
-Первый английский plan выбрал `superb lyrebird`; stock gate нашёл только 2 approved sources и fail-closed.
+Пользователь после fixes сообщил, что Cat v2 уже лучше, поэтому highlight selection/cache считается рабочим.
 
-После этого:
+## 8. Точная текущая точка
 
-- planner ограничен broad stock-friendly animals для automatic topics;
-- stale material cache стал anchor-aware;
-- старый lyrebird audit не блокирует новую тему.
+Цель: **перерендерить slot 2 в Cat v3**, не тратясь повторно на plan/source search/highlight selection.
 
-Но пользователь сейчас явно решил **сначала довести котиков**, поэтому slot 3 пока не трогать.
-
-## 8. Точная следующая точка
-
-На ПК пользователя:
+На ПК:
 
 ```powershell
 git pull
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Важно:
+Не запускать `plan 2` заново перед этим тестом.
 
-- `vv plan 2 --topic cats` повторно НЕ запускать;
-- `runtime/slots/02/sources.json` НЕ удалять;
-- заново stock search не нужен.
+Expected extra runtime file:
 
-При успехе:
-
-```powershell
-.\.venv\Scripts\vv.exe status
-Get-Content .\runtime\slots\02\highlights.json -Raw
+```text
+runtime/slots/02/episode.json
 ```
 
 Review output:
@@ -210,25 +188,14 @@ Review output:
 runtime/ready_for_review/slot-02-ru-animals.mp4
 ```
 
-Human review criteria:
+После render проверить:
 
-- highlights действительно интереснее первых 5 секунд;
-- captions не мешают;
-- BGM не слишком громкий;
-- procedural meow звучит приятно, не как электронный писк;
-- original source audio слышен там, где он существует;
-- cuts не содержат bass hits.
+- intro title/card читается ли на телефоне;
+- voice intro не слишком длинный/громкий;
+- quick meow приятнее ли старого;
+- black mini-card 0.35s достаточно ли заметна;
+- transition text полезен или мешает;
+- BGM/source audio balance;
+- нужен ли следующий новый themed cat episode сделать уже English.
 
-Если synthetic meow не понравится — заменить только SFX на один лицензированный real-cat sample; остальная architecture остаётся.
-
-## 9. Отложено
-
-До quality-pass cat v2 не делать:
-
-- English slot 3 continuation;
-- auto publish;
-- analytics feedback loop;
-- trend hunter;
-- social scraper;
-- mass batch;
-- expensive text-to-video.
+До этого review не заниматься auto-publish/analytics/trend hunter/mass batch.
