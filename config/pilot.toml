@@ -81,8 +81,10 @@ transition_sfx = "none"
 forbidden_transition_tags = ["bass", "bass_drop", "impact", "boom", "sub_drop"]
 compilation_lufs = -16.0
 true_peak_db = -1.5
-edge_voice_en = "en-US-AriaNeural-Female"
-edge_voice_ru = "ru-RU-SvetlanaNeural-Female"
+# Use canonical edge-tts voice IDs. Human-readable MPT labels such as
+# `*-Female`/`*-Male` are display metadata and are rejected by edge-tts itself.
+edge_voice_en = "en-US-AriaNeural"
+edge_voice_ru = "ru-RU-SvetlanaNeural"
 
 [safety]
 require_source_provenance = true
