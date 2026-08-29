@@ -8,7 +8,7 @@ from vv_knopka.animal_episode import (
     build_episode_metadata,
     scheduled_animal_language,
 )
-from vv_knopka.animal_v3 import _generate_quick_meow, _wrap_card_text
+from vv_knopka.animal_v3 import _generate_quick_meow, _resolve_meow, _wrap_card_text
 from vv_knopka.settings import Settings
 
 
@@ -69,11 +69,11 @@ def test_episode_metadata_repeats_title_on_transitions_and_has_localized_end(tmp
 
 
 def test_long_numbered_title_wraps_inside_phone_card():
-    wrapped = _wrap_card_text("#001 — Кошки и их важные маленькие миссии", width=22)
+    wrapped = _wrap_card_text("#001 — Кошки и их важные маленькие миссии", width=18)
     lines = wrapped.splitlines()
     assert lines[0] == "#001"
     assert 2 <= len(lines) <= 4
-    assert max(len(line) for line in lines) <= 22
+    assert max(len(line) for line in lines) <= 18
     assert "маленькие" in wrapped
 
 
@@ -87,6 +87,20 @@ def test_quick_meow_is_short_and_non_silent(tmp_path):
     assert max(abs(int(value)) for value in values) > 100
 
 
+def test_meow_resolver_accepts_downloaded_wav_with_friendly_name(tmp_path, monkeypatch):
+    monkeypatch.delenv("CAT_MEOW_FILE", raising=False)
+    settings = _settings(tmp_path)
+    assets = tmp_path / "runtime" / "assets"
+    assets.mkdir(parents=True)
+    chosen = assets / "sweet-kitty-meow.wav"
+    chosen.write_bytes(b"not-empty-test-fixture")
+
+    resolved, fallback = _resolve_meow(settings, tmp_path / "work")
+
+    assert resolved == chosen.resolve()
+    assert fallback is False
+
+
 def test_pilot_uses_canonical_edge_tts_voice_ids_for_mpt_ai_shorts():
     config_path = Path(__file__).resolve().parents[1] / "config" / "pilot.toml"
     with config_path.open("rb") as handle:
@@ -95,4 +109,6 @@ def test_pilot_uses_canonical_edge_tts_voice_ids_for_mpt_ai_shorts():
     assert config["audio"]["edge_voice_en"] == "en-US-AriaNeural"
     assert config["animal"]["intro_card_seconds"] < config["animal"]["transition_card_seconds"] + 0.3
     assert config["animal"]["require_source_audio"] is True
+    assert config["animal"]["title_font_size"] >= 80
+    assert config["animal"]["card_wrap_chars"] <= 18
     assert "bgm_volume" not in config["animal"]
