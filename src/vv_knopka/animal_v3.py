@@ -1,22 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import math
+import os
 import shutil
 import subprocess
-import wave
+import textwrap
 from array import array
 from pathlib import Path
 from typing import Any
 
-import edge_tts
-
 from .animal_compilation import (
-    _escape_drawtext,
     _escape_filter_path,
     _ffprobe_has_audio,
-    _generate_playful_bgm,
     _system_font,
     _write_pcm_stereo,
     load_sources,
@@ -24,39 +20,8 @@ from .animal_compilation import (
 from .settings import Settings
 
 
-def _audio_duration(path: Path) -> float:
-    ffprobe = shutil.which("ffprobe")
-    if not ffprobe:
-        return 0.0
-    result = subprocess.run(
-        [
-            ffprobe,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return 0.0
-    try:
-        return max(float(result.stdout.strip()), 0.0)
-    except ValueError:
-        return 0.0
-
-
 def _quick_meow_samples(sample_rate: int = 48000, variant: int = 0) -> array:
-    """Generate a short bright transition chirp shaped like a quick meow.
-
-    It intentionally avoids a bass transient. The 0.30s envelope is much faster
-    than the previous 0.58s procedural sound and fits a 0.35s black card.
-    """
+    """Fallback-only short bright chirp; real meow asset is preferred."""
     duration = 0.30
     total = int(duration * sample_rate)
     base_shift = (variant % 3 - 1) * 45.0
@@ -86,22 +51,53 @@ def _generate_quick_meow(path: Path, variant: int = 0) -> Path:
     return path
 
 
-async def _save_edge_voice(text: str, voice: str, output: Path) -> None:
-    communicate = edge_tts.Communicate(text=text, voice=voice, rate="+8%")
-    await communicate.save(str(output))
+def _resolve_meow(settings: Settings, work: Path) -> tuple[Path, bool]:
+    """Use one persistent real meow asset when supplied, otherwise fallback."""
+    animal_cfg = settings.raw.get("animal", {})
+    configured = os.getenv("CAT_MEOW_FILE", "").strip() or str(
+        animal_cfg.get("meow_file", "runtime/assets/cat-transition-meow.mp3")
+    ).strip()
+    if configured:
+        candidate = Path(configured)
+        if not candidate.is_absolute():
+            candidate = (settings.root / candidate).resolve()
+        if candidate.exists() and candidate.stat().st_size > 0:
+            return candidate, False
+    fallback = _generate_quick_meow(work / "fallback-quick-meow.wav")
+    return fallback, True
 
 
-def _synthesize_intro_voice(text: str, voice: str, output: Path) -> Path:
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if output.exists() and output.stat().st_size > 0:
-        return output
-    try:
-        asyncio.run(_save_edge_voice(text, voice, output))
-    except Exception as exc:
-        raise RuntimeError(f"Edge TTS could not synthesize cat intro voice: {exc}") from exc
-    if not output.exists() or output.stat().st_size <= 0:
-        raise RuntimeError("Edge TTS returned no intro audio")
-    return output
+def _wrap_card_text(text: str, *, width: int = 22) -> str:
+    """Wrap title cards to phone-safe lines instead of letting drawtext overflow."""
+    clean = " ".join(str(text or "").replace("\n", " ").split())
+    if not clean:
+        return ""
+
+    lines: list[str] = []
+    # Number and title are more legible when the episode number gets its own line.
+    if clean.startswith("#") and " — " in clean:
+        number, title = clean.split(" — ", 1)
+        lines.append(number.strip())
+        lines.extend(
+            textwrap.wrap(
+                title.strip(),
+                width=max(int(width), 8),
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+            or [title.strip()]
+        )
+    else:
+        lines.extend(
+            textwrap.wrap(
+                clean,
+                width=max(int(width), 8),
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+            or [clean]
+        )
+    return "\n".join(lines[:4])
 
 
 def _render_black_card(
@@ -113,15 +109,23 @@ def _render_black_card(
     font_size: int,
     meow: Path,
     meow_volume: float,
-    voice: Path | None = None,
-    voice_delay_seconds: float = 0.22,
+    wrap_chars: int,
 ) -> Path:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    wrapped = _wrap_card_text(text, width=wrap_chars)
+    text_file = output.with_suffix(".txt")
+    text_file.write_text(wrapped, encoding="utf-8")
+
     escaped_font = _escape_filter_path(font)
-    escaped_text = _escape_drawtext(text)
+    escaped_text_file = _escape_filter_path(text_file)
     video_filter = (
-        f"drawtext=fontfile='{escaped_font}':text='{escaped_text}':"
-        f"fontcolor=white:fontsize={font_size}:borderw=2:bordercolor=black@0.5:"
+        f"drawtext=fontfile='{escaped_font}':textfile='{escaped_text_file}':"
+        f"fontcolor=white:fontsize={font_size}:line_spacing=18:borderw=2:bordercolor=black@0.5:"
         "x=(w-text_w)/2:y=(h-text_h)/2"
+    )
+    audio_filter = (
+        f"[1:a]atrim=0:{duration:.3f},asetpts=N/SR/TB,volume={meow_volume:.3f},"
+        f"apad=pad_dur={duration:.3f},alimiter=limit=0.95[a]"
     )
     command = [
         "ffmpeg",
@@ -132,22 +136,6 @@ def _render_black_card(
         f"color=c=black:s=1080x1920:r=30:d={duration:.3f}",
         "-i",
         str(meow),
-    ]
-    if voice is not None:
-        command += ["-i", str(voice)]
-        delay_ms = max(int(voice_delay_seconds * 1000), 0)
-        audio_filter = (
-            f"[1:a]volume={meow_volume:.3f},apad=pad_dur={duration:.3f}[m];"
-            f"[2:a]adelay={delay_ms}|{delay_ms},volume=1.0,apad=pad_dur={duration:.3f}[v];"
-            "[m][v]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,"
-            "alimiter=limit=0.95[a]"
-        )
-    else:
-        audio_filter = (
-            f"[1:a]volume={meow_volume:.3f},apad=pad_dur={duration:.3f},"
-            "alimiter=limit=0.95[a]"
-        )
-    command += [
         "-vf",
         video_filter,
         "-filter_complex",
@@ -193,6 +181,7 @@ def _render_highlight_clip(
     source_audio_volume: float,
     lufs: float,
     peak: float,
+    require_audio: bool,
 ) -> Path:
     video_graph = (
         "[0:v]split=2[bg][fg];"
@@ -201,24 +190,24 @@ def _render_highlight_clip(
         "[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fgv];"
         "[bgv][fgv]overlay=(W-w)/2:(H-h)/2,format=yuv420p[v]"
     )
-    audio_filter = (
-        f"loudnorm=I={lufs}:LRA=11:TP={peak},"
-        f"volume={source_audio_volume:.3f}"
-    )
     has_audio = _ffprobe_has_audio(source)
+    if require_audio and not has_audio:
+        raise RuntimeError(f"Cat source unexpectedly has no audio stream: {source}")
+
     command = ["ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", str(source)]
     if has_audio:
+        audio_filter = (
+            f"loudnorm=I={lufs}:LRA=11:TP={peak},"
+            f"volume={source_audio_volume:.3f},"
+            f"apad=pad_dur={seconds:.3f}[a]"
+        )
         command += [
-            "-t",
-            f"{seconds:.3f}",
             "-filter_complex",
-            video_graph,
+            video_graph + ";[0:a:0]" + audio_filter,
             "-map",
             "[v]",
             "-map",
-            "0:a:0",
-            "-af",
-            audio_filter,
+            "[a]",
         ]
     else:
         command += [
@@ -228,8 +217,6 @@ def _render_highlight_clip(
             f"{seconds:.3f}",
             "-i",
             "anullsrc=channel_layout=stereo:sample_rate=48000",
-            "-t",
-            f"{seconds:.3f}",
             "-filter_complex",
             video_graph,
             "-map",
@@ -237,7 +224,10 @@ def _render_highlight_clip(
             "-map",
             "1:a:0",
         ]
+
     command += [
+        "-t",
+        f"{seconds:.3f}",
         "-r",
         "30",
         "-c:v",
@@ -249,12 +239,11 @@ def _render_highlight_clip(
         "-c:a",
         "aac",
         "-b:a",
-        "160k",
+        "192k",
         "-ar",
         "48000",
         "-ac",
         "2",
-        "-shortest",
         str(output),
     ]
     subprocess.run(command, check=True)
@@ -270,7 +259,7 @@ def render_cat_v3(
     *,
     language: str,
 ) -> Path:
-    """Render Cat v3: intro title+voice, black mini-cards, highlights and music."""
+    """Render cat montage with title cards, real source audio and no music/voiceover."""
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is not on PATH")
     clips = load_sources(source_manifest)
@@ -283,80 +272,67 @@ def render_cat_v3(
     }
     order = [int(value) for value in highlights.get("order", []) if int(value) in selections]
     if len(order) < 3:
-        raise RuntimeError("Cat v3 needs at least three selected highlights")
+        raise RuntimeError("Cat renderer needs at least three selected highlights")
 
     font = _system_font()
     if font is None:
-        raise RuntimeError("No suitable system font found for Cat v3 title cards")
+        raise RuntimeError("No suitable system font found for Cat title cards")
 
     animal_cfg = settings.raw.get("animal", {})
     audio_cfg = settings.raw.get("audio", {})
     clip_seconds = float(animal_cfg.get("clip_seconds", 5))
-    transition_seconds = float(animal_cfg.get("transition_card_seconds", 0.35))
-    configured_intro_seconds = float(animal_cfg.get("intro_card_seconds", 1.8))
-    meow_volume = float(animal_cfg.get("meow_volume", 0.82))
-    bgm_volume = float(animal_cfg.get("bgm_volume", 0.42))
-    source_audio_volume = float(animal_cfg.get("source_audio_volume", 0.82))
+    intro_seconds = float(animal_cfg.get("intro_card_seconds", 0.9))
+    transition_seconds = float(animal_cfg.get("transition_card_seconds", 0.75))
+    end_seconds = float(animal_cfg.get("end_card_seconds", 1.0))
+    meow_volume = float(animal_cfg.get("meow_volume", 0.9))
+    source_audio_volume = float(animal_cfg.get("source_audio_volume", 1.0))
     lufs = float(audio_cfg.get("compilation_lufs", -16.0))
     peak = float(audio_cfg.get("true_peak_db", -1.5))
-    title_font_size = int(animal_cfg.get("title_font_size", 72))
-    transition_font_size = int(animal_cfg.get("transition_font_size", 64))
-    intro_delay = float(animal_cfg.get("intro_voice_delay_seconds", 0.22))
-    intro_voice_enabled = bool(animal_cfg.get("intro_voice_enabled", True))
+    title_font_size = int(animal_cfg.get("title_font_size", 64))
+    transition_font_size = int(animal_cfg.get("transition_font_size", 58))
+    end_font_size = int(animal_cfg.get("end_font_size", 64))
+    wrap_chars = int(animal_cfg.get("card_wrap_chars", 22))
+    require_audio = bool(animal_cfg.get("require_source_audio", True))
 
-    work = settings.runtime_dir / "tmp" / (output.stem + "-v3")
+    work = settings.runtime_dir / "tmp" / (output.stem + "-v4")
     work.mkdir(parents=True, exist_ok=True)
-
-    voice_file: Path | None = None
-    if intro_voice_enabled:
-        voice_name = str(audio_cfg.get("edge_voice_ru") if language == "ru" else audio_cfg.get("edge_voice_en"))
-        voice_file = _synthesize_intro_voice(
-            str(episode.get("intro_voice") or ""),
-            voice_name,
-            work / "intro-voice.mp3",
+    meow, fallback_meow = _resolve_meow(settings, work)
+    if fallback_meow:
+        print(
+            "Real cat meow asset not found; using procedural fallback. "
+            "Place a chosen sound at runtime/assets/cat-transition-meow.mp3 or set CAT_MEOW_FILE."
         )
-    voice_duration = _audio_duration(voice_file) if voice_file else 0.0
-    intro_seconds = max(configured_intro_seconds, voice_duration + intro_delay + 0.10)
+    else:
+        print(f"Cat meow asset: {meow}")
 
-    meow_files = [
-        _generate_quick_meow(work / f"quick-meow-{index}.wav", index)
-        for index in range(3)
+    display_title = str(episode.get("display_title") or "#001 — Cat Chaos")
+    sequence: list[Path] = [
+        _render_black_card(
+            output=work / "000-intro.mp4",
+            text=display_title,
+            duration=intro_seconds,
+            font=font,
+            font_size=title_font_size,
+            meow=meow,
+            meow_volume=meow_volume,
+            wrap_chars=wrap_chars,
+        )
     ]
-
-    sequence: list[Path] = []
-    intro = _render_black_card(
-        output=work / "000-intro.mp4",
-        text=str(episode.get("display_title") or "#001 — Cat Chaos"),
-        duration=intro_seconds,
-        font=font,
-        font_size=title_font_size,
-        meow=meow_files[0],
-        meow_volume=meow_volume,
-        voice=voice_file,
-        voice_delay_seconds=intro_delay,
-    )
-    sequence.append(intro)
-
-    cards_by_clip = {
-        int(item["clip_index"]): str(item.get("text") or "")
-        for item in episode.get("transition_cards", [])
-        if isinstance(item, dict) and item.get("clip_index") is not None
-    }
 
     for position, clip_index in enumerate(order, start=1):
         selection = selections[clip_index]
         clip = clips[clip_index - 1]
         if position > 1:
-            card_text = cards_by_clip.get(clip_index) or ("Следующий котик" if language == "ru" else "Next cat")
             sequence.append(
                 _render_black_card(
                     output=work / f"{position:03d}-card.mp4",
-                    text=card_text,
+                    text=display_title,
                     duration=transition_seconds,
                     font=font,
                     font_size=transition_font_size,
-                    meow=meow_files[(position - 1) % len(meow_files)],
+                    meow=meow,
                     meow_volume=meow_volume,
+                    wrap_chars=wrap_chars,
                 )
             )
         sequence.append(
@@ -368,12 +344,29 @@ def render_cat_v3(
                 source_audio_volume=source_audio_volume,
                 lufs=lufs,
                 peak=peak,
+                require_audio=require_audio,
             )
         )
 
+    sequence.append(
+        _render_black_card(
+            output=work / "999-end.mp4",
+            text=str(episode.get("end_text") or ("Спасибо за просмотр" if language == "ru" else "Thanks for watching")),
+            duration=end_seconds,
+            font=font,
+            font_size=end_font_size,
+            meow=meow,
+            meow_volume=meow_volume,
+            wrap_chars=wrap_chars,
+        )
+    )
+
     concat_file = work / "concat.txt"
-    concat_file.write_text("".join(f"file '{path.as_posix()}'\n" for path in sequence), encoding="utf-8")
-    concat_output = work / "cat-v3-concat.mp4"
+    concat_file.write_text(
+        "".join(f"file '{path.as_posix()}'\n" for path in sequence),
+        encoding="utf-8",
+    )
+    concat_output = work / "cat-cards-concat.mp4"
     subprocess.run(
         [
             "ffmpeg",
@@ -391,45 +384,22 @@ def render_cat_v3(
         check=True,
     )
 
-    total_duration = _audio_duration(concat_output)
-    if total_duration <= 0:
-        total_duration = intro_seconds + len(order) * clip_seconds + max(len(order) - 1, 0) * transition_seconds
-    bgm = _generate_playful_bgm(work / "procedural-playful-bgm.wav", total_duration)
-
     output.parent.mkdir(parents=True, exist_ok=True)
-    mix = (
-        "[0:a]aresample=48000[src];"
-        f"[1:a]volume={bgm_volume:.3f}[bg];"
-        "[src][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
-        "alimiter=limit=0.95[a]"
-    )
+    # Product decision: no BGM. Keep only source audio and the meow on black cards.
     subprocess.run(
         [
             "ffmpeg",
             "-y",
             "-i",
             str(concat_output),
-            "-i",
-            str(bgm),
-            "-filter_complex",
-            mix,
             "-map",
             "0:v:0",
             "-map",
-            "[a]",
-            "-c:v",
+            "0:a:0",
+            "-c",
             "copy",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
             "-movflags",
             "+faststart",
-            "-shortest",
             str(output),
         ],
         check=True,
