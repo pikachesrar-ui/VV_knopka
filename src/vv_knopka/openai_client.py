@@ -32,10 +32,6 @@ SHORT_PLAN_SCHEMA: dict[str, Any] = {
 }
 
 
-# The pilot is rendered from free licensed stock. Rare species can produce a
-# scientifically good script but an unusable visual plan. Keep the automatic
-# topic picker on subjects that have a realistic chance of yielding several
-# distinct Pexels/Pixabay clips. Explicit user topic requests still override this.
 STOCK_FRIENDLY_AI_ANCHORS = (
     "cat",
     "dog",
@@ -61,7 +57,6 @@ STOCK_FRIENDLY_AI_ANCHORS = (
 
 
 def _previous_visual_anchors(settings: Settings, current_slot: int) -> list[str]:
-    """Read already-generated pilot plans so the automatic picker can vary subjects."""
     anchors: list[str] = []
     for slot in range(1, current_slot):
         path = settings.runtime_dir / "slots" / f"{slot:02d}" / "plan.json"
@@ -107,9 +102,9 @@ class OpenAIPlanner:
         else:
             task = (
                 "Create an editorial concept for a 25-45 second cute/funny animal compilation. The final video "
-                "must add a clear original framing or running joke rather than being a raw repost montage. "
-                "Write short optional on-screen/voiceover lines that can connect licensed clips. Never request "
-                "bass drops, impact booms, or loud transition effects."
+                "must add a clear original framing rather than being a raw repost montage. Give it one coherent "
+                "episode theme so the clips feel related, not random. Keep the hook short enough to be spoken over "
+                "a roughly two-second opening title card. Never request bass drops, impact booms, or loud transition effects."
             )
 
         topic_instruction = ""
@@ -120,9 +115,13 @@ class OpenAIPlanner:
             )
             if normalized_topic.lower() in {"cat", "cats", "kitten", "kittens", "кот", "коты", "котики", "кошки"}:
                 topic_instruction += (
-                    " This is a domestic-cat video: set visual_anchor exactly to \"cat\". "
-                    "Search terms should seek clearly visible playful/cute/curious domestic cats or kittens, "
-                    "while every search term still contains the exact word \"cat\"."
+                    " This is a domestic-cat compilation: set visual_anchor exactly to \"cat\". "
+                    "Choose ONE stock-friendly subtheme for the episode, such as cats with toys, cats and boxes, "
+                    "sleepy cats, curious reactions, climbing/jumping, dramatic stares, or playful hunting. "
+                    "All search terms must contain the exact word \"cat\" AND reflect that same subtheme. "
+                    "Do not use the phrase \"Daily Dose of Cats\" or any close imitation of it anywhere. "
+                    "Title must be a short original episode title, ideally 2-5 words, not a permanent series name. "
+                    "Hook should be one short voice-friendly sentence, ideally under 10 words."
                 )
         elif pipeline == "ai_short":
             used = _previous_visual_anchors(self.settings, slot)
@@ -147,7 +146,7 @@ Slot: {slot}/15.
 For visual_anchor, return one concise ENGLISH noun or noun phrase naming the visible main subject that must be present in every stock clip (examples: "octopus", "cat", "bee").
 Every search term must include that exact visual_anchor. Avoid ambiguous standalone visual terms such as "skin texture", "reef", "ocean", or "forest" that could retrieve footage without the main subject.
 Search terms must describe generic footage that can be found on licensed stock providers such as Pexels/Pixabay.
-Keep the title natural, not deceptive clickbait. Hashtags must not claim something unsupported.
+Keep the title natural, original and not deceptive clickbait. Hashtags must not claim something unsupported.
 Return only the requested structured object."""
 
         payload = {
