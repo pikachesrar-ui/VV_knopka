@@ -33,7 +33,8 @@ Pilot:
 - последний показанный OpenAI ledger: `$0.0281 / $10.00`;
 - slot 1 octopus = manual QUALITY PASS;
 - real user meow asset теперь успешно используется;
-- audible-source gate slot 2 нашёл 6/6 usable Pexels clips с реальным signal audio.
+- audible-source gate slot 2 нашёл 6/6 usable Pexels clips с реальным signal audio;
+- **Impact title-card style одобрен пользователем и считается принятым checkpoint**.
 
 ## 3. AI short architecture
 
@@ -60,21 +61,17 @@ Terra plan -> Pexels/Pixabay -> Luna relevance gate -> local stock -> MPT -> Edg
 
 `Daily Dose of Cats` and close imitation must not be used.
 
-## 5. Latest title-card failure and fix
+## 5. Title-card style — APPROVED
 
-После увеличения title и добавления badge пользователь увидел RU title как квадратные glyph boxes. `#001` рендерился нормально.
+После нескольких итераций пользователь одобрил **Impact** как основной шрифт карточек.
 
-Root cause: decorative Windows fallback мог выбрать font без Cyrillic glyph coverage (например Arial Rounded/Impact-style choice).
-
-Fix: в `config/pilot.toml` для Windows pilot pin:
+Windows pilot pin:
 
 ```text
-C:\Windows\Fonts\seguibl.ttf
+C:\Windows\Fonts\impact.ttf
 ```
 
-Это **Segoe UI Black**. Microsoft Typography документирует у Segoe UI поддержку Cyrillic, а filename Black style = `seguibl.ttf`.
-
-Current sizes:
+Текущие размеры:
 - intro 84;
 - transition 78;
 - end 82;
@@ -82,7 +79,7 @@ Current sizes:
 - `#NNN` white badge;
 - each title line centered separately.
 
-На Linux CI Windows font path отсутствует и renderer использует system fallback.
+Impact поддерживает кириллицу на Windows-машине пользователя и визуально устраивает пользователя. **Не возвращаться к Segoe UI Black / Arial Rounded / другим font experiments без новой явной причины.**
 
 ## 6. Real meow resolver
 
@@ -122,7 +119,7 @@ Cat meow asset: ...
 
 Пользователь хочет больше актуального UGC / popular cat footage, а не только stock libraries.
 
-Архитектура остаётся:
+Архитектура:
 
 ```text
 trend discovery -> candidate queue -> rights/human gate -> controlled import -> Luna/audio/highlight gates -> renderer
@@ -183,33 +180,27 @@ YouTube explicitly treats minimally transformed compilations from other social w
 
 ## 10. Next local checkpoint
 
-Because `vv-cat-trends` is a new console entry point, run once:
+Visual card/meow format is accepted enough for now. Next focus = **current/UGC cat sourcing**.
+
+Because `vv-cat-trends` is a new console entry point, if not yet installed locally:
 
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Expected log:
-
-```text
-Cat card font: C:\Windows\Fonts\seguibl.ttf
-Cat meow asset: <real user asset>
-```
-
-Review:
-
-```text
-runtime/ready_for_review/slot-02-ru-animals.mp4
-```
-
-After confirming Cyrillic title, optionally configure YouTube Data API v3 key and test:
+Then, if `YOUTUBE_API_KEY` is configured:
 
 ```powershell
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
 ```
 
-Then inspect `runtime/trends/youtube-cat-cc.json` before building any ingest/download step.
+Inspect:
+
+```text
+runtime/trends/youtube-cat-cc.json
+```
+
+If candidate quality is useful, implement controlled import next. Do not merge Draft PR #1 until the relevant pilot quality checkpoint is explicitly approved.
