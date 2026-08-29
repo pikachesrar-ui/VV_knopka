@@ -47,12 +47,15 @@ Until the user explicitly changes it:
 - No voiceover in the current cat format.
 - Intro and inter-clip black cards repeat the unique numbered episode title; end card is localized `Спасибо за просмотр` / `Thanks for watching`.
 - Long card text must wrap safely inside 1080x1920; do not regress to one-line overflow.
+- Windows pilot card font is accepted as **Impact** (`C:\Windows\Fonts\impact.ttf`); do not restart font experiments without a concrete new reason.
 - Cat stock must have **audible source audio**, not merely a technically present silent stream. Current gate probes audio and rejects effectively silent clips.
 - If fewer than 5 relevant licensed audible clips are available, fail closed rather than silently relaxing the rule.
 - Do not implement a raw social-media repost scraper as the default workflow.
 - Every accepted clip must retain source/provenance metadata.
 - Commercial-use permission/licensing must be explicitly represented before a clip passes the source gate.
 - Reused-content/copyright risk is a first-class product concern, not an afterthought.
+- Reddit/community posts are trend/reference input only by default; a public post is **not** reuse permission.
+- Trend themes may steer licensed-footage search, but must never bypass the existing source/audio/provenance gates.
 
 ## 5. YouTube/content-safety rules
 
@@ -92,11 +95,15 @@ Slot 1 (Russian `ai_short`, octopus) has received manual **QUALITY PASS**.
 
 Current work is intentionally focused on slot 2 cats before returning to slot 3:
 
-1. Re-render **slot 2 Russian cat compilation** with safe wrapped title cards, no voice, no BGM, longer black transitions and localized end card.
-2. Use one chosen real meow asset when available.
-3. Require 5-6 licensed relevant stock clips with genuine source audio; inspect `animal_audio_sources.json` if the gate cannot find enough.
-4. Human-review title fit, timing, meow, source audio and pacing.
-5. Only after cat format is accepted, return to the first English AI short / remaining pilot.
+1. Cat visual format is accepted: Impact cards, real meow, no voiceover, no BGM, localized end card.
+2. Audible-source gate works, but old slot 2 Pexels footage looks too generic/stock-like.
+3. YouTube no-key trend discovery works technically but yielded weak results and 0 confirmed CC in the user's first useful run.
+4. Reddit public-RSS community discovery is confirmed locally useful and now acts as the primary trend/reference brain.
+5. Use `vv-cat-theme <animal-slot>` to convert repeated community signals into a coherent theme, localized title, scene prompts and cat-anchored licensed-stock search terms.
+6. A changed trend theme must force a fresh active stock search rather than silently reusing unrelated cached Pexels clips; actual media files may be archived/reused only when theme signature matches.
+7. Reddit media itself remains reference-only unless separate creator permission/provenance is obtained.
+8. Human-review the first themed slot 2 render for thematic coherence, title, pacing, source audio and whether it materially reduces the stock feel.
+9. Only after cat format + sourcing are accepted, return to slot 3 / remaining pilot.
 
 ## 9. Language policy for cats
 
