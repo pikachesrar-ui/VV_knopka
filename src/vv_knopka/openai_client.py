@@ -103,8 +103,9 @@ class OpenAIPlanner:
             task = (
                 "Create an editorial concept for a 25-45 second cute/funny animal compilation. The final video "
                 "must add a clear original framing rather than being a raw repost montage. Give it one coherent "
-                "episode theme so the clips feel related, not random. Keep the hook short enough to be spoken over "
-                "a roughly two-second opening title card. Never request bass drops, impact booms, or loud transition effects."
+                "episode theme so the clips feel related, not random. The rendered compilation has no voiceover "
+                "and no background music: its sound comes from the original clips plus a short meow on black title cards. "
+                "Never request bass drops, impact booms, or loud transition effects."
             )
 
         topic_instruction = ""
@@ -117,11 +118,13 @@ class OpenAIPlanner:
                 topic_instruction += (
                     " This is a domestic-cat compilation: set visual_anchor exactly to \"cat\". "
                     "Choose ONE stock-friendly subtheme for the episode, such as cats with toys, cats and boxes, "
-                    "sleepy cats, curious reactions, climbing/jumping, dramatic stares, or playful hunting. "
+                    "sleepy cats, curious reactions, climbing/jumping, dramatic stares, playful hunting, meowing or purring. "
                     "All search terms must contain the exact word \"cat\" AND reflect that same subtheme. "
+                    "Favor visually useful terms that can also plausibly return clips with original sound, such as "
+                    "cat meowing, cat purring, cat playing, or cat interacting, when they fit the chosen theme. "
                     "Do not use the phrase \"Daily Dose of Cats\" or any close imitation of it anywhere. "
-                    "Title must be a short original episode title, ideally 2-5 words, not a permanent series name. "
-                    "Hook should be one short voice-friendly sentence, ideally under 10 words."
+                    "Title must be a short original episode title, preferably 2-4 words and never a permanent series name. "
+                    "The hook is metadata only; do not write it as a voiceover instruction."
                 )
         elif pipeline == "ai_short":
             used = _previous_visual_anchors(self.settings, slot)
