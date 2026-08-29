@@ -30,7 +30,9 @@ Pilot:
 - OpenAI/Pexels/Pixabay keys локально в `.env`;
 - MPT используется для `ai_short`, но **не для cat pipeline**;
 - cat renderer = local FFmpeg;
-- последний показанный OpenAI ledger: `$0.0281 / $10.00`;
+- последний подтверждённый local test run: **36 passed**;
+- publication gate = **PASS**;
+- последний показанный OpenAI ledger: **$0.0340 / $10.00**;
 - slot 1 octopus = manual QUALITY PASS;
 - real user meow asset успешно используется;
 - audible-source gate slot 2 нашёл 6/6 usable Pexels clips с real signal audio;
@@ -198,18 +200,39 @@ Keep discovery separate from ingest.
 - Current workflow therefore keeps `auto_download=false`, explicit human match confirmation, provenance, attribution and substantive editing/highlight selection.
 - Do not make raw TikTok/Instagram scraper a default source. Broad TikTok query is not a normal production API path.
 
-## 11. Next local checkpoint
+## 11. Current blocker / next local checkpoint
 
-Because two console entry points now exist, run once after pull:
+User already ran after the new UGC tools:
 
-```powershell
-git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe status
+```text
+36 passed
+OpenAI spent: $0.0340 / $10.00
+auto_publish: False
+publication gate: PASS
 ```
 
-Then configure `YOUTUBE_API_KEY` if not already present and run:
+First discovery attempt produced only:
+
+```text
+YOUTUBE_API_KEY is not set. Add a YouTube Data API v3 key to .env before running trend discovery.
+```
+
+So current blocker is **only missing YouTube Data API v3 key**.
+
+Next steps:
+
+1. Google Cloud: create/select project.
+2. Enable **YouTube Data API v3**.
+3. Create standard API key and restrict the key to YouTube Data API v3.
+4. Add locally to `.env`:
+
+```text
+YOUTUBE_API_KEY=...
+```
+
+Never paste the key into chat or commit `.env`.
+
+Then run:
 
 ```powershell
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
