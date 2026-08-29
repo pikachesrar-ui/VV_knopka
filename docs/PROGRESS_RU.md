@@ -2,13 +2,13 @@
 
 Короткий оперативный статус. Подробный контекст — `AGENT.md` и `docs/PROJECT_HANDOFF_RU.md`.
 
-Последнее обновление: **2026-08-29**.
+Последнее обновление: **2026-08-30**.
 
 ## Подтверждено на ПК пользователя
 
 - Project Python: `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний локальный test run: **38 passed**.
+- Последний локальный test run: **39 passed**.
 - Последний показанный OpenAI ledger: **$0.0340 / $10.00**.
 - Slot 1 RU AI Short — manual QUALITY PASS.
 - Cat pipeline = local FFmpeg; MPT нужен только `ai_short`.
@@ -32,23 +32,11 @@ Audible-source gate подтверждён: 6/6 usable Pexels clips с наст�
 
 ## Google Cloud больше НЕ blocker
 
-Пользователь сообщил, что Google Cloud Console требует адрес/карту; такой путь ему не подходит.
+Пользователю не подходит Google Cloud с адресом/картой. `YOUTUBE_API_KEY` не обязателен. Default no-key backend = `yt-dlp`; без OAuth/account login/media download.
 
-Поэтому `YOUTUBE_API_KEY` **не обязателен**.
+## No-key trend discovery — runtime incidents и текущий fix
 
-### `vv-cat-trends` no-key backend
-
-Default `--backend auto`:
-
-- если `YOUTUBE_API_KEY` уже есть — можно использовать официальный API backend;
-- если ключа нет — автоматически используется **yt-dlp no-key discovery**;
-- не нужен Google Cloud, карта, адрес, OAuth или login в YouTube account;
-- media не скачивается;
-- обычный `ytsearchN:<query>`, затем local recent/duration filtering и rank by views/day;
-- candidate metadata: title, creator/channel, publish time, views, duration, optional `license` metadata;
-- report: `runtime/trends/youtube-cat-cc.json`.
-
-### Runtime incident 2026-08-29
+### Incident 1: удалённый `ytsearchdate`
 
 Первый no-key запуск упал:
 
@@ -56,47 +44,52 @@ Default `--backend auto`:
 Unsupported url scheme: "ytsearchdate90"
 ```
 
-Причина подтверждена по актуальному upstream yt-dlp: `ytsearchdate` был удалён как сломанный в феврале 2026. Обычный `ytsearch` остаётся поддерживаемым.
+Актуальный yt-dlp удалил `ytsearchdate`; исправлено на обычный `ytsearchN:` + локальный recent filter.
 
-Fix в ветке:
+### Incident 2: ordinary `ytsearch` дал 0 candidates
 
-- `ytsearchdateN:` -> `ytsearchN:`;
-- свежесть больше не зависит от search extractor: даты фильтруются локально по `timestamp/upload_date`;
-- добавлен regression-test, запрещающий `ytsearchdate`.
-
-Следующий локальный pytest после `git pull` ожидается **39 passed** (до фикса пользователь подтвердил 38 passed).
-
-No-key rights policy fail-closed:
-
-- explicit Creative Commons -> `creative_commons_attribution_required`;
-- license отсутствует/неясна -> `license_unverified`, только trend reference;
-- неизвестная лицензия не считается разрешением на монтаж.
-
-Dependency:
+После первого compatibility fix пользователь подтвердил:
 
 ```text
-yt-dlp>=2026.1,<2027
+39 passed
+OpenAI spent: $0.0340 / $10.00
+auto_publish: False
+publication gate: PASS
+Trend backend: yt-dlp (no Google Cloud, no API key, no account login)
+YouTube cat trend candidates: 0 (CC already identified: 0)
+```
+
+Причина: search использовал `extract_flat="in_playlist"`. Плоские YouTube search entries часто не содержат `timestamp/upload_date`; `_candidate_from_ytdlp_entry` fail-closed отбрасывал entries без даты, поэтому поиск сам работал, но все результаты исчезали на локальном фильтре.
+
+Текущий fix:
+
+1. flat `ytsearch` используется только для быстрого сбора ID/URL;
+2. затем до 50 уникальных кандидатов получают **full yt-dlp metadata lookup без download**;
+3. только после hydration применяются date/duration/views/license checks;
+4. default discovery расширен несколькими запросами с текущим годом:
+   - `cat shorts 2026`;
+   - `funny cat shorts 2026`;
+   - `kitten shorts 2026`;
+   - `viral cat shorts 2026`;
+   - `cat shorts`;
+5. recency = локальный `timestamp/upload_date` filter;
+6. duration = 5..180 sec;
+7. rank = views/day, затем total views;
+8. rights остаются fail-closed: explicit CC -> `[CC]`, unknown -> `[rights?]` trend-reference-only.
+
+Добавлены regression tests на multi-query current-year search и hydration URL из flat video id. Следующий local pytest после pull ожидается **41 passed**.
+
+Report остаётся:
+
+```text
+runtime/trends/youtube-cat-cc.json
 ```
 
 ## Controlled UGC import
 
-`vv-cat-import` работает с no-key report.
-
-При import:
-
-1. пользователь подтверждает exact file/candidate через `--confirm-match`;
-2. если report не доказал CC, yt-dlp повторно делает full metadata lookup выбранного URL без download;
-3. import разрешён только если license реально определяется как Creative Commons;
-4. затем проверяются duration + audible audio;
-5. SHA-256/provenance/attribution сохраняются;
-6. UGC prepends `sources.json`, Pexels только дозаполняет remaining slots;
-7. highlights автоматически invalidated by manifest change.
-
-Никакого автоматического скачивания arbitrary social videos по умолчанию.
+`vv-cat-import` работает с no-key report. Unverified candidate при import получает full yt-dlp license lookup; если Creative Commons всё ещё не подтверждён — import refuses. Затем duration/audio/SHA-256/provenance/attribution gates; UGC prepends `sources.json`, Pexels только дозаполняет remaining slots; highlights invalidated automatically.
 
 ## Следующая точка на ПК
-
-Google Cloud больше не настраивать.
 
 ```powershell
 git pull
@@ -106,10 +99,10 @@ git pull
 .\.venv\Scripts\vv-cat-trends.exe --days 30 --limit 30
 ```
 
-Ожидаемый backend:
+Discovery теперь печатает:
 
 ```text
-Trend backend: yt-dlp (no Google Cloud, no API key, no account login)
+Scanning YouTube search results and hydrating metadata; this can take a minute...
 ```
 
-Затем прислать top-10 output. Если обычный `ytsearch` тоже окажется нестабилен, следующий fallback — отдельный Reddit RSS trend discovery без API key.
+Это нормально: metadata hydration делает дополнительные read-only YouTube requests, но media не скачивает. После запуска прислать top-10 или exact error. Если и hydrated YouTube search не даст полезной выдачи, следующий fallback — Reddit/community discovery без Google Cloud.
