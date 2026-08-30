@@ -91,6 +91,20 @@ def blocked_rendered_cat_slots(settings: Settings, *, before_slot: int) -> list[
     return rendered[-cooldown:]
 
 
+def cooled_down_rendered_cat_slots(settings: Settings, *, before_slot: int) -> list[int]:
+    """Return older rendered cat slots that are eligible again in long-run.
+
+    Oldest eligible slots are returned first. Pilot slots never expose cooled-down
+    history because the frozen pilot keeps the original all-history protection.
+    """
+    pilot_total = int(settings.raw.get("pilot", {}).get("total_shorts", 15))
+    if int(before_slot) <= pilot_total:
+        return []
+    rendered = _rendered_cat_slots(settings, before_slot=before_slot)
+    blocked = set(blocked_rendered_cat_slots(settings, before_slot=before_slot))
+    return [slot for slot in rendered if slot not in blocked]
+
+
 def blocked_cat_source_identities(settings: Settings, *, before_slot: int) -> set[tuple[str, str]]:
     """Return identities that may not be selected for this cat episode."""
     return _identities_for_slots(
