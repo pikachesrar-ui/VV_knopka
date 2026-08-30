@@ -1,166 +1,133 @@
 # VV_knopka — LIVE PROGRESS (RU)
 
-Короткий оперативный статус. Подробный контекст — `AGENT.md` и `docs/PROJECT_HANDOFF_RU.md`.
-
-Последнее обновление: **2026-08-30**.
+Последнее обновление: **2026-08-30**. Подробный контекст — `AGENT.md` и `docs/PROJECT_HANDOFF_RU.md`.
 
 ## Подтверждено на ПК пользователя
 
-- Project Python: `3.11.0`.
+- Python `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний явно показанный локальный test run перед текущим YouTube-source кодом: **47 passed**.
 - Последний показанный OpenAI ledger: **$0.0340 / $10.00**.
-- Slot 1 RU AI Short — manual QUALITY PASS.
-- Cat pipeline = local FFmpeg; MPT нужен только `ai_short`.
-- Real user meow работает.
-- Impact title-card style принят.
+- Slot 1 RU AI Short = manual QUALITY PASS.
+- Cat renderer = local FFmpeg; real meow + Impact; no voiceover/BGM.
+- Generic slot 2 `#001 — Котики` пользователь оценил как **нормальный**.
+- Vertical gate локально подтверждён: 6/6 selected Pexels sources = **720x1280 / aspect 0.5625**.
 
-## Slot 2 generic + vertical — MANUAL PASS
+## Старый CC discovery — исчерпан
 
-После отказа от narrow theme пользователь собрал generic `#001 — Котики` render и сказал **«да, норм»**.
-
-Проверка `animal_audio_sources.json` показала 6/6 selected sources:
+Пользователь дважды запустил старый metadata-only CC search:
 
 ```text
-pexels 10358235  720x1280  aspect 0.5625
-pexels 19306625  720x1280  aspect 0.5625
-pexels 10231519  720x1280  aspect 0.5625
-pexels 5335581   720x1280  aspect 0.5625
-pexels 15769301  720x1280  aspect 0.5625
-pexels 17536779  720x1280  aspect 0.5625
+vv-cat-youtube cc-search
+Verified CC cat candidates: 0
+
+vv-cat-youtube cc-search --days 6000 --limit 15 --scan-per-query 20
+Verified CC cat candidates: 0
 ```
 
-Вывод: **near-9:16 gate работает локально как задумано**; landscape 16:9 проблема закрыта для текущего stock pipeline.
+Вывод: расширение окна не помогает. Причина архитектурная: поле `license` у yt-dlp необязательное, поэтому отсутствие поля нельзя трактовать как доказательство Standard license.
 
-Accepted presentation остаётся:
+## YouTube CC search v2 — IMPLEMENTED
 
-- generic cat compilation, без обязательной темы;
-- Impact;
-- real meow;
-- no voiceover / no BGM;
-- source audio retained/normalized;
-- source footage near 9:16;
-- target 6, minimum 5 unique production sources.
-
-## Новый текущий эксперимент — YouTube Creative Commons
-
-Пользователь хочет проверить, будут ли YouTube CC клипы заметно смешнее/живее Pexels.
-
-Добавлен CLI:
+Новый production entry point всё ещё:
 
 ```powershell
 vv-cat-youtube
 ```
 
-### 1. CC search
+но `pyproject.toml` теперь маршрутизирует его в:
+
+```text
+src/vv_knopka/youtube_cat_source_v2.py
+```
+
+### `cc-search` v2
+
+Использует **YouTube Creative Commons advanced-search filter** через настоящий YouTube search URL (`sp=`), который поддерживается `YoutubeSearchURLIE` в актуальном yt-dlp.
+
+Flow:
+
+```text
+YouTube CC search filter
+-> filtered video IDs
+-> full yt-dlp metadata hydration
+-> explicit Standard license => reject
+-> direct CC license => accept (metadata+filter evidence)
+-> empty license field => accept only because candidate came from YouTube CC filter
+-> report
+```
+
+Команда:
 
 ```powershell
 vv-cat-youtube cc-search
 ```
 
-- no Google Cloud;
-- no API key;
-- no account login;
-- metadata-only search;
-- более широкий historical window, потому что recent-only поиск раньше дал 0 CC;
-- defaults: `funny cat shorts`, `cats being cats`, `funny kittens shorts`;
-- показывает только candidates, где yt-dlp metadata реально сообщает Creative Commons.
+Defaults: 6000 days, 20 scan/query, top 15; queries include funny cat shorts / cats being cats / funny kittens shorts / cat fails shorts.
 
-Можно расширить:
-
-```powershell
-vv-cat-youtube cc-search --days 6000 --limit 15 --scan-per-query 20
-```
-
-### 2. Verified CC URL -> production source
-
-```powershell
-vv-cat-youtube cc 2 --url "https://www.youtube.com/watch?v=..."
-```
-
-Flow:
+Report:
 
 ```text
-metadata -> require CC -> yt-dlp download -> ffprobe near-9:16 -> audible audio -> sources.json -> attribution.json
+runtime/trends/youtube-cat-cc-filtered.json
 ```
 
-CC clip gets:
+Report diagnostics per query:
 
-- `rights_verified=true`;
-- `rights_status=creative_commons_attribution_required`;
-- `commercial_use_allowed=true`;
-- `attribution_required=true`;
-- creator/title/source URL/license preserved.
+- `filtered_results`
+- `hydrated`
+- `accepted`
+- exact `search_url`
 
-If license is not verified, source is not downloaded by this mode. If downloaded media is not near 9:16 / audible / >= clip length, it is rejected.
+Это позволит понять причину даже если результат снова `0`.
 
-After importing one or more CC sources, normal:
+### `cc-import`
+
+Импорт теперь предпочтительно идёт **по rank из сохранённого CC-filter report**, а не по произвольному URL:
 
 ```powershell
-vv render-animal 2
+vv-cat-youtube cc-import 2 --candidate N
 ```
 
-uses imported YouTube sources first and Pexels/Pixabay fill remaining slots.
+Перед download снова проверяются video ID и текущие metadata. Если текущие metadata явно говорят Standard/non-CC, импорт fail-closed даже при старом filter evidence.
 
-## Ordinary YouTube — isolated test-only comparison
+Успешный candidate далее проходит:
 
-User also wants to compare ordinary funny YouTube cats privately without treating them as publishable media.
+```text
+yt-dlp download
+-> near-9:16 ffprobe gate
+-> duration gate
+-> audible-audio gate
+-> production sources.json
+-> attribution.json
+```
 
-We do **not** auto-download standard/unverified YouTube media. Instead an already-local exact file can be added to a hard-isolated pool:
+Pexels/Pixabay затем могут заполнить оставшиеся позиции до target 6.
+
+Строгий старый URL mode `vv-cat-youtube cc 2 --url ...` сохранён для случаев, когда yt-dlp прямо сообщает CC license.
+
+## Ordinary YouTube — test-only path остаётся
+
+Обычные/unverified YouTube clips автоматически не считаются разрешёнными. Уже локальный exact file можно добавить только в изолированный pool:
 
 ```powershell
 vv-cat-youtube test-add 2 --url "https://youtube..." --file "D:\path\cat.mp4" --confirm-match
-```
-
-It goes only under:
-
-```text
-runtime/test_only/slot-02/
-```
-
-and gets:
-
-- `do_not_publish=true`;
-- `publication_allowed=false`;
-- `commercial_use_allowed=false`;
-- `rights_verified=false`;
-- `rights_status=test_only_unverified`.
-
-It never enters `runtime/slots/02/sources.json` or `runtime/ready_for_review`.
-
-After at least 3 test-only clips:
-
-```powershell
 vv-cat-youtube test-render 2
 ```
 
-Output:
+Storage/output только under `runtime/test_only/slot-02/`; `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`. Не попадает в production sources или `ready_for_review`.
 
-```text
-runtime/test_only/slot-02/render-test-only.mp4
-```
+## Tests / CI
 
-Cards say `ТЕСТ — Котики`; render refuses if publication locks are missing.
+Новый v2 добавил regression tests на:
 
-## Rights notes
+- наличие YouTube CC filter в search URL;
+- пустой yt-dlp `license` допускается только при CC-filter provenance;
+- explicit Standard license reject;
+- CC report provenance обязателен;
+- import recheck rejects current explicit non-CC.
 
-- YouTube CC Attribution permits reuse subject to CC BY / attribution, but metadata is rechecked fail-closed.
-- Standard/unverified YouTube is not converted into permission merely by being a local experiment.
-- YouTube Terms also restrict downloading content outside authorized mechanisms; therefore automatic download in our new tool is limited to the explicitly verified CC path, while ordinary-video comparison requires an already-local file.
-- Creative Commons alone still does not guarantee YouTube monetization under reused-content policy; human review/editorial transformation remain relevant.
+GitHub CI `test` job на code head `2e56412...`: **58 passed in 0.49s**, `Verify pilot lock` = success. Windows bootstrap на последней проверке ещё выполнялся отдельно.
 
-## Tests in current YouTube source change
-
-Added regression coverage for:
-
-- standard license rejected by CC production mode;
-- CC search keeps only verified CC metadata and dedupes;
-- test-only import remains under `runtime/test_only` and never creates production sources;
-- test-only render refuses a missing publication lock.
-
-Latest final-head GitHub CI `test` job: **54 passed**, `Verify pilot lock` = success. `windows-bootstrap` was still running at the last check, so do not claim the whole workflow is complete yet.
-
-## Next local checkpoint
+## Следующая точка на ПК
 
 ```powershell
 git pull
@@ -170,4 +137,18 @@ git pull
 .\.venv\Scripts\vv-cat-youtube.exe cc-search
 ```
 
-Send the CC-search output first. If it finds a useful vertical-looking cat candidate, import that URL with `cc` and rerender slot 2 to compare against the Pexels-only version.
+Ожидаемый local test count: **58 passed**.
+
+Если кандидаты есть — прислать top list и выбрать `N`, затем:
+
+```powershell
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate N
+```
+
+Если снова `0`, прислать:
+
+```powershell
+Get-Content .\runtime\trends\youtube-cat-cc-filtered.json -Raw
+```
+
+Нельзя merge Draft PR #1 без отдельного решения после визуального review.
