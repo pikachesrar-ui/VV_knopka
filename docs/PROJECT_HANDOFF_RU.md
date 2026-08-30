@@ -16,16 +16,43 @@ RU slots:     1,2
 
 ## Manual quality status
 
-Пользователь визуально принял все четыре proof-of-format ролика:
+Пользователь визуально принял proof pair обеих веток:
 
 - slot 1 RU AI facts = QUALITY PASS;
 - slot 2 RU cats = QUALITY PASS;
 - slot 3 EN AI facts = QUALITY PASS;
 - slot 4 EN cats = QUALITY PASS.
 
-Следовательно основной формат обеих веток подтверждён на RU и EN. Текущий milestone — **локальный review-first conveyor**, а не дальнейшие эксперименты с шаблоном.
+Последний показанный локальный статус после запуска conveyor:
 
-Последний показанный OpenAI ledger до завершения EN proof pair: `$0.0618 / $10.00`; текущее значение всегда читать через `vv status`, не угадывать.
+```text
+92 passed in 0.79s
+OpenAI spent: $0.0887 / $10.00
+auto_publish: False
+publication gate: PASS
+```
+
+Не угадывать более новые local test/ledger значения.
+
+## Первый реальный conveyor success
+
+`pilot-next --dry-run` правильно определил slot 5 как следующий отсутствующий:
+
+```text
+slot 05: ai_short / en -> runtime/ready_for_review/slot-05-en-ai.mp4
+```
+
+Затем настоящий `pilot-next` успешно выполнил slot 5:
+
+```text
+runtime/slots/05/plan.json
+Curated stock materials: 8
+MPT task: bde437d8-38e1-48c2-bc41-8515a5d68595
+runtime/ready_for_review/slot-05-en-ai.mp4
+runtime/ready_for_review/slot-05-en-ai.upload.json
+```
+
+Это локально подтверждает resumable next-slot selection, plan-on-demand, MPT handling, AI render и metadata sidecar.
 
 ## Cat / YouTube sourcing
 
@@ -41,139 +68,113 @@ Full clean gate PASS 0.99
 
 Не вводить обязательную YouTube quota. Clean YouTube pool может расти со временем; Pexels/Pixabay остаются safe fallback. Все rights / clean-footage / near-9:16 / audible-audio gates сохраняются.
 
-## Cross-episode source history
+## Cross-episode source history + automatic refresh
 
-`src/vv_knopka/source_history.py` добавлен перед масштабированием. Для нового cat slot он сравнивает текущие `provider + provider_id` с source manifests ранее реально отрендеренных cat episodes.
+Первоначальный `source_history.py` post-gate разрешает максимум один reused `provider + provider_id` и fail closed при 2+ повторах.
 
-Политика:
+Первый `pilot-batch --count 3` дошёл до slot 6 и корректно остановился, потому что source pool содержал **5 clips уже использованных в предыдущих cat episodes**. Примеры: `pexels:15769301`, `17536779`, `19306625`, `20420481`, `5335581`.
+
+Проблема была не в gate, а в автономности: source picker сначала переиспользовал старые top results, а post-gate требовал ручного refresh.
+
+Исправление: `src/vv_knopka/animal_audio_sources_v3.py`.
+
+Теперь до source review/render:
+
+1. `prior_rendered_cat_identities()` собирает IDs из реально существующих предыдущих cat MP4/source manifests;
+2. эти IDs удаляются из текущего `sources.json`;
+3. удаляются из slot-local legacy `ai_materials.json` cache;
+4. те же IDs отфильтровываются из новых Pexels/Pixabay search results;
+5. sourcing автоматически идёт глубже за свежими licensed/audible/near-9:16 clips;
+6. старый final reuse audit остаётся второй fail-closed линией защиты.
+
+Старые media files не удаляются с диска.
+
+Чтобы политика применялась и к child processes, текущий console entrypoint:
 
 ```text
-0–1 reused source identity -> PASS
-2+ reused source identities -> FAIL before highlight/render
+vv -> vv_knopka.cli_v2:main
 ```
 
-Audit: `runtime/slots/XX/source_reuse_audit.json`.
+`cli_v2` подменяет cat sourcing на v3 и conveyor на `pilot_conveyor_v2`; child CLI также идёт через v2.
 
-Это защита от серии почти одинаковых компиляций. При fail надо обновить source pool, а не ослаблять gate.
+Если свежих источников всё равно меньше production minimum, система должна остановиться, а не разрешить heavy reuse.
 
 ## Review-first conveyor
 
-Новый `src/vv_knopka/pilot_conveyor.py` и команды:
+Команды:
 
 ```powershell
 .\.venv\Scripts\vv.exe pilot-next
 .\.venv\Scripts\vv.exe pilot-batch --count 3
 ```
-
-`pilot-next` = один следующий отсутствующий slot. `pilot-batch` = несколько подряд, строго по manifest, stop-on-first-failure.
 
 Resumability:
 
 - non-empty expected MP4 в `runtime/ready_for_review` считается завершённым slot marker;
 - состояние/attempt history: `runtime/conveyor/state.json`;
 - существующие slots пропускаются;
-- если slot AI и `plan.json` уже есть, plan не генерируется заново.
+- если AI `plan.json` уже есть, он не генерируется заново.
 
 Safety:
 
-- conveyor запускается только при publication gate PASS;
-- `auto_publish=false` обязателен;
-- `$10` OpenAI ledger guard сохраняется;
+- publication gate PASS обязателен;
+- `auto_publish=false` frozen;
+- `$10` OpenAI hard guard;
 - никакого YouTube upload/OAuth;
-- outputs только `runtime/ready_for_review`;
-- первая ошибка останавливает batch.
+- outputs only `runtime/ready_for_review`;
+- batch stop-on-first-failure.
 
 ## MPT process management
 
-Обычный `vv render-ai` всё ещё делает ранний MPT healthcheck.
-
-Conveyor умеет дополнительно поднять MPT для unattended AI slot. Порядок поиска executable:
+Conveyor умеет использовать уже работающий MPT или автоматически поднять локальный MPT через первый найденный executable:
 
 ```text
 MoneyPrinterTurbo/.venv/Scripts/python.exe
 MoneyPrinterTurbo/venv/Scripts/python.exe
 MoneyPrinterTurbo/.venv/bin/python
 MoneyPrinterTurbo/venv/bin/python
-uv (только если есть в PATH)
+uv (fallback only)
 ```
 
-Это учитывает реальный Windows пользователя, где `uv` ранее не распознавался.
-
-Если MPT уже работает — conveyor его использует и не завершает. Если conveyor сам запустил MPT — пишет `runtime/conveyor/mpt.log`, ждёт health readiness, а в конце batch завершает только свой процесс.
+Это учитывает Windows пользователя, где `uv` не был в PATH. Если conveyor сам поднял MPT, он пишет `runtime/conveyor/mpt.log` и завершает только свой процесс после batch.
 
 ## Upload metadata / titles
 
-Новый `src/vv_knopka/publication_metadata.py`. После каждого нового render рядом с видео создаётся `.upload.json`.
+После каждого нового render создаётся `.upload.json` с proposed YouTube title/description, language/pipeline/video path, required CC attribution, `review_required=true`, `auto_publish=false`, `publication_allowed_by_conveyor=false`.
 
-Содержит:
-
-- proposed YouTube title;
-- proposed description;
-- language / pipeline / video path;
-- required CC attribution text from `sources.json`;
-- `review_required=true`;
-- `auto_publish=false`;
-- `publication_allowed_by_conveyor=false`.
-
-Cat external titles:
-
-```text
-slot 2 cat episode #001: Котики, которые сделали мой день 😹 #001 #shorts
-slot 4 cat episode #002: Cats That Made My Day 😹 #002 #shorts
-slot 6 cat episode #003: Cats That Made My Day 😹 #003 #shorts
-...
-```
-
-On-card title remains simple `#NNN — Котики/Cats`.
-
-AI external title uses each plan's own title + `#shorts`, so it remains fact-specific rather than one generic `Did You Know...?` template.
-
-Conveyor best-effort backfills sidecars for already-existing outputs when their old plan/source metadata is sufficient.
+Cat external titles: `Cats That Made My Day 😹 #NNN #shorts`; on-card remains `#NNN — Cats`. AI title берётся из конкретного fact plan + `#shorts`.
 
 ## CI
 
-Latest code-head test job after conveyor, sidecars and source-history:
+Latest code-head test job после automatic cat-source refresh:
 
 ```text
-92 passed in 0.38s
+95 passed in 0.65s
 Verify pilot lock: success
 ```
 
-Windows-bootstrap was still in progress at that exact check. Recheck live GitHub before a full-CI claim.
+Windows-bootstrap для exact head на момент проверки ещё выполнялся; recheck live before claiming full workflow green.
 
-## Immediate local validation
+## Immediate local continuation
 
-User should pull the latest branch and run:
+На пользовательском ПК slot 5 уже существует, а failed slot 6 не создал final MP4. Поэтому после pull новый batch должен снова начать с slot 6.
+
+Команды:
 
 ```powershell
 cd D:\KiraS\VV_knopka
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv.exe pilot-next --dry-run
-```
-
-Given standard output filenames for accepted slot 1–4, expected dry-run next item:
-
-```text
-slot 05: ai_short / en
-```
-
-Then validate one real autonomous iteration:
-
-```powershell
-.\.venv\Scripts\vv.exe pilot-next
-```
-
-If slot 5 succeeds and lands in `runtime/ready_for_review` with its `.upload.json`, move to:
-
-```powershell
 .\.venv\Scripts\vv.exe pilot-batch --count 3
 ```
 
-Only after local conveyor behavior is proven should Windows Task Scheduler cadence be configured. Uploader/OAuth remains a separate later decision.
+Expected tests around **95 passed**.
+
+Для slot 6 ожидается: old cat IDs будут исключены автоматически, sourcing попробует найти свежую шестёрку, затем final reuse audit должен PASS. Если production minimum свежих источников не набирается, исследовать `runtime/slots/06/animal_audio_sources.json`; не ослаблять rights/audio/aspect/clean/history gates.
+
+После успешного batch можно перейти к Windows Task Scheduler. Uploader/OAuth остаётся отдельным более поздним решением.
 
 ## Git / release
 
-Continue on `mvp/pilot-scaffold`, Draft PR #1. Do not merge merely because tests pass. The next meaningful manual gate is successful local conveyor validation / review of generated pilot outputs unless the user explicitly changes release policy.
+Continue on `mvp/pilot-scaffold`, Draft PR #1. PR не merge без отдельного решения пользователя после дальнейшей local conveyor validation/review.
