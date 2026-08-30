@@ -1,3 +1,4 @@
+import vv_knopka.animal_audio_sources_v4 as source_v4
 from vv_knopka.animal_audio_sources_v4 import (
     _deep_pexels_collector,
     _deep_pixabay_collector,
@@ -76,7 +77,8 @@ def _pixabay_video(video_id):
     }
 
 
-def test_deep_pexels_keeps_paging_after_prior_popular_result():
+def test_deep_pexels_keeps_paging_after_prior_popular_result(monkeypatch):
+    monkeypatch.setattr(source_v4._base, "has_audio_stream", lambda *args, **kwargs: True)
     collector = _deep_pexels_collector(prior={("pexels", "100")}, pages_per_query=3)
     client = _Client()
 
@@ -93,10 +95,35 @@ def test_deep_pexels_keeps_paging_after_prior_popular_result():
 
     assert [item["id"] for item in found] == [200]
     assert found[0]["search_page"] == 2
+    assert found[0]["remote_audio_probe"] == "confirmed"
     assert ("cat", 2) in client.pages
 
 
-def test_deep_pixabay_uses_pixabay_file_and_tag_helpers():
+def test_remote_audio_prefilter_skips_silent_candidate_before_cap(monkeypatch):
+    def probe(url, **kwargs):
+        return False if "/100.mp4" in str(url) else True
+
+    monkeypatch.setattr(source_v4._base, "has_audio_stream", probe)
+    collector = _deep_pexels_collector(prior=set(), pages_per_query=3)
+    client = _Client()
+
+    found = collector(
+        client=client,
+        api_key="key",
+        queries=["cat"],
+        per_page=40,
+        max_candidates=1,
+        clip_seconds=5,
+        anchor="cat",
+        aspect_tolerance=0.08,
+    )
+
+    assert [item["id"] for item in found] == [200]
+    assert ("cat", 2) in client.pages
+
+
+def test_deep_pixabay_uses_pixabay_file_and_tag_helpers(monkeypatch):
+    monkeypatch.setattr(source_v4._base, "has_audio_stream", lambda *args, **kwargs: True)
     collector = _deep_pixabay_collector(prior=set(), pages_per_query=1)
 
     found = collector(
@@ -113,6 +140,8 @@ def test_deep_pixabay_uses_pixabay_file_and_tag_helpers():
     assert found[0]["file_info"]["width"] == 720
     assert found[0]["file_info"]["height"] == 1280
     assert found[0]["metadata_mentions_anchor"] is True
+    assert found[0]["remote_audio_probe"] == "confirmed"
+    assert found[0]["search_order"] == "popular"
 
 
 def test_expanded_queries_adds_diversity_without_duplicates():
@@ -121,3 +150,5 @@ def test_expanded_queries_adds_diversity_without_duplicates():
     assert queries.count("cat") == 1
     assert "kitten" in queries
     assert "house cat" in queries
+    assert "cat eating" in queries
+    assert "domestic cat" in queries
