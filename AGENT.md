@@ -99,17 +99,28 @@ Existing non-empty long-run MP4 files are resume markers just like the pilot. At
 
 ## 8. Windows scheduled generation
 
-Scheduler support is implemented but must be installed explicitly on the user's machine.
+User approved a **one-week test at up to 3 generated videos per night**.
+
+Chosen Moscow-time triggers:
+
+```text
+01:30 MSK
+03:30 MSK
+05:30 MSK
+```
+
+Implementation:
 
 - `scripts/run-longrun-task.ps1` runs exactly one review-only `longrun-next` per invocation.
 - It runs `vv status` first, logs to `runtime/scheduler/longrun-task.log`, and uses an exclusive lock to prevent overlapping renders.
 - It never runs `git pull`, never auto-updates code, and never publishes.
-- A failed generation exits nonzero; the next scheduled run resumes the same missing slot through existing long-run resume semantics.
-- `scripts/install-longrun-task.ps1 -At HH:mm` registers one daily Windows Scheduled Task for the current interactive Windows user without storing/requesting a password.
-- Scheduler task is configured `StartWhenAvailable`, `IgnoreNew`, battery-safe, with a four-hour execution limit.
-- Both scripts support dry-run validation; CI executes the dry-run path on Windows.
-
-Do not install a schedule until the user chooses the desired local clock time.
+- A failed generation exits nonzero; the next scheduled trigger resumes the same missing slot through existing long-run resume semantics.
+- `scripts/install-longrun-task.ps1` now supports one Windows Scheduled Task with multiple daily triggers.
+- Default installer schedule is `01:30,03:30,05:30`; `-At "HH:mm"` remains valid for a single custom trigger, and comma/semicolon-separated times are supported.
+- Task is `StartWhenAvailable`, `IgnoreNew`, battery-safe, with a four-hour execution limit.
+- Because `IgnoreNew` is enabled, three triggers mean **up to** three videos/day; a still-running earlier render prevents overlap rather than spawning a second renderer.
+- Current cost estimate from observed pilot/long-run usage for 21 generated videos/week is roughly **$0.25–0.50 OpenAI**, with the hard `$10` guard unchanged.
+- Scheduler installation is explicit and local; no password is requested/stored.
 
 ## 9. Architecture constraints
 
@@ -143,23 +154,21 @@ slot-16-en-animals.upload.json
 Long-run conveyor outputs: slot-16-en-animals.mp4
 ```
 
-The successful retry validated the cooled local-history fallback: the system preserved the accepted fresh slot-16 source and could fill the remaining minimum from sufficiently old Pexels/Pixabay history while retaining the current gates.
+The successful retry validated the cooled local-history fallback. The scheduler runner dry-run then correctly resolved **slot 17 / ai_short / EN** and showed:
 
-Next deterministic target is **slot 17 / ai_short / EN**.
+```text
+OpenAI spent: $0.1885 / $10.00
+auto_publish: False
+publication gate: PASS
+long_run: True
+```
 
-Windows scheduler implementation is now on the branch. Code/CI checkpoint after scheduler scripts:
+The multi-trigger scheduler installer is now on the branch. Immediate continuation:
 
-- Python suite remains **114 passed**;
-- safety lock and long-run dry-run PASS;
-- Windows CI validates both scheduler scripts in dry-run mode;
-- workflow run `33325562523` completed successfully for commit `1844ddf3c5f39734989b99cf5c3a05df04ae33d6`.
-
-Immediate local continuation:
-
-1. pull scheduler scripts;
-2. run `scripts/run-longrun-task.ps1 -DryRun` and verify it resolves slot 17 without rendering;
-3. choose a daily local clock time;
-4. install the task with `scripts/install-longrun-task.ps1 -At HH:mm`;
+1. pull the latest scheduler installer;
+2. optionally run `scripts/install-longrun-task.ps1 -DryRun` and expect the three default triggers;
+3. register the task with `scripts/install-longrun-task.ps1` (no `-At` needed for the approved 01:30/03:30/05:30 schedule);
+4. verify task state/next run and inspect `runtime/scheduler/longrun-task.log` after the first night;
 5. publishing remains manual/review-first.
 
 ## 12. Language / title policy
