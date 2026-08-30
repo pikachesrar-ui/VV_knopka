@@ -9,188 +9,115 @@
 ## Локально подтверждено
 
 - Windows path `D:\KiraS\VV_knopka`, `.venv` Python 3.11.
-- Latest shown OpenAI ledger **$0.0509 / $10.00**; publication gate PASS.
-- Latest local pytest before clean-footage v4: **62 passed in 0.48s**.
+- Latest shown OpenAI ledger before clean-review: **$0.0509 / $10.00**; publication gate PASS.
 - Slot 1 octopus = manual QUALITY PASS.
 - Cat renderer local FFmpeg; Impact + real meow; no voiceover/BGM.
-- Production cats = broad generic `#NNN — Котики` / `#NNN — Cats`; narrow trend themes abandoned.
+- Production cats = broad generic `#NNN — Котики` / `#NNN — Cats`; narrow themes abandoned.
 - Generic vertical slot 2 baseline manually accepted as normal.
 - Strict near-9:16 stock baseline validated: six Pexels sources exactly 720×1280 / aspect 0.5625.
 
-## YouTube Data API / CC — WORKING LOCALLY
+## YouTube Data API / CC
 
-User has project `VV Knopka`, enabled YouTube Data API v3, created API key and stores it locally in ignored `.env` as `YOUTUBE_API_KEY`. Never ask for the key or commit it.
+User has Google Cloud project `VV Knopka`, enabled YouTube Data API v3 and stores `YOUTUBE_API_KEY` locally in ignored `.env`. Never ask for or commit the key.
 
-Official `vv-cat-youtube cc-search` works and returned 15 Creative Commons cat candidates using `search.list(videoLicense=creativeCommon)` plus `videos.list` confirmation `status.license=creativeCommon`.
+Official API CC discovery works: `search.list(videoLicense=creativeCommon)` plus `videos.status.license=creativeCommon` returned 15 real CC candidates.
 
-Report:
+First imported candidates 1, 8, 14 were all technically valid CC, 2160×3840 and audible, but all came from `Pawcsu` and were visually packaged with `Pawcsu/@Pawcsu` branding + large captions.
 
-```text
-runtime/trends/youtube-cat-cc-official.json
-```
+## Full clean-footage gate — confirmed locally
 
-## First real YouTube CC import experiment
-
-User imported candidates **1, 8, 14** from the saved official report. All three succeeded technically:
+User ran `vv-cat-youtube cc-clean 2` and got:
 
 ```text
-9DL-J0hKxtM  Never about drinking water! 😼          Pawcsu  2160x3840  audio -12.0 dB
-8IYWJiho1fQ  What was the reason for this? 👀        Pawcsu  2160x3840  audio -18.9 dB
-3YVtMMK1Uoc  What was this cat trying to do 🤔🐾     Pawcsu  2160x3840  audio -47.4 dB
+YouTube clean-footage audit: 0 kept / 3 reviewed
+[REJECT] 3YVtMMK1Uoc | confidence=0.99 | Pawcsu/@Pawcsu branding + large headline caption
+[REJECT] 8IYWJiho1fQ | confidence=1.00 | Pawcsu/@Pawcsu branding + large caption
+[REJECT] 9DL-J0hKxtM | confidence=1.00 | Pawcsu branding/avatar/handle + large headline caption
 ```
 
-Each showed:
+This is the desired behavior. Do not crop/blur such branding to make a source pass. Production `sources.json` no longer contains those three YouTube entries; downloaded files remain only for audit/local inspection.
+
+Full import gate remains:
 
 ```text
-Rights evidence: youtube_data_api_status_license
-License: YouTube Creative Commons Attribution
+official CC recheck -> download -> near-9:16 -> duration -> audible audio -> 4-frame Luna clean review -> production only on PASS
 ```
 
-Then `vv render-animal 2` succeeded with six sources (YouTube CC + Pexels fallback), output:
+Any production YouTube clip must carry `clean_footage_approved=true`.
 
-```text
-runtime/ready_for_review/slot-02-ru-animals.mp4
-```
-
-So official rights check + download + 9:16 + audible-audio + mixed-source rendering all work.
-
-## New problem discovered by manual visual review
-
-User showed candidate 8. The source contains a large social-media-style top block:
-
-- `Pawcsu`
-- `@Pawcsu`
-- avatar / verification badge
-- large caption `What was the reason for this?`
-
-This is not desired production footage. It visually looks like taking another account's already-packaged Short, even though the YouTube upload itself is API-confirmed CC.
-
-Product decision: **do not crop/blur branding to make such material pass**. Prefer relatively raw/self-contained cat footage. CC license verification and visual cleanliness are separate gates.
-
-## YouTube clean-footage v4 — IMPLEMENTED
+## Current implementation: YouTube CC v5 prescreen
 
 `pyproject.toml` now maps:
 
 ```text
-vv-cat-youtube = vv_knopka.youtube_cat_source_v4:main
+vv-cat-youtube = vv_knopka.youtube_cat_source_v5:main
 ```
 
-New modules:
+New module:
 
 ```text
-src/vv_knopka/youtube_clean_footage.py
-src/vv_knopka/youtube_cat_source_v4.py
-src/vv_knopka/animal_audio_sources_v2.py
+src/vv_knopka/youtube_cc_prescreen.py
 ```
 
-`vv` cat rendering now imports source preparation from `animal_audio_sources_v2`, which wraps the existing audio/vertical stock gate and removes unreviewed legacy YouTube clips before rendering.
-
-### New production import flow
+Official `cc-search` v5 now does:
 
 ```text
-official YouTube API status.license=creativeCommon recheck
--> yt-dlp download
--> real ffprobe near-9:16 gate
--> duration gate
--> audible-source gate
--> four-frame 2x2 contact sheet
--> GPT-5.6 Luna clean-footage review
--> production sources.json only on PASS
+exact YouTube API CC search
+-> default queries: funny cat / funny kitten / cat playing / cat reaction
+-> larger ranked CC pool
+-> enrich canonical channel + thumbnail
+-> max one candidate per channel
+-> Luna thumbnail prescreen
+-> require domestic cat
+-> reject branding/@handle/avatar/social UI/watermark/large caption/split-screen/ranking/repost packaging
+-> save only clean-looking candidates to official report
 ```
 
-Clean review rejects prominent:
+Thumbnail prescreen is only a cheap prefilter. It does not replace the final 4-frame gate after `cc-import` downloads the actual video.
 
-- creator/channel names, `@handles`, avatars/banners;
-- social-platform watermarks/UI/chrome;
-- large added meme/headline captions;
-- split-screen/collage/ranking layout;
-- obvious already-compiled/repost packaging.
-
-It allows incidental environmental text such as signs, labels and license plates. This is a presentation/provenance-risk gate, not legal rights verification.
-
-Config:
-
-```toml
-youtube_clean_vision_min_confidence = 0.78
-youtube_clean_vision_max_estimated_cost_usd = 0.02
-```
-
-Fail-closed rule: model `approved=true` is still rejected if any forbidden packaging flag is true. A production YouTube clip must store `clean_footage_approved=true` plus review confidence/reason/flags/hash/review path.
-
-### Legacy/current import cleanup
-
-Current three Pawcsu imports predate v4 and therefore do not yet have `clean_footage_approved=true`.
-
-Migration command:
-
-```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-clean 2
-```
-
-It reviews current YouTube entries, keeps only passes, removes rejects from production `sources.json`, rewrites attribution, and saves:
+Expected v5 header:
 
 ```text
-runtime/slots/02/youtube_clean_audit.json
-runtime/slots/02/youtube_clean_reviews/<video-id>.json
-runtime/slots/02/youtube_clean_reviews/<video-id>.jpg
+YouTube CC search v5: official API + clean thumbnail prescreen
+No OAuth/channel login; thumbnails only at prescreen; no media download
 ```
 
-Downloaded media remains on disk for audit/local inspection. Clean review is SHA-cached, so re-running unchanged clips should not spend again.
-
-Even if user skips `cc-clean`, `vv render-animal 2` now sanitizes the active manifest first: YouTube sources without `clean_footage_approved=true` are removed and Pexels/Pixabay fill missing positions.
-
-### New import behavior
-
-For all future:
-
-```powershell
-vv-cat-youtube cc-import 2 --candidate N
-```
-
-CC/format/audio may pass but clean gate may reject. Expected reject message begins:
-
-```text
-YouTube CC candidate passed the license/format gates but failed the clean-footage anti-repost gate
-```
-
-Do not bypass it; try another candidate.
+Output candidate label is `[API-CC+CLEAN?]` and includes `clean-thumb=<confidence>`.
 
 ## Tests / CI
 
-v4 added 7 regression tests for:
-
-- raw clean decision pass;
-- creator branding fail even if model says approved;
-- large caption fail;
-- low-confidence fail;
-- render sanitizer removing legacy/unapproved YouTube while keeping stock and clean-reviewed YouTube;
-- rejected import rollback from production manifest;
-- passed import clean metadata persistence.
-
-GitHub CI `test` job on code head `90d471f18c50f9643980eacc28b0bdd8132e6021`:
+Latest code-head CI after v5:
 
 ```text
-69 passed in 0.56s
+73 passed in 0.59s
 Verify pilot lock: success
 ```
 
-Windows-bootstrap was still running at that exact check. Documentation commits followed afterward; always inspect live head/CI before claiming the full latest workflow is green.
+Windows-bootstrap was still running at that check. Recheck live final-head CI before claiming the entire latest workflow is green.
 
-## Immediate next local checkpoint
+## Immediate next local step
 
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv-cat-youtube.exe cc-clean 2
+.\.venv\Scripts\vv-cat-youtube.exe cc-search
 ```
 
-Expected pytest ≈ **69 passed**. `cc-clean 2` may issue up to three small Luna calls under the existing `$10` project budget; latest user ledger before this work is `$0.0509`.
+Expected pytest ≈ **73 passed**. `cc-search` now makes a few small Luna thumbnail-review calls under the existing `$10` budget.
 
-User should send the full `cc-clean 2` output. Based on PASS/REJECT results, search/import more CC candidates until several clean YouTube sources are available, then render and visually compare against the Pexels baseline.
+User should send the complete new `cc-search` output. IMPORTANT: v5 overwrites `runtime/trends/youtube-cat-cc-official.json`; after that, candidate numbers refer to the new clean-prescreened report, not the old 15-item list.
 
-## Ordinary YouTube test-only remains isolated
+Then import promising candidates one by one:
+
+```powershell
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate N
+```
+
+A thumbnail PASS may still fail the strict full-video gate; do not bypass it. Once several clean YouTube CC clips pass, render slot 2 and compare against the accepted Pexels baseline.
+
+## Ordinary YouTube test-only
 
 Standard/unverified YouTube is not production-safe just because testing is local. Already-local exact files may only use `test-add` / `test-render` under `runtime/test_only`, with `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
 
