@@ -21,6 +21,10 @@ pipeline_cycle = ["animal_compilation", "ai_short"]
 ai_language = "en"
 # Do not choose the same AI fact subject among the most recent N AI Shorts.
 fact_subject_cooldown = 6
+# Cat stock is finite. In long-run a source remains blocked for the immediately
+# preceding N rendered cat episodes, then becomes eligible as a fresh-first fallback.
+# Reusing it starts the cooldown again. The frozen pilot keeps its all-history rule.
+cat_source_cooldown_episodes = 5
 
 [openai]
 writer_model = "gpt-5.6-terra"
