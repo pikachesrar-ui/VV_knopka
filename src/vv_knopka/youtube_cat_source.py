@@ -19,11 +19,16 @@ from .budget import BudgetLedger
 from .cat_compilation import build_generic_cat_plan
 from .manifest import build_manifest
 from .settings import Settings, load_settings
-from .trend_discovery import _is_creative_commons
+from .trend_discovery import _is_creative_commons, discover_ytdlp_cats
 from .trend_import import _ffprobe_duration, merge_source_manifest, write_attribution_report
 
 
 _VIDEO_SUFFIXES = {".mp4", ".mkv", ".webm", ".mov", ".m4v"}
+_DEFAULT_CC_QUERIES = (
+    "funny cat shorts",
+    "cats being cats",
+    "funny kittens shorts",
+)
 
 
 def _sha256(path: Path) -> str:
@@ -72,6 +77,52 @@ def require_verified_cc(metadata: dict[str, Any]) -> str:
             "Production CC download/import is blocked."
         )
     return license_name
+
+
+def search_cc_candidates(
+    *,
+    days: int = 3650,
+    scan_per_query: int = 15,
+    limit: int = 10,
+    queries: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Search a wider no-key YouTube window and keep only metadata-verified CC results."""
+    requested_queries = [str(value).strip() for value in (queries or list(_DEFAULT_CC_QUERIES)) if str(value).strip()]
+    candidates: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for query in requested_queries:
+        try:
+            found = discover_ytdlp_cats(
+                query=query,
+                days=max(int(days), 1),
+                limit=max(1, int(scan_per_query)),
+            )
+        except RuntimeError as exc:
+            warnings.append(f"{query}: {exc}")
+            continue
+        for item in found:
+            if not isinstance(item, dict) or not _is_creative_commons(str(item.get("license") or "")):
+                continue
+            video_id = str(item.get("video_id") or "").strip()
+            source_url = str(item.get("url") or "").strip()
+            identity = video_id or source_url
+            if not identity or identity in seen:
+                continue
+            seen.add(identity)
+            candidates.append(dict(item) | {"cc_search_query": query})
+
+    candidates.sort(
+        key=lambda item: (
+            -int(item.get("view_count") or 0),
+            -float(item.get("views_per_day") or 0.0),
+            str(item.get("published_at") or ""),
+        )
+    )
+    selected = candidates[: max(1, int(limit))]
+    for rank, item in enumerate(selected, 1):
+        item["cc_rank"] = rank
+    return selected, warnings
 
 
 def _download_cc_media(url: str, *, destination_dir: Path, video_id: str) -> Path:
@@ -333,6 +384,12 @@ def main() -> None:
     parser.add_argument("--config", default="config/pilot.toml")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    cc_search = sub.add_parser("cc-search", help="No-key search that prints only metadata-verified YouTube CC cat candidates")
+    cc_search.add_argument("--days", type=int, default=3650)
+    cc_search.add_argument("--limit", type=int, default=10)
+    cc_search.add_argument("--scan-per-query", type=int, default=15)
+    cc_search.add_argument("--query", action="append", default=None, help="Repeat to replace the default cat queries")
+
     cc = sub.add_parser("cc", help="Verify CC BY, download and import one YouTube cat source")
     cc.add_argument("slot", type=int)
     cc.add_argument("--url", required=True)
@@ -351,6 +408,31 @@ def main() -> None:
 
     args = parser.parse_args()
     settings = load_settings(args.config)
+
+    if args.command == "cc-search":
+        print("YouTube CC search: yt-dlp metadata only, no API key, no account login, no media download")
+        print("Scanning a wide window; this can take a few minutes...")
+        candidates, warnings = search_cc_candidates(
+            days=args.days,
+            scan_per_query=args.scan_per_query,
+            limit=args.limit,
+            queries=args.query,
+        )
+        print(f"Verified CC cat candidates: {len(candidates)}")
+        for item in candidates:
+            print(
+                f"[{int(item['cc_rank']):02d}] {int(item.get('view_count') or 0):,} views | "
+                f"{item.get('title')} | {item.get('url')}"
+            )
+        if warnings:
+            print(f"Search warnings: {len(warnings)}")
+            for warning in warnings[:5]:
+                print(f"- {warning}")
+        if not candidates:
+            print("No verified CC results in this scan. Try --days 6000 or another --query.")
+        else:
+            print("Choose a URL and run: `vv-cat-youtube cc 2 --url \"https://...\"`")
+        return
 
     if args.command == "cc":
         source_manifest, attribution, clip = import_cc_url(settings, slot=args.slot, url=args.url)
