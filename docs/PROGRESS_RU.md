@@ -65,7 +65,7 @@ cat_source_cooldown_episodes = 5
 - fresh Pexels result на более глубокой странице приоритетнее старого cooled candidate с первой страницы;
 - существующий pilot all-history reuse gate остаётся прежним.
 
-Последний code test-job:
+Code-head `487ccd6946c2a3e5ed405f6619f904e02d3dd7bf`:
 
 ```text
 111 passed in 0.70s
@@ -74,7 +74,7 @@ long_run: True
 vv longrun-next --dry-run -> slot 16 EN cats
 ```
 
-Ubuntu test job green. Windows job этого code run на последней проверке ещё выполнялся. Docs-only commits после code-head двигают branch HEAD; перед точными CI claims recheck live.
+Workflow run `33323215094` завершён `success`: Ubuntu test и Windows bootstrap оба green. Последующие docs-only commits двигают branch HEAD; exact CI выше относится к указанному code commit.
 
 ## Long-run schedule / other features
 
