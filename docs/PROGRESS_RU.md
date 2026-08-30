@@ -7,83 +7,116 @@
 - Python `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
 - Последний показанный OpenAI ledger: **$0.0509 / $10.00**.
-- Последний локальный pytest: **62 passed in 0.48s**.
+- Последний локальный pytest до clean-footage v4: **62 passed in 0.48s**.
 - Slot 1 RU AI Short = manual QUALITY PASS.
 - Cat renderer = local FFmpeg; real meow + Impact; no voiceover/BGM.
 - Generic slot 2 `#001 — Котики` пользователь оценил как нормальный.
-- Vertical gate локально подтверждён: 6/6 selected Pexels sources = **720x1280 / aspect 0.5625**.
+- Vertical gate локально подтверждён: accepted stock baseline = 6/6 Pexels clips at **720x1280 / aspect 0.5625**.
 
-## YouTube Creative Commons — OFFICIAL API WORKS LOCALLY
+## Official YouTube Creative Commons works locally
 
-Пользователь успешно включил YouTube Data API v3, создал API key и хранит его локально в `.env` как `YOUTUBE_API_KEY`. Ключ никогда не просить вставлять в чат и не коммитить.
+User enabled YouTube Data API v3, created a local API key and stores it only in ignored `.env` as `YOUTUBE_API_KEY`. Never ask for or commit the key.
 
-Локальный запуск:
+Official run:
 
 ```text
 vv-cat-youtube cc-search
 YouTube CC search: official YouTube Data API (videoLicense=creativeCommon)
-Public metadata only; no OAuth, no channel login, no media download
 Creative Commons cat candidates: 15
 ```
 
-Report:
+Report: `runtime/trends/youtube-cat-cc-official.json`.
+
+## Three real CC imports succeeded technically
+
+User imported candidates 1, 8 and 14 from the saved official report:
+
+- `9DL-J0hKxtM` — `Never about drinking water! 😼` — creator `Pawcsu` — 2160×3840 — audio mean -12.0 dB.
+- `8IYWJiho1fQ` — `What was the reason for this? 👀` — creator `Pawcsu` — 2160×3840 — audio mean -18.9 dB.
+- `3YVtMMK1Uoc` — `What was this cat trying to do 🤔🐾` — creator `Pawcsu` — 2160×3840 — audio mean -47.4 dB.
+
+All three showed `Rights evidence: youtube_data_api_status_license` and `License: YouTube Creative Commons Attribution`; thus API CC + 9:16 + audio gates all worked.
+
+`vv render-animal 2` then succeeded and created `runtime/ready_for_review/slot-02-ru-animals.mp4` with six sources (YouTube CC + Pexels fallback).
+
+## New visual blocker found: packaged/repost-like Shorts
+
+User showed candidate 8 visually. It contains a large top block with `Pawcsu`, `@Pawcsu`, avatar/verification badge and a large pre-added caption `What was the reason for this?`.
+
+Decision: this is not the visual style wanted for production. Do not solve it by cropping/blurring the account branding. Prefer relatively raw/self-contained cat footage.
+
+## Clean-footage / anti-repost gate — IMPLEMENTED
+
+New files/paths:
+
+- `src/vv_knopka/youtube_clean_footage.py`
+- `src/vv_knopka/youtube_cat_source_v4.py`
+- `src/vv_knopka/animal_audio_sources_v2.py`
+- `vv-cat-youtube` now routes to `youtube_cat_source_v4:main`.
+- `vv render-animal` now routes cat source preparation through the v2 wrapper that refuses unreviewed YouTube clips.
+
+Flow for new production YouTube CC import:
 
 ```text
-runtime/trends/youtube-cat-cc-official.json
+official API CC recheck
+-> download
+-> near-9:16 + duration + audible audio
+-> sample 4 frames into 2x2 contact sheet
+-> Luna clean-footage review
+-> only PASS may remain in production sources.json
 ```
 
-Top candidates from the successful run:
+The clean gate rejects any sampled frame with prominent:
+
+- creator/channel name or `@handle`;
+- avatar/profile/banner;
+- TikTok/Instagram/Reels/Shorts-style UI/watermark;
+- large added meme/headline caption;
+- split-screen/collage/ranking packaging;
+- obvious already-compiled/repost layout.
+
+Incidental environmental text (signs, labels, plates) is allowed. Gate is fail-closed: even `approved=true` cannot pass if a forbidden flag is true. Config: `youtube_clean_vision_min_confidence=0.78`, max estimated call cost `$0.02` inside existing project-side `$10` budget.
+
+Every production YouTube clip must now carry `clean_footage_approved=true`. Old imported YouTube clips without that flag are removed from the active source manifest before `render-animal`; stock fallback fills missing positions.
+
+### Migration command for current three imports
+
+After pulling/reinstalling:
+
+```powershell
+.\.venv\Scripts\vv-cat-youtube.exe cc-clean 2
+```
+
+This reviews the existing YouTube clips, keeps clean passes, removes rejected clips from production `sources.json`, writes:
 
 ```text
-01  9,490,575  Never about drinking water! 😼
-02 27,067,392  Bichinhos que nos entendem -gatos e pássaros
-03 58,256,969  Bichinhos que nos entendem - gatos e caixas
-04 34,953,145  Bichinhos que nos entendem - mamãe gata
-05  9,947,315  Wind swept rescue mission! 🤯
-06 10,979,204  Bichinhos que nos entendem -gatos e água
-07 33,876,469  Bichinhos que nos entendem -gatos e suas patinhas
-08 13,067,369  What was the reason for this? 👀
-09  9,894,205  Bichinhos que nos entendem-gatos e aspiradores
-10 27,289,448  Bichinhos que nos entendem -dando tilt nos gatos
-11 36,424,618  Bichinhos que nos entendem - gatos laranjas
-12  7,944,733  Ranking Best Big Cats Moments
-13 20,034,233  Bichinhos que nos entendem - gatos com fobia social
-14 10,244,613  What was this cat trying to do 🤔🐾
-15 20,670,771  Bichinhos que nos entendem - gatitos e brinquedos
+runtime/slots/02/youtube_clean_audit.json
+runtime/slots/02/youtube_clean_reviews/<video-id>.json
 ```
 
-All 15 were returned through official `videoLicense=creativeCommon` discovery and `videos.status.license=creativeCommon` verification.
+Downloaded files are left intact for audit/local inspection.
 
-## Current recommended quality test
+## Tests / CI
 
-First test should prefer candidates that appear from their titles to be single-scene Shorts rather than already-edited compilations:
+Clean-footage v4 added 7 regression tests. GitHub CI `test` job on code head `90d471f18c50f9643980eacc28b0bdd8132e6021` passed:
 
-- candidate **1** — `Never about drinking water! 😼`
-- candidate **8** — `What was the reason for this? 👀`
-- candidate **14** — `What was this cat trying to do 🤔🐾`
+```text
+69 passed in 0.56s
+Verify pilot lock: success
+```
 
-The repeated `Bichinhos que nos entendem` series may still be useful later, but first-pass concern is that these may already be compilations; avoid a compilation-inside-compilation until manually inspected. Candidate 12 is big cats and is not suitable for the domestic-cat compilation target.
+Windows bootstrap was still running at that check. Docs commits came afterward; recheck live head/CI before claiming entire final workflow complete.
 
-Run imports one by one:
+## Immediate next local step
 
 ```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 1
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 8
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 14
+git pull
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\vv.exe status
+.\.venv\Scripts\vv-cat-youtube.exe cc-clean 2
 ```
 
-Each import rechecks current API `status.license == creativeCommon`, downloads only after that, then requires near-9:16, minimum duration and audible source audio. Failures on orientation/audio are expected and should be reported rather than bypassed.
+Expected pytest count: about **69**. `cc-clean 2` may make up to three small Luna review calls (cached thereafter) and therefore may increment the existing OpenAI ledger slightly.
 
-If at least 2–3 are accepted, run:
-
-```powershell
-.\.venv\Scripts\vv.exe render-animal 2
-```
-
-The YouTube CC imports should be prioritized in production `sources.json`; Pexels/Pixabay fill remaining target slots to six.
-
-## Test-only ordinary YouTube remains isolated
-
-Standard/unverified YouTube clips are not production-safe. Already-local exact files may only be used under `runtime/test_only/slot-02/` with `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
-
-Draft PR #1 remains review-only; do not merge without explicit user decision after visual review.
+Send the complete `cc-clean 2` output before importing more candidates. Do not merge Draft PR #1 without explicit user decision after visual review.
