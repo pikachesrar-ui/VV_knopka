@@ -99,6 +99,31 @@ def test_deep_pexels_keeps_paging_after_prior_popular_result(monkeypatch):
     assert ("cat", 2) in client.pages
 
 
+def test_deep_pexels_prefers_never_used_over_cooled_old_result(monkeypatch):
+    monkeypatch.setattr(source_v4._base, "has_audio_stream", lambda *args, **kwargs: True)
+    collector = _deep_pexels_collector(
+        prior=set(),
+        all_prior={("pexels", "100")},
+        pages_per_query=3,
+    )
+    client = _Client()
+
+    found = collector(
+        client=client,
+        api_key="key",
+        queries=["cat"],
+        per_page=40,
+        max_candidates=1,
+        clip_seconds=5,
+        anchor="cat",
+        aspect_tolerance=0.08,
+    )
+
+    assert [item["id"] for item in found] == [200]
+    assert found[0]["cooled_down_reuse"] is False
+    assert ("cat", 2) in client.pages
+
+
 def test_remote_audio_prefilter_skips_silent_candidate_before_cap(monkeypatch):
     def probe(url, **kwargs):
         return False if "/100.mp4" in str(url) else True
@@ -142,6 +167,7 @@ def test_deep_pixabay_uses_pixabay_file_and_tag_helpers(monkeypatch):
     assert found[0]["metadata_mentions_anchor"] is True
     assert found[0]["remote_audio_probe"] == "confirmed"
     assert found[0]["search_order"] == "popular"
+    assert found[0]["cooled_down_reuse"] is False
 
 
 def test_expanded_queries_adds_diversity_without_duplicates():
