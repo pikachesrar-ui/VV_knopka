@@ -1,4 +1,8 @@
-from vv_knopka.animal_audio_sources_v4 import _deep_pexels_collector, _expanded_queries
+from vv_knopka.animal_audio_sources_v4 import (
+    _deep_pexels_collector,
+    _deep_pixabay_collector,
+    _expanded_queries,
+)
 
 
 class _Response:
@@ -29,6 +33,11 @@ class _Client:
         return _Response({"videos": videos})
 
 
+class _PixabayClient:
+    def get(self, url, *, headers=None, params=None):
+        return _Response({"hits": [_pixabay_video(300)]})
+
+
 def _video(video_id):
     return {
         "id": video_id,
@@ -44,6 +53,26 @@ def _video(video_id):
                 "height": 1280,
             }
         ],
+    }
+
+
+def _pixabay_video(video_id):
+    return {
+        "id": video_id,
+        "duration": 10,
+        "pageURL": f"https://pixabay.com/videos/id-{video_id}/",
+        "user": "Creator",
+        "user_id": 42,
+        "tags": "cat, kitten, pet",
+        "videos": {
+            "medium": {
+                "url": f"https://cdn.pixabay/{video_id}.mp4",
+                "width": 720,
+                "height": 1280,
+                "thumbnail": f"https://img.pixabay/{video_id}.jpg",
+                "size": 12345,
+            }
+        },
     }
 
 
@@ -65,6 +94,25 @@ def test_deep_pexels_keeps_paging_after_prior_popular_result():
     assert [item["id"] for item in found] == [200]
     assert found[0]["search_page"] == 2
     assert ("cat", 2) in client.pages
+
+
+def test_deep_pixabay_uses_pixabay_file_and_tag_helpers():
+    collector = _deep_pixabay_collector(prior=set(), pages_per_query=1)
+
+    found = collector(
+        client=_PixabayClient(),
+        api_key="key",
+        queries=["cat"],
+        per_page=100,
+        max_candidates=1,
+        clip_seconds=5,
+        anchor="cat",
+    )
+
+    assert [item["id"] for item in found] == [300]
+    assert found[0]["file_info"]["width"] == 720
+    assert found[0]["file_info"]["height"] == 1280
+    assert found[0]["metadata_mentions_anchor"] is True
 
 
 def test_expanded_queries_adds_diversity_without_duplicates():
