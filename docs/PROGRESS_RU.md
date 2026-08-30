@@ -6,106 +6,80 @@
 
 - Python `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний показанный OpenAI ledger: **$0.0509 / $10.00**.
-- Последний локальный pytest до clean-footage v4: **62 passed in 0.48s**.
+- Последний показанный OpenAI ledger до clean-review: **$0.0509 / $10.00**.
+- Последний показанный локальный pytest перед v5: **62 passed in 0.48s**; новый v5 CI ниже = 73 passed.
 - Slot 1 RU AI Short = manual QUALITY PASS.
-- Cat renderer = local FFmpeg; real meow + Impact; no voiceover/BGM.
+- Cat renderer = local FFmpeg; Impact + real meow; no voiceover/BGM.
 - Generic slot 2 `#001 — Котики` пользователь оценил как нормальный.
-- Vertical gate локально подтверждён: accepted stock baseline = 6/6 Pexels clips at **720x1280 / aspect 0.5625**.
+- Vertical gate подтверждён: accepted stock baseline = 6/6 Pexels clips at **720x1280 / aspect 0.5625**.
 
 ## Official YouTube Creative Commons works locally
 
-User enabled YouTube Data API v3, created a local API key and stores it only in ignored `.env` as `YOUTUBE_API_KEY`. Never ask for or commit the key.
+User enabled YouTube Data API v3 and stores `YOUTUBE_API_KEY` only in ignored `.env`. Never ask for or commit the key.
 
-Official run:
+Official API discovery returned 15 Creative Commons cat candidates and proved `videoLicense=creativeCommon` + `videos.status.license=creativeCommon` works.
 
-```text
-vv-cat-youtube cc-search
-YouTube CC search: official YouTube Data API (videoLicense=creativeCommon)
-Creative Commons cat candidates: 15
-```
+Three first imports (candidate 1, 8, 14) succeeded technically:
 
-Report: `runtime/trends/youtube-cat-cc-official.json`.
+- `9DL-J0hKxtM` — `Never about drinking water! 😼` — Pawcsu — 2160×3840 — audio mean -12.0 dB.
+- `8IYWJiho1fQ` — `What was the reason for this? 👀` — Pawcsu — 2160×3840 — audio mean -18.9 dB.
+- `3YVtMMK1Uoc` — `What was this cat trying to do 🤔🐾` — Pawcsu — 2160×3840 — audio mean -47.4 dB.
 
-## Three real CC imports succeeded technically
+## Full clean-footage gate — LOCAL RESULT
 
-User imported candidates 1, 8 and 14 from the saved official report:
-
-- `9DL-J0hKxtM` — `Never about drinking water! 😼` — creator `Pawcsu` — 2160×3840 — audio mean -12.0 dB.
-- `8IYWJiho1fQ` — `What was the reason for this? 👀` — creator `Pawcsu` — 2160×3840 — audio mean -18.9 dB.
-- `3YVtMMK1Uoc` — `What was this cat trying to do 🤔🐾` — creator `Pawcsu` — 2160×3840 — audio mean -47.4 dB.
-
-All three showed `Rights evidence: youtube_data_api_status_license` and `License: YouTube Creative Commons Attribution`; thus API CC + 9:16 + audio gates all worked.
-
-`vv render-animal 2` then succeeded and created `runtime/ready_for_review/slot-02-ru-animals.mp4` with six sources (YouTube CC + Pexels fallback).
-
-## New visual blocker found: packaged/repost-like Shorts
-
-User showed candidate 8 visually. It contains a large top block with `Pawcsu`, `@Pawcsu`, avatar/verification badge and a large pre-added caption `What was the reason for this?`.
-
-Decision: this is not the visual style wanted for production. Do not solve it by cropping/blurring the account branding. Prefer relatively raw/self-contained cat footage.
-
-## Clean-footage / anti-repost gate — IMPLEMENTED
-
-New files/paths:
-
-- `src/vv_knopka/youtube_clean_footage.py`
-- `src/vv_knopka/youtube_cat_source_v4.py`
-- `src/vv_knopka/animal_audio_sources_v2.py`
-- `vv-cat-youtube` now routes to `youtube_cat_source_v4:main`.
-- `vv render-animal` now routes cat source preparation through the v2 wrapper that refuses unreviewed YouTube clips.
-
-Flow for new production YouTube CC import:
+User ran:
 
 ```text
-official API CC recheck
--> download
--> near-9:16 + duration + audible audio
--> sample 4 frames into 2x2 contact sheet
--> Luna clean-footage review
--> only PASS may remain in production sources.json
+vv-cat-youtube cc-clean 2
+YouTube clean-footage audit: 0 kept / 3 reviewed
+[REJECT] 3YVtMMK1Uoc | confidence=0.99 | All sampled frames visibly include Pawcsu/@Pawcsu branding and a large added headline caption, indicating social-media packaging.
+[REJECT] 8IYWJiho1fQ | confidence=1.00 | All frames prominently show Pawcsu/@Pawcsu branding and a large added caption, so this is not clean source footage.
+[REJECT] 9DL-J0hKxtM | confidence=1.00 | Reject: every frame visibly includes Pawcsu branding/avatar/handle and a large added headline caption.
 ```
 
-The clean gate rejects any sampled frame with prominent:
+This is a manual/operational PASS for the anti-repost gate: it correctly rejected exactly the packaged Shorts style the user wanted removed. Production `sources.json` no longer keeps these three YouTube clips. Downloaded files remain only for audit/local inspection.
 
-- creator/channel name or `@handle`;
-- avatar/profile/banner;
-- TikTok/Instagram/Reels/Shorts-style UI/watermark;
-- large added meme/headline caption;
-- split-screen/collage/ranking packaging;
-- obvious already-compiled/repost layout.
+## YouTube CC discovery v5 — IMPLEMENTED
 
-Incidental environmental text (signs, labels, plates) is allowed. Gate is fail-closed: even `approved=true` cannot pass if a forbidden flag is true. Config: `youtube_clean_vision_min_confidence=0.78`, max estimated call cost `$0.02` inside existing project-side `$10` budget.
+`vv-cat-youtube` now routes to `youtube_cat_source_v5:main`.
 
-Every production YouTube clip must now carry `clean_footage_approved=true`. Old imported YouTube clips without that flag are removed from the active source manifest before `render-animal`; stock fallback fills missing positions.
-
-### Migration command for current three imports
-
-After pulling/reinstalling:
-
-```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-clean 2
-```
-
-This reviews the existing YouTube clips, keeps clean passes, removes rejected clips from production `sources.json`, writes:
+The official `cc-search` no longer shows raw top-viewed CC results directly. New flow:
 
 ```text
-runtime/slots/02/youtube_clean_audit.json
-runtime/slots/02/youtube_clean_reviews/<video-id>.json
+YouTube Data API exact CC search
+-> broader funny-cat query set
+-> ranked candidate pool
+-> one candidate per channel
+-> fetch YouTube thumbnails only
+-> Luna thumbnail clean-source prescreen
+-> domestic-cat + no branding/UI/caption/repost packaging
+-> saved official CC report
+-> cc-import still runs the strict full 4-frame gate after download
 ```
 
-Downloaded files are left intact for audit/local inspection.
+Default search queries:
+
+- `funny cat`
+- `funny kitten`
+- `cat playing`
+- `cat reaction`
+
+Thumbnail prescreen is intentionally only a cheap prefilter. Passing `clean-thumb` does **not** bypass the final downloaded-video clean gate.
+
+New file: `src/vv_knopka/youtube_cc_prescreen.py`.
+
+Prescreen also rejects non-domestic/big-cat candidates and limits results to one video per uploader/channel so one repost account cannot dominate the list.
 
 ## Tests / CI
 
-Clean-footage v4 added 7 regression tests. GitHub CI `test` job on code head `90d471f18c50f9643980eacc28b0bdd8132e6021` passed:
+Latest code-head CI test job after v5:
 
 ```text
-69 passed in 0.56s
+73 passed in 0.59s
 Verify pilot lock: success
 ```
 
-Windows bootstrap was still running at that check. Docs commits came afterward; recheck live head/CI before claiming entire final workflow complete.
+Windows-bootstrap was still running at that check. Recheck live final HEAD/CI before claiming full workflow completion.
 
 ## Immediate next local step
 
@@ -114,9 +88,20 @@ git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv-cat-youtube.exe cc-clean 2
+.\.venv\Scripts\vv-cat-youtube.exe cc-search
 ```
 
-Expected pytest count: about **69**. `cc-clean 2` may make up to three small Luna review calls (cached thereafter) and therefore may increment the existing OpenAI ledger slightly.
+Expected local pytest count: about **73**.
 
-Send the complete `cc-clean 2` output before importing more candidates. Do not merge Draft PR #1 without explicit user decision after visual review.
+Expected search header:
+
+```text
+YouTube CC search v5: official API + clean thumbnail prescreen
+No OAuth/channel login; thumbnails only at prescreen; no media download
+```
+
+The command may make a few small Luna calls for thumbnail review and increment the existing OpenAI ledger slightly, still under the fixed `$10` cap.
+
+Send the complete new `cc-search` output. Do not import candidates from the old report after v5 overwrites it; use candidate numbers from the new clean-prescreened report only.
+
+Draft PR #1 remains review-only; do not merge without explicit user decision after visual review.
