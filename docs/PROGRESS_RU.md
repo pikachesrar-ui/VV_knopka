@@ -75,9 +75,10 @@ Upload-limit code checkpoint:
 
 ```text
 573bc4f2eb904da20fab03456f90391079144914
+workflow: 33328852436
 ```
 
-Ubuntu job:
+Result:
 
 ```text
 121 passed in 0.82s
@@ -85,14 +86,18 @@ publication gate: PASS
 long_run: True
 ```
 
+Full workflow = **success**:
+
+- Ubuntu tests green;
+- Windows bootstrap green;
+- Windows scheduler dry-run green.
+
 Regression coverage:
 
 - Google error reason parser;
 - 24h cooldown state;
 - backlog stops cleanly at limit after earlier successful item;
 - receipted files excluded from pending count.
-
-Windows job этого workflow на первом checkpoint ещё выполнялся; recheck live перед утверждением full green.
 
 ## Immediate next local steps
 
