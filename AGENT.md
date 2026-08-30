@@ -77,7 +77,9 @@ Still mandatory:
 - yt-dlp capability != official YouTube/API permission.
 - Production media should be Pexels/Pixabay, owned/creator-supplied/directly authorized, or another independently authorized downloadable source.
 - `videos.insert` is used only to upload our finished local MP4s to the user's authorized channel.
-- Official YouTube behavior: API projects subject to YouTube's audit restriction may have uploads forced to `private` even when `public` is requested. Record requested and actual privacy separately; never claim public if API returned private.
+- API projects subject to YouTube audit restriction may have uploads forced to `private`; record requested vs actual privacy separately.
+- `uploadLimitExceeded` means the **YouTube channel daily upload limit**, not Google Cloud API quota. YouTube documents this limit as shared across desktop/mobile/API and recommends retrying after 24 hours.
+- Advanced YouTube feature eligibility generally provides a higher daily upload limit; do not invent a fixed numeric limit because YouTube varies it by account/channel eligibility and history.
 
 ## 7. Long-run schedule
 
@@ -90,7 +92,7 @@ Long-run starts at slot 16 and is deterministic:
 - AI fact subject cooldown = 6 recent distinct anchors;
 - cat source cooldown = 5 recent cat episodes.
 
-Slot 16 EN cats / #008 succeeded locally. Next target = slot 17 AI EN.
+Slot 16 EN cats / #008 succeeded locally. Next generation target remains slot 17 AI EN until scheduler/backlog policy permits new generation.
 
 ## 8. YouTube uploader
 
@@ -99,6 +101,7 @@ Entry point:
 ```powershell
 .\.venv\Scripts\vv-youtube.exe status
 .\.venv\Scripts\vv-youtube.exe auth
+.\.venv\Scripts\vv-youtube.exe pending-count
 .\.venv\Scripts\vv-youtube.exe upload-ready --dry-run
 .\.venv\Scripts\vv-youtube.exe upload-ready
 ```
@@ -106,18 +109,21 @@ Entry point:
 Implementation:
 
 - OAuth scopes: `youtube.upload` + `youtube.readonly`.
-- Desktop-app OAuth JSON expected at `runtime/youtube/client_secret.json`.
-- Token stored `runtime/youtube/token.json`.
-- Bound channel stored `runtime/youtube/channel.json`.
-- `auth` prints channel title + ID; user must verify before first real backlog upload.
-- each successful ready upload writes `<metadata>.youtube.json` receipt.
-- `upload-ready` skips receipts and is safe to rerun after interruption.
-- queue defaults oldest slot first; `--newest --limit 1` is scheduler path for newly generated video.
-- full setup guide: `docs/YOUTUBE_PUBLISHING_RU.md`.
+- Desktop-app OAuth JSON: `runtime/youtube/client_secret.json`.
+- Token: `runtime/youtube/token.json`.
+- Bound channel: `runtime/youtube/channel.json`.
+- each successful ready upload writes `<metadata>.youtube.json` receipt;
+- queue defaults oldest slot first; `--newest --limit 1` is scheduler post-render path;
+- requested vs actual privacy stored separately;
+- `uploadLimitExceeded` is converted to a clean `DEFERRED` result/exit code 75 instead of traceback;
+- daily-limit observation is persisted to ignored `runtime/youtube/upload-limit.json` with conservative 24-hour `retry_not_before`;
+- while cooldown is active uploader does not keep hammering the upload endpoint.
+
+Full setup/operations guide: `docs/YOUTUBE_PUBLISHING_RU.md`.
 
 ## 9. Windows scheduled generation + publication
 
-Approved one-week test schedule, Moscow time:
+Approved one-week schedule, Moscow time:
 
 ```text
 01:30
@@ -125,22 +131,23 @@ Approved one-week test schedule, Moscow time:
 05:30
 ```
 
-`run-longrun-task.ps1` per trigger:
+To respect YouTube daily limits and drain the existing backlog, each trigger now has at most **one upload opportunity**:
 
-1. obtains exclusive scheduler lock;
-2. checks generation status and YouTube uploader status;
-3. retries one older pending upload first;
-4. generates exactly one next long-run slot;
-5. uploads the newest pending ready video;
-6. logs to `runtime/scheduler/longrun-task.log`.
+1. lock + status checks;
+2. count pending ready uploads;
+3. if any pending/backlog exists, upload exactly one oldest pending and end the trigger **without generating**;
+4. only when pending count is zero, generate one next long-run slot and upload that new video;
+5. if YouTube returns daily limit or another upload failure, do not generate another slot until pending publication recovers.
 
-If YouTube retry fails, it refuses to generate another slot until publication recovers. If generation succeeds but upload fails, next trigger retries pending publication first. `IgnoreNew` prevents overlap. No `git pull`/auto-update inside scheduled task.
+This caps scheduler upload pressure at 3/day for the approved triggers and makes the backlog shrink instead of accumulating new local videos while old ones wait.
 
-Default installer creates one task with all three triggers:
+Default installer:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1
 ```
+
+No `git pull`/auto-update runs inside the scheduled task.
 
 ## 10. Architecture constraints
 
@@ -157,19 +164,18 @@ Draft PR #1 into `main` stays open/draft/unmerged until explicit user decision.
 
 Keep `AGENT.md`, `PROJECT_HANDOFF_RU.md`, and `PROGRESS_RU.md` current after substantive work.
 
-## 12. Immediate continuation
+## 12. Current milestone / immediate continuation
 
-YouTube publishing code is implemented, but real publishing cannot happen until local OAuth is configured.
+Real OAuth succeeded on the user's machine. The first real backlog upload attempt then hit YouTube's channel-level `uploadLimitExceeded` restriction. Any successful uploads before the error should already have receipts and must not be duplicated.
 
-Next local sequence:
+Immediate local workflow:
 
-1. `git pull` + reinstall editable dependencies;
-2. create/enable a Google Cloud project with YouTube Data API v3 and a **Desktop app** OAuth client;
-3. save downloaded OAuth JSON as `runtime/youtube/client_secret.json` (never paste it into chat);
-4. run `vv-youtube auth` and verify printed channel title/ID;
-5. run `vv-youtube upload-ready --dry-run`;
-6. run `vv-youtube upload-ready` to publish existing ready backlog;
-7. install/reinstall the 3-trigger scheduler; future generation then publishes automatically.
+1. inspect `.youtube.json` receipts / YouTube Studio to see how many uploads succeeded and whether actual privacy is public;
+2. check YouTube Studio → Settings → Channel → Feature eligibility; Advanced features can provide higher daily upload limits;
+3. pull the upload-limit handling fix and reinstall editable package;
+4. do not repeatedly hammer `upload-ready` while the platform limit is active; YouTube says retry after 24 hours unless feature eligibility has legitimately increased the available limit;
+5. once backlog can resume, receipts make reruns idempotent;
+6. scheduler drains one backlog item per trigger before any new generation.
 
 ## 13. Language / title policy
 
