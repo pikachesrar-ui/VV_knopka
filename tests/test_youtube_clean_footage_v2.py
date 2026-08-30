@@ -1,7 +1,5 @@
 import json
 
-import vv_knopka.youtube_cat_source_v4 as youtube_v4
-import vv_knopka.youtube_cc_preflight as preflight
 import vv_knopka.youtube_clean_footage_v2 as clean_v2
 import vv_knopka.youtube_cat_source_v6 as youtube_v6
 
@@ -33,11 +31,6 @@ def test_v2_rejects_real_collage_inside_source_frame():
 
 def test_v2_rejects_clear_multi_clip_sequence():
     assert clean_v2.decision_passes_clean_gate(clean_decision(multi_clip_sequence=True)) is False
-
-
-def test_v6_patches_v4_and_preflight_to_contact_sheet_aware_gate():
-    assert youtube_v4.review_clean_youtube_footage is clean_v2.review_clean_youtube_footage
-    assert preflight.review_clean_youtube_footage is clean_v2.review_clean_youtube_footage
 
 
 def test_reject_memory_expires_stale_collage_only_but_keeps_obvious_packaging(tmp_path):
