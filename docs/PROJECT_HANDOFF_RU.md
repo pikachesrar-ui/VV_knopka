@@ -10,7 +10,7 @@
 Рабочая ветка: `mvp/pilot-scaffold`.
 Draft PR #1 открыт; **не merge без отдельного решения пользователя после визуального review**.
 
-Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot 2 RU cats, остальные 13 EN; one channel; OpenAI hard budget `$10`; `auto_publish=false`; human review; outputs only `runtime/ready_for_review`.
+Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot 2 RU cats, остальные 13 EN; one channel; OpenAI hard budget `$10`; `auto_publish=false`; human review; production outputs only `runtime/ready_for_review`.
 
 ## 2. Локально подтверждено
 
@@ -19,194 +19,244 @@ Pilot: 15 Shorts; 8 × `ai_short`; 7 × `animal_compilation`; slot 1 RU AI, slot
 - `.venv` Python `3.11.0`;
 - keys local `.env`, не коммитить;
 - MPT только для `ai_short`; cats = local FFmpeg;
-- latest user test before current code changes: **47 passed**;
+- last explicitly shown local tests before current YouTube-source code: **47 passed**;
 - publication gate **PASS**;
 - latest OpenAI ledger **$0.0340 / $10.00**;
 - slot 1 octopus = manual QUALITY PASS;
 - real user meow works;
 - Impact title cards approved.
 
-## 3. Accepted cat presentation
+## 3. Cat presentation — accepted
 
-- no voiceover;
-- no BGM;
+- broad generic cat compilation; no narrow promised theme;
+- RU title `#NNN — Котики`, EN `#NNN — Cats`;
+- no voiceover / no BGM;
 - real meow on black cards;
 - intro ~0.9s, transitions ~0.75s, end ~1.0s;
-- numbered intro/transition title;
 - localized thanks end card;
 - source audio retained/normalized;
 - Windows font `C:\Windows\Fonts\impact.ttf`, sizes 84/78/82;
-- minimum 5 unique usable clips, target 6;
+- minimum 5 unique usable production clips, target 6;
 - long-run `en,en,en,en,ru` cadence;
 - never use `Daily Dose of Cats` or close imitation.
 
-## 4. Trend/community experiment history
+## 4. Vertical source gate — locally validated
+
+Earlier themed render exposed bad landscape 1920×1080 / 2560×1440 clips. We added a strict near-9:16 gate (`source_aspect_tolerance=0.08`), provider portrait filtering, and real ffprobe validation for cached/downloaded/imported media.
+
+The user's next generic render succeeded. They inspected `animal_audio_sources.json`; all six selected sources were **exactly 720×1280 (aspect 0.5625)**:
+
+- Pexels 10358235
+- Pexels 19306625
+- Pexels 10231519
+- Pexels 5335581
+- Pexels 15769301
+- Pexels 17536779
+
+User verdict: **«да, норм»**.
+
+Therefore orientation/base presentation is no longer the current blocker.
+
+## 5. Why current focus moved to YouTube CC
+
+Pexels pipeline is now technically acceptable but can still feel stock-like. User wants funnier, more natural internet-cat footage.
+
+Next experiment: **verified YouTube Creative Commons Attribution** as production-capable UGC-like source, with Pexels/Pixabay as fallback.
+
+Official policy context checked 2026-08-30:
+
+- YouTube offers Standard and Creative Commons Attribution licenses.
+- CC BY videos may be reused subject to license terms and attribution.
+- Suggested attribution info includes title, author, source URL and license.
+- Standard-license/public availability alone does not grant reuse rights.
+- YouTube Terms restrict downloading content outside authorized mechanisms; we therefore do not add auto-download for standard/unverified videos.
+
+## 6. New `vv-cat-youtube` CLI
+
+Entry point:
+
+```powershell
+vv-cat-youtube
+```
+
+Module:
+
+```text
+src/vv_knopka/youtube_cat_source.py
+```
+
+### A. `cc-search`
+
+```powershell
+vv-cat-youtube cc-search
+```
+
+Purpose: find **metadata-verified CC cat candidates** without Google Cloud/API key/login/media download.
+
+Defaults:
+
+- wide lookback: 3650 days;
+- queries:
+  - `funny cat shorts`
+  - `cats being cats`
+  - `funny kittens shorts`
+- scan 15 results per query;
+- output top 10 verified-CC candidates by views.
+
+Can widen:
+
+```powershell
+vv-cat-youtube cc-search --days 6000 --limit 15 --scan-per-query 20
+```
+
+or custom repeated queries:
+
+```powershell
+vv-cat-youtube cc-search --query "funny cat" --query "cat fails" --query "cute kitten shorts"
+```
+
+This uses existing no-key `discover_ytdlp_cats()` and discards everything whose metadata does not identify Creative Commons.
+
+### B. `cc`
+
+```powershell
+vv-cat-youtube cc 2 --url "https://www.youtube.com/watch?v=..."
+```
+
+Flow:
+
+```text
+fetch full metadata
+-> require Creative Commons
+-> yt-dlp download
+-> real ffprobe dimensions
+-> near-9:16 gate
+-> >= clip_seconds
+-> audible-source gate
+-> production sources.json
+-> attribution.json
+```
+
+Imported CC clip metadata includes:
+
+- source title / creator / URL;
+- exact detected license;
+- `rights_status=creative_commons_attribution_required`;
+- `rights_verified=true`;
+- `commercial_use_allowed=true`;
+- `attribution_required=true` + attribution text;
+- SHA-256;
+- width/height/aspect;
+- audio mean.
+
+If metadata does not prove CC, no production download/import occurs. If media is landscape, too short or effectively silent, it is rejected after download and not accepted into the production source pool.
+
+Normal `vv render-animal 2` then sees imported CC source first, while Pexels/Pixabay fill remaining target slots.
+
+## 7. Ordinary YouTube private comparison — hard isolated
+
+User also wants to compare ordinary funnier YouTube cats for private testing. Important boundary: local testing does not convert a standard/unverified upload into production permission, and automatic standard-license YouTube downloading is not added.
+
+New test-only path accepts an **already-local** exact source file:
+
+```powershell
+vv-cat-youtube test-add 2 --url "https://www.youtube.com/watch?v=..." --file "D:\path\cat.mp4" --confirm-match
+```
+
+Validation still requires:
+
+- near-9:16;
+- enough duration;
+- audible audio.
+
+But rights fields intentionally fail closed:
+
+- `rights_status=test_only_unverified`;
+- `rights_verified=false`;
+- `commercial_use_allowed=false`;
+- `do_not_publish=true`;
+- `publication_allowed=false`.
+
+Storage ONLY:
+
+```text
+runtime/test_only/slot-02/
+```
+
+No write to:
+
+```text
+runtime/slots/02/sources.json
+runtime/ready_for_review/
+```
+
+A `DO_NOT_PUBLISH.txt` marker is written as well.
+
+After at least 3 test clips:
+
+```powershell
+vv-cat-youtube test-render 2
+```
+
+This uses the same highlight/editor/card stack but title is `ТЕСТ — Котики`; output:
+
+```text
+runtime/test_only/slot-02/render-test-only.mp4
+```
+
+The renderer checks both top-level and per-clip publication locks before running. This test render may use the existing Luna highlight step and therefore can consume a small amount of the same `$10` project budget.
+
+## 8. Trend/community experiment history
 
 Pexels-only footage looked stock-like, so trend discovery was explored.
 
-### YouTube no-key
+- YouTube no-key `vv-cat-trends`: technically works, first useful run gave 5 recent candidates and 0 CC; weak as primary recent discovery.
+- Reddit `vv-cat-community`: 30 candidates, useful as idea signal, but Reddit media remains permission-required/reference-only.
+- `vv-cat-theme`: selected `important_jobs` correctly from Reddit, but user rejected narrow themes because stock could not satisfy every promised scene.
+- Current production `render-animal` ignores theme files and stays generic.
 
-`vv-cat-trends` via yt-dlp works without Google Cloud/API key/login. Google Cloud was explicitly rejected by user because setup requested address/card.
+## 9. Rights / monetization constraints
 
-Actual useful run: 5 recent candidates, **0 CC confirmed**; only one had meaningful views. Verdict: technically works but weak as primary source.
+- Public Reddit post is not permission to reuse media.
+- YouTube Standard/unverified is not production permission.
+- Verified YouTube CC BY is a candidate with attribution, not a guarantee that the uploader actually owned every underlying element; human review remains useful.
+- Creative Commons/permission alone does not solve YouTube reused-content monetization risk; editorial transformation remains important.
+- Pexels/Pixabay production clips keep normal license/provenance gates.
+- Test-only unverified media is never a production candidate.
 
-### Reddit public RSS
+## 10. Tests added for YouTube source layer
 
-`vv-cat-community` worked well as a trend/reference signal: user got 30 candidates with 1 feed warning. Reddit remains reference-only (`author_permission_required`), never automatic reusable media.
+`tests/test_youtube_cat_source.py` covers:
 
-### Trend → Theme
+- standard license rejected by production CC gate;
+- CC license accepted by CC gate;
+- CC search keeps only verified CC and dedupes repeated query hits;
+- test-only import stays isolated and carries publication locks;
+- test-only renderer refuses a missing publication lock.
 
-`vv-cat-theme` / `cat_theme.py` was implemented and successfully selected `important_jobs` for slot 2 from real Reddit evidence.
+GitHub `test` job passed on the first YouTube-source code head. After adding `cc-search`, a newer CI run must be checked before claiming the entire final head is green.
 
-User then rendered:
+## 11. Immediate next local checkpoint
 
-```text
-Trend theme: important_jobs
-Cat episode: #001 — Важные кошачьи дела
-Audible licensed animal sources: 6
-```
-
-The render completed successfully, but manual verdict was only **«более менее»**.
-
-## 5. Why narrow themes were removed from production
-
-User identified two concrete issues after watching the themed render:
-
-1. **Landscape stock** sometimes appeared in the montage and looked bad in 9:16 Shorts.
-2. Even with theme-driven search, some clips were simply “a cat doing something else” and did not match the promised episode theme.
-
-Therefore current product decision is simpler:
-
-> **Animal episodes are broad cat compilations, not narrow themed videos.**
-
-Research tooling (`vv-cat-community`, `vv-cat-theme`, YouTube trend discovery) may remain in repo, but current `render-animal` does **not** use `trend-theme.json`.
-
-## 6. Generic cat compilation mode — IMPLEMENTED
-
-New module:
-
-```text
-src/vv_knopka/cat_compilation.py
-```
-
-`build_generic_cat_plan(language)` returns a free/deterministic plan:
-
-- RU title `Котики`;
-- EN title `Cats`;
-- `visual_anchor = cat`;
-- broad search terms:
-  - cat funny reaction
-  - cat playing
-  - cat jumping
-  - cat running
-  - cat curious
-  - cat interacting with human
-  - cat meowing
-  - cat purring
-
-`src/vv_knopka/cli.py` production behavior now:
-
-- `render-animal` always uses this generic plan;
-- no cat writer API call required;
-- stale `plan.json` / `trend-theme.json` do not control the production cat render;
-- writes `runtime/slots/XX/effective-plan.json` for audit;
-- expected slot 2 title = `#001 — Котики`.
-
-This intentionally avoids promising a storyline that every licensed stock clip must satisfy.
-
-## 7. Near-9:16 cat source gate — IMPLEMENTED
-
-The previous themed render log proved accepted sources included both correct portrait `720x1280` and bad landscape files such as `1920x1080` and `2560x1440`.
-
-New rule: **cat source footage must already be vertical and close to 9:16 before montage acceptance**.
-
-Config:
-
-```toml
-[animal]
-source_aspect_tolerance = 0.08
-```
-
-Definition:
-
-- target width/height = `9/16` (`0.5625`);
-- accept only portrait footage whose width/height is within `0.08` of target;
-- reject all landscape, square and visibly-wide portrait formats.
-
-Implementation in `animal_audio_sources.py`:
-
-- `video_dimensions()` probes actual local/downloaded media with ffprobe;
-- `is_short_portrait()` applies the near-9:16 rule;
-- Pexels audio search now sends `orientation=portrait`;
-- Pexels/Pixabay candidate file metadata is filtered **before Luna review/download**;
-- old cached/local/imported media is re-probed with ffprobe before reuse;
-- downloaded media is checked again before final acceptance;
-- accepted source manifest stores width/height/aspect;
-- audit v2 stores target aspect/tolerance and rejected landscape rows;
-- if fewer than 5 licensed + audible + vertical sources remain, fail closed.
-
-This means old 1920×1080/2560×1440 sources from the previous slot 2 cache should be rejected automatically on the next render.
-
-## 8. Cat audio/source gates
-
-Still required:
-
-- actual audio stream;
-- effective mean signal above configured threshold (`-55 dB` by default);
-- visual cat relevance via Luna;
-- source provenance/license/commercial-use metadata;
-- near-9:16 source dimensions;
-- minimum 5 unique usable clips.
-
-Do not silently relax these if a run fails. Inspect `runtime/slots/02/animal_audio_sources.json` first.
-
-## 9. Controlled UGC / rights
-
-- Reddit/public social post != permission.
-- YouTube unverified candidate != permission; CC must be verified.
-- `vv-cat-import` remains controlled/local and rights-gated.
-- Creative Commons/permission alone does not solve YouTube reused-content monetization risk.
-- Human review remains mandatory.
-- Do not add raw social repost scraping as default workflow.
-
-## 10. Tests added in current change
-
-- vertical aspect helper accepts 9:16 and rejects landscape/4:5;
-- cached audible landscape clip is rejected;
-- cached portrait clip can still be reused;
-- generic RU/EN cat plan stays broad and cat-anchored.
-
-CI test job for the code head passed after these changes; Windows bootstrap may complete separately. Last user-confirmed local count is still 47 until the user pulls/runs the new tests.
-
-## 11. Next local checkpoint
-
-User should run:
+Once latest CI/head is confirmed, user should run:
 
 ```powershell
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\vv.exe status
+.\.venv\Scripts\vv-cat-youtube.exe cc-search
+```
+
+Send full `cc-search` output.
+
+If a promising CC candidate is found:
+
+```powershell
+.\.venv\Scripts\vv-cat-youtube.exe cc 2 --url "CANDIDATE_URL"
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-Do **not** run `vv-cat-theme 2` for production; it is now optional research tooling.
-
-Expected start:
-
-```text
-Cat compilation mode: generic | title=Котики | effective plan: ...
-Audible vertical licensed cat sources: ...
-```
-
-After render, review:
-
-1. all six selected sources visually portrait/Short-native;
-2. no obvious 16:9 blur-fill footage;
-3. title is generic `#001 — Котики`;
-4. all clips are simply good cat moments, so there is no theme-mismatch problem;
-5. source audio and real meow remain correct.
-
-If source gate finds <5 clips, inspect audit rather than weakening aspect/audio gates automatically.
+Then compare new render against the already-accepted Pexels generic vertical baseline.
 
 Do not merge Draft PR #1 until explicit pilot quality approval.
