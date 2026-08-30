@@ -21,8 +21,10 @@ jobs:
           pip install -e ".[dev]"
       - name: Test
         run: pytest -q
-      - name: Verify pilot lock
-        run: vv status
+      - name: Verify safety lock and long-run schedule
+        run: |
+          vv status
+          vv longrun-next --dry-run
 
   windows-bootstrap:
     runs-on: windows-latest
@@ -37,8 +39,9 @@ jobs:
       - name: Run Windows bootstrap
         shell: powershell
         run: powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
-      - name: Verify venv Python and pilot lock
+      - name: Verify venv Python, safety lock and long-run schedule
         shell: powershell
         run: |
           .\.venv\Scripts\python.exe -c "import sys; assert sys.version_info >= (3,11); print(sys.version)"
           .\.venv\Scripts\vv.exe status
+          .\.venv\Scripts\vv.exe longrun-next --dry-run
