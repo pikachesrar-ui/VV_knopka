@@ -8,7 +8,7 @@ Frozen pilot: 15 Shorts, 8 × `ai_short`, 7 × `animal_compilation`; slot 1 RU A
 
 Пользователь завершил все 15 ready outputs и после просмотра сообщил, что всё нормально. Pilot не надо перегенерировать ради последующих metadata refinements.
 
-Последний явно показанный локальный статус после полного pilot:
+Финальный явно показанный pilot status:
 
 ```text
 OpenAI spent: $0.1786 / $10.00
@@ -18,11 +18,9 @@ publication gate: PASS
 
 ## Текущая фаза — long-run local validation
 
-После успешного pilot пользователь дал команду переходить к постоянной генерации.
-
 Long-run реализован отдельно от конечного pilot manifest, но сохраняет глобальную slot-нумерацию. Первый post-pilot slot = 16.
 
-Текущий deterministic schedule:
+Current schedule:
 
 ```text
 16 cats EN  -> cat episode #008
@@ -39,7 +37,55 @@ Long-run реализован отдельно от конечного pilot man
 
 Pipeline cycle configurable через `[long_run].pipeline_cycle`, сейчас `animal_compilation, ai_short`. AI language сейчас EN. Cat long-run language cycle начинает новый цикл после pilot: `en,en,en,en,ru`.
 
-## Новые команды
+## Первый реальный long-run запуск
+
+На ПК пользователя после pull/install/tests:
+
+```text
+108 passed in 0.99s
+OpenAI spent: $0.1786 / $10.00
+auto_publish: False
+publication gate: PASS
+long_run: True
+slot 16: animal_compilation / en -> ...slot-16-en-animals.mp4
+```
+
+Реальный `vv longrun-next` корректно начал slot 16, но sourcing остановился fail-closed:
+
+```text
+Vertical audible-source gate found only 1/5 usable cat clips
+```
+
+Это не CLI/renderer bug. Причина — старое правило source history навсегда исключало все IDs из семи pilot cat episodes. Для бесконечного режима finite Pexels/Pixabay vertical+audible pool при таком правиле неизбежно истощается.
+
+## Long-run cat source cooldown — текущий fix
+
+Новая политика не ослабляет license/audio/aspect/vision/minimum-count gates.
+
+- Frozen pilot сохраняет исходную all-history защиту.
+- Long-run: source блокируется, если он использовался в **любом из последних 5 rendered cat episodes**.
+- После выхода из этого окна source снова eligible как fallback.
+- Если его снова используют, cooldown начинается заново автоматически, потому что новый ready episode попадает в artifact history.
+- Never-used stock имеет приоритет над cooled-down reuse.
+- Последние 5 cat episodes остаются полностью защищены на этапе sourcing.
+- Final reuse audit проверяет protected recent window и отдельно записывает `reused_cooled_down_sources`.
+
+Для slot 16 / cat #008 это означает: источники cat #003–#007 защищены; достаточно старые sources из #001/#002 могут вернуться только если свежего stock не хватает.
+
+Config:
+
+```toml
+[long_run]
+cat_source_cooldown_episodes = 5
+```
+
+`animal_audio_sources_v4.py` теперь разделяет remote candidates на never-used и cooled-down historical. Сначала сканирует/ранжирует fresh; cooled-down stock заполняет остаток candidate pool только как fallback. Confirmed-silent remote media по-прежнему отбрасывается до Luna.
+
+`animal_audio_sources_v5.py` recovery также использует active protected window, поэтому валидированный local stock из failed attempt можно восстановить, если он не является recent-blocked.
+
+## Остальной long-run функционал
+
+Commands:
 
 ```powershell
 .\.venv\Scripts\vv.exe longrun-next --dry-run
@@ -47,50 +93,15 @@ Pipeline cycle configurable через `[long_run].pipeline_cycle`, сейчас
 .\.venv\Scripts\vv.exe longrun-batch --count 3
 ```
 
-`longrun-next/batch`:
-
-- используют тот же `$10` hard budget guard;
-- сохраняют `auto_publish=false` / human review;
+- тот же `$10` hard budget guard;
+- `auto_publish=false` / human review;
 - AI slot: plan-on-demand -> MPT -> ready output;
-- cat slot: history-aware licensed sourcing -> gates -> FFmpeg -> ready output;
+- cat slot: licensed sourcing -> gates -> FFmpeg -> ready output;
 - stop on first failure;
 - existing non-empty MP4 = resume marker;
-- attempt history: `runtime/long_run/state.json`;
-- child CLI остаётся `cli_v2`, поэтому актуальная cat-source v5 policy сохраняется.
+- attempt history: `runtime/long_run/state.json`.
 
-## Fact subject cooldown
-
-`openai_client.recent_visual_anchors()` читает `plan.json` предыдущих AI slots в обратном порядке.
-
-Config:
-
-```toml
-[long_run]
-fact_subject_cooldown = 6
-```
-
-Автоматический planner исключает последние 6 distinct `visual_anchor` из доступного stock-friendly subject list. Это не вечный ban: старое животное снова становится доступно после выхода из cooldown window. Explicit `--topic` пользователя по-прежнему имеет приоритет.
-
-## Cat numbering / language / description
-
-- Pilot cat episodes остаются #001–#007.
-- Long-run начинается с #008.
-- Episode numbering больше не зависит от того, что slot находится в конечном `content.animal_slots`.
-- Long-run cat language вычисляется детерминированно по отдельному long-run cat ordinal.
-- Pilot descriptions остаются byte-stable.
-- Long-run cat descriptions выбираются детерминированно из небольшого безопасного набора вариантов, чтобы не создавать сотни одинаковых описаний.
-
-## Cat source history теперь unbounded
-
-`source_history.py` больше не ограничивает prior history списком pilot animal slots. Он обнаруживает реально существующие:
-
-```text
-runtime/ready_for_review/slot-*-*-animals.mp4
-```
-
-и читает соответствующие `runtime/slots/XX/sources.json`. Поэтому источники из slot 16+ также блокируются от тяжёлого повторного reuse.
-
-Все существующие quality gates сохраняются: provenance/commercial use, near-9:16, audible audio, Luna relevance, minimum 5 unique clips, final max-one-incidental-repeat gate.
+AI fact subject cooldown = последние 6 distinct visual anchors. Long-run cat descriptions имеют deterministic safe variation. Cat numbering продолжается с #008.
 
 ## YouTube / acquisition wording
 
@@ -98,49 +109,43 @@ YouTube Data API = discovery/reference/license metadata, не media-download end
 
 Long-run automated production должен предпочитать Pexels/Pixabay, owned/creator-supplied или independently authorized downloadable files. yt-dlp capability != official YouTube/API permission.
 
-## CI
+## Tests / CI
 
-Первый CI после переименования cooldown helper поймал только старый test-import; test обновлён.
-
-Последний завершённый code test-job после long-run implementation:
+Последний code test-job для source-cooldown fix:
 
 ```text
-108 passed in 0.55s
-OpenAI spent in CI: $0.0000 / $10.00
-auto_publish: False
+111 passed in 0.70s
 publication gate: PASS
 long_run: True
+vv longrun-next --dry-run -> slot 16 EN cats
 ```
 
-CI workflow также обновлён, чтобы запускать `vv longrun-next --dry-run` на Ubuntu и Windows. После docs commits HEAD двигается; всегда recheck live перед утверждением полного workflow status.
+На момент фиксации Ubuntu `test` job green; Windows job этого code run ещё выполнялся. Docs commits после code-head двигают branch HEAD, поэтому exact workflow state всегда recheck live.
 
 ## Immediate local continuation
 
-После того как пользователь подтянет branch:
+На ПК пользователя не удалять `runtime/slots/16`: один уже найденный fresh clip из failed audit полезен для recovery.
+
+После pull:
 
 ```powershell
 cd D:\KiraS\VV_knopka
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe status
 .\.venv\Scripts\vv.exe longrun-next --dry-run
 ```
 
-Ожидаемый dry-run:
+Ожидание: около **111 passed**, dry-run всё ещё slot 16 EN cats.
 
-```text
-slot 16: animal_compilation / en -> ...slot-16-en-animals.mp4
-```
-
-Если dry-run правильный, следующий тест — **ровно один** реальный:
+Затем retry одного slot:
 
 ```powershell
 .\.venv\Scripts\vv.exe longrun-next
 ```
 
-Проверить slot 16 визуально и sidecar. Только после успешного реального long-run slot переходить к Windows Task Scheduler. YouTube uploader/OAuth остаётся отдельной фазой; публикация пока ручная.
+Если slot 16 SUCCESS, проверить MP4 + `source_reuse_audit.json`; затем можно переходить к Windows Task Scheduler. YouTube uploader/OAuth остаётся отдельной фазой; публикация пока manual/review-first.
 
 ## Git
 
-PR #1 остаётся draft/open/unmerged. Название PR обновлено под pilot + long-run phase. Не merge без отдельного решения пользователя.
+PR #1 остаётся draft/open/unmerged. Не merge без отдельного решения пользователя.
