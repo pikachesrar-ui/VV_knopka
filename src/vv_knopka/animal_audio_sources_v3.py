@@ -11,7 +11,7 @@ from .animal_audio_sources_v2 import (
 )
 from .budget import BudgetLedger
 from .settings import Settings
-from .source_history import prior_rendered_cat_identities
+from .source_history import blocked_cat_source_identities
 
 
 def _identity_from_clip(item: dict[str, Any]) -> tuple[str, str] | None:
@@ -60,7 +60,7 @@ def _remove_prior_from_manifest(
                     "provider_id": identity[1],
                     "file": item.get("file"),
                     "source_url": item.get("source_url"),
-                    "reason": "excluded before sourcing because this clip was used in an earlier rendered cat episode",
+                    "reason": "excluded before sourcing because this clip is inside the protected cross-episode source window",
                 }
             )
             continue
@@ -76,7 +76,7 @@ def _remove_prior_from_cached_materials(
     audit_path: Path,
     prior: set[tuple[str, str]],
 ) -> list[dict[str, Any]]:
-    """Prevent a slot-local legacy material cache from reintroducing old episode clips."""
+    """Prevent a slot-local legacy material cache from reintroducing protected clips."""
     if not audit_path.exists() or not prior:
         return []
     try:
@@ -101,7 +101,7 @@ def _remove_prior_from_cached_materials(
                     "provider_id": identity[1],
                     "file": item.get("local_file"),
                     "source_url": item.get("page_url"),
-                    "reason": "excluded from cached material pool because this clip was used in an earlier rendered cat episode",
+                    "reason": "excluded from cached material pool because this clip is inside the protected cross-episode source window",
                 }
             )
             continue
@@ -150,9 +150,9 @@ def _append_history_audit(
         rejected[:0] = removed
     raw["cross_episode_source_filter"] = {
         "enabled": True,
-        "prior_source_ids": int(prior_count),
+        "protected_source_ids": int(prior_count),
         "removed_cached_or_manifest_sources": len(removed),
-        "policy": "previously rendered cat source IDs are excluded before new sourcing; final reuse audit remains fail-closed",
+        "policy": "source IDs inside the active protected history window are excluded before new sourcing; final reuse audit remains fail-closed",
     }
     audit_path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -166,8 +166,8 @@ def ensure_audio_animal_sources(
     source_manifest: Path,
     ledger: BudgetLedger,
 ) -> Path:
-    """Source cats while automatically excluding clips used by earlier rendered episodes."""
-    prior = prior_rendered_cat_identities(settings, before_slot=slot)
+    """Source cats while excluding clips inside the active cross-episode cooldown window."""
+    prior = blocked_cat_source_identities(settings, before_slot=slot)
 
     removed: list[dict[str, Any]] = []
     removed.extend(sanitize_unapproved_youtube_sources(source_manifest))
