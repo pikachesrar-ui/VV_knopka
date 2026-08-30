@@ -5,7 +5,7 @@ import json
 
 from dotenv import load_dotenv
 
-from .animal_audio_sources import ensure_audio_animal_sources
+from .animal_audio_sources_v2 import ensure_audio_animal_sources
 from .animal_episode import build_episode_metadata
 from .animal_highlights import select_highlights
 from .animal_v3 import render_cat_v3
@@ -190,7 +190,8 @@ def main() -> None:
 
         # Cat compilations are fully local FFmpeg renders. MoneyPrinterTurbo does
         # not need to be running. Before editing, require licensed stock with
-        # genuine source audio and a vertical Short-friendly source frame.
+        # genuine source audio and a vertical Short-friendly source frame. YouTube
+        # sources additionally require the clean-footage anti-repost vision gate.
         source_manifest = ensure_audio_animal_sources(
             settings,
             content,
