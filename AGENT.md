@@ -58,6 +58,8 @@ Until the user explicitly changes them:
 - Frozen pilot source reuse remains all-history protected.
 - Long-run source reuse uses a **rolling cooldown of the previous 5 rendered cat episodes**. A source older than that window may return as fallback; using it again restarts its cooldown.
 - Long-run sourcing is **fresh-first**: never-used candidates are ranked before cooled-down historical candidates.
+- If a completed fresh-source pass still fails the minimum-count gate, long-run may seed **local Pexels/Pixabay files from rendered episodes outside the cooldown window**. These files are not trusted blindly: current geometry and audible-audio checks run again before acceptance.
+- On retry after a recorded minimum-count failure, recover accepted local files from that failed audit and use cooled local history without paying to repeat the same fresh discovery pass first.
 - Final reuse audit blocks heavy reuse inside the protected recent window while separately reporting cooled-down historical reuse.
 
 ## 6. YouTube / UGC compliance wording
@@ -119,31 +121,27 @@ Draft review vehicle: PR #1 into `main`.
 
 The pilot/conveyor format has been visually accepted and the project is in **long-run local validation**.
 
-First real long-run attempt on the user's machine correctly selected slot 16 EN cats but failed safely at sourcing:
-
-```text
-Vertical audible-source gate found only 1/5 usable cat clips
-```
-
-Root cause: the old unbounded history exclusion permanently banned every source used in the seven pilot cat episodes, exhausting the finite vertical+audible Pexels/Pixabay stock pool.
+The user's first real long-run attempts correctly selected slot 16 EN cats but failed safely at sourcing with only `1/5` usable fresh clips. A rolling cooldown alone was insufficient because merely making old source IDs eligible does not guarantee Pexels/Pixabay search will rediscover those exact older IDs.
 
 Current fix on the branch:
 
 - pilot keeps all-history protection;
 - long-run protects only the previous 5 rendered cat episodes;
 - never-used stock is still searched/ranked first;
-- older cooled-down stock is fallback only;
-- a reused source becomes protected again immediately after the new episode renders;
-- source audit records cooled-down reuse separately;
+- older cooled-down remote stock is fallback only;
+- after fresh-source exhaustion, existing local Pexels/Pixabay files from cooled-down rendered episodes can seed the fallback pool;
+- seeded history is revalidated by the current geometry/audio gates;
+- failed-attempt accepted files are recovered and preserved;
+- source audit records cooled-down local fallback separately;
 - no aspect/audio/license/vision/minimum-count gate was weakened.
 
-Latest tested code job for this fix: **111 passed** with safety lock PASS and long-run dry-run still resolving slot 16. Recheck live workflow before claiming the Windows job is complete.
+Latest code-head test job for the local-history fallback: **114 passed** with safety lock PASS and long-run dry-run still resolving slot 16. Recheck live workflow before claiming all jobs green.
 
 Immediate local continuation after pull:
 
 1. install editable + pytest;
-2. `vv longrun-next --dry-run` should still show slot 16;
-3. retry exactly one `vv longrun-next`;
+2. expect about 114 tests and `vv longrun-next --dry-run` -> slot 16;
+3. retry exactly one `vv longrun-next` without deleting `runtime/slots/16`;
 4. inspect slot 16 output/audits before enabling Windows Task Scheduler.
 
 Task Scheduler comes after one real long-run slot succeeds. Publishing remains manual/review-first.
