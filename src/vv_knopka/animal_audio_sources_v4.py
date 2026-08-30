@@ -15,6 +15,7 @@ from .animal_audio_sources_v3 import (
     _remove_prior_from_manifest,
 )
 from .budget import BudgetLedger
+from .pexels_curator import _text_matches_anchor, choose_pixabay_file
 from .settings import Settings
 from .source_history import prior_rendered_cat_identities
 
@@ -167,7 +168,9 @@ def _deep_pixabay_collector(
                     duration = float(video.get("duration") or 0)
                     if duration < clip_seconds:
                         continue
-                    file_info = _base.choose_pixabay_file(video)
+                    # Pixabay helpers live in pexels_curator; the base animal
+                    # module intentionally imports only the shared collector.
+                    file_info = choose_pixabay_file(video)
                     thumbnail_url = str((file_info or {}).get("thumbnail") or "").strip()
                     if not file_info or not thumbnail_url:
                         continue
@@ -192,7 +195,7 @@ def _deep_pixabay_collector(
                             "creator_url": creator_url,
                             "tags": tags,
                             "file_info": file_info,
-                            "metadata_mentions_anchor": _base._text_matches_anchor(tags, anchor),
+                            "metadata_mentions_anchor": _text_matches_anchor(tags, anchor),
                         }
                     )
                     if len(candidates) >= max(int(max_candidates), 1):
