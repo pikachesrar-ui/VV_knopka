@@ -10,176 +10,175 @@ Before changing code or giving project-status claims:
 2. Read `docs/PROJECT_HANDOFF_RU.md` completely.
 3. Read `docs/PROGRESS_RU.md` completely for the newest operational checkpoint.
 4. Check the current repository state, active branch, and draft PR #1.
-5. Treat GitHub as source of truth for code/history; handoff as product intent; `PROGRESS_RU.md` as the live checkpoint.
+5. Treat GitHub as source of truth for code/history; handoff as product intent; `PROGRESS_RU.md` as live checkpoint.
 
 ## 2. Project goal
 
-Build a review-first short-form video production pipeline under **Animals / Nature Curiosities** with two formats:
+Build an automated short-form video pipeline under **Animals / Nature Curiosities** with two formats:
 
 - `ai_short`: original animal/nature fact/story Short through MoneyPrinterTurbo.
 - `animal_compilation`: cat compilation assembled locally with FFmpeg.
 
-The original 15-video pilot is complete and serves as immutable validation history. Current development extends the same review-first system into deterministic unbounded generation.
+The immutable 15-video review-first pilot is complete and visually accepted. Current phase is deterministic unbounded generation **plus user-authorized YouTube publishing**.
 
 ## 3. Frozen pilot — immutable history
 
-- 15 Shorts total.
-- 8 `ai_short`, 7 `animal_compilation`.
+- 15 Shorts total: 8 AI + 7 cat compilations.
 - Slot 1 RU AI + slot 2 RU cats; slots 3–15 EN.
-- All 15 ready outputs were generated on the user's machine.
-- User subsequently reported the generated set looks normal/acceptable.
-- Final explicitly shown OpenAI ledger after the pilot: **$0.1786 / $10.00**.
+- All 15 ready outputs were generated and visually accepted by the user.
+- Final explicitly shown pilot ledger: **$0.1786 / $10.00**.
 - Do not rebuild the frozen pilot solely for later metadata refinements.
+- Frozen pilot config keeps `pilot.auto_publish=false` as historical behavior.
 
-## 4. Safety locks
+## 4. Current safety / authorization state
 
-Until the user explicitly changes them:
+User explicitly requested:
 
-- Project-side OpenAI cap: **$10 USD**.
-- `auto_publish=false`.
-- Human review required.
-- Production outputs only to `runtime/ready_for_review`.
-- Do not silently add paid providers or increase paid usage.
-- No uploader/OAuth in the current phase.
-- Do not merge PR #1 merely because tests pass.
+- automatically publish future generated Shorts to YouTube;
+- upload the already generated ready backlog as well.
+
+Therefore current `[youtube]` policy is intentionally:
+
+```toml
+enabled = true
+auto_publish = true
+privacy_status = "public"
+```
+
+Do **not** silently revert this to review-only unless the user asks.
+
+Still mandatory:
+
+- project-side OpenAI hard cap = **$10 USD**;
+- do not add paid providers or raise paid usage without explicit approval;
+- source/provenance/audio/geometry/vision gates stay fail-closed;
+- OAuth secrets/tokens stay local under ignored `runtime/youtube/`;
+- uploader must channel-bind and fail closed if OAuth resolves to a different channel;
+- successful uploads must leave idempotent `.youtube.json` receipts to prevent duplicates;
+- do not merge PR #1 merely because tests pass.
 
 ## 5. Cat production rules
 
-- Cat renderer = local FFmpeg; MoneyPrinterTurbo is not needed.
-- Broad/generic cat compilation; no voiceover and no BGM.
-- Real meow on black intro/transition/end cards; no bass/drop/impact/boom SFX.
-- Windows card font = `C:\Windows\Fonts\impact.ttf` with safe fallback elsewhere.
-- Source footage must be licensed/commercial-use allowed, audible, already vertical and close to 9:16.
-- Current aspect tolerance from 9/16 = `0.08`.
-- Fewer than 5 unique usable clips -> fail closed.
-- Every production clip keeps provenance/licensing metadata.
-- Remote files confirmed to have no audio are filtered before Luna/candidate-cap accounting.
-- Pexels/Pixabay are the normal automated downloadable stock path.
-- Frozen pilot source reuse remains all-history protected.
-- Long-run source reuse uses a **rolling cooldown of the previous 5 rendered cat episodes**. A source older than that window may return as fallback; using it again restarts its cooldown.
-- Long-run sourcing is **fresh-first**: never-used candidates are ranked before cooled-down historical candidates.
-- If a completed fresh-source pass still fails the minimum-count gate, long-run may seed **local Pexels/Pixabay files from rendered episodes outside the cooldown window**. These files are not trusted blindly: current geometry and audible-audio checks run again before acceptance.
-- On retry after a recorded minimum-count failure, recover accepted local files from that failed audit and use cooled local history without paying to repeat the same fresh discovery pass first.
-- Final reuse audit blocks heavy reuse inside the protected recent window while separately reporting cooled-down historical reuse.
+- Local FFmpeg renderer; no MPT for cats.
+- Generic cats; no voiceover/BGM.
+- Real meow on black cards; no bass/drop/impact/boom SFX.
+- Source footage: commercial-use/provenance evidence, audible, vertical close to 9:16.
+- Aspect tolerance = `0.08`; fewer than 5 unique usable clips = fail closed.
+- Pexels/Pixabay are normal automated downloadable stock paths.
+- Frozen pilot reuse protection = all-history.
+- Long-run source cooldown = previous 5 rendered cat episodes.
+- Fresh never-used stock first; cooled historical sources fallback only.
+- If remote minimum fails, local cooled Pexels/Pixabay history may seed fallback and is revalidated by current geometry/audio checks.
 
 ## 6. YouTube / UGC compliance wording
 
-- YouTube Data API is used for discovery/reference/license metadata only; `videos.list` is not a media-download endpoint.
-- An uploader-declared Creative Commons license is evidence about declared metadata, not proof of full chain-of-title and not permission for an arbitrary acquisition method.
-- A project geometry/audio/clean-footage PASS is a technical gate only. Never describe it as proof that YouTube acquisition is platform-compliant.
-- `vv-cat-youtube` may be used for discovery/research and technical screening, but long-run production media should come from Pexels/Pixabay, creator-supplied/directly authorized files, owned footage, or another independently authorized downloadable source.
-- Do not describe yt-dlp technical ability as official YouTube/API permission.
-- If an independently authorized file originated from a YouTube reference, preserve attribution/rights evidence and run the same clean-footage/geometry/audio gates on that file.
-- Reddit/community posts are references only; a public post is not reuse permission.
+- YouTube Data API discovery metadata is not a media-download permission mechanism.
+- Uploader-declared CC metadata does not prove chain-of-title or authorize arbitrary acquisition.
+- yt-dlp capability != official YouTube/API permission.
+- Production media should be Pexels/Pixabay, owned/creator-supplied/directly authorized, or another independently authorized downloadable source.
+- `videos.insert` is used only to upload our finished local MP4s to the user's authorized channel.
+- Official YouTube behavior: API projects subject to YouTube's audit restriction may have uploads forced to `private` even when `public` is requested. Record requested and actual privacy separately; never claim public if API returned private.
 
 ## 7. Long-run schedule
 
-Long-run starts at **slot 16** and is deterministic rather than driven by one fragile mutable counter.
+Long-run starts at slot 16 and is deterministic:
 
-Current config:
+- pipeline cycle: cats, AI, cats, AI...
+- AI language EN;
+- long-run cat language cycle: `en,en,en,en,ru`;
+- cat episode numbering continues after pilot (#008 at slot16);
+- AI fact subject cooldown = 6 recent distinct anchors;
+- cat source cooldown = 5 recent cat episodes.
 
-- pipeline cycle: `animal_compilation`, `ai_short` (alternating cats/facts);
-- AI language: EN;
-- long-run cat language cycle starts fresh after the pilot: `en, en, en, en, ru`;
-- first long-run cat is slot 16 / cat episode `#008` / EN;
-- fifth long-run cat is slot 24 / cat episode `#012` / RU;
-- AI fact subject cooldown = most recent 6 distinct AI visual anchors;
-- cat source cooldown = previous 5 rendered cat episodes;
-- long-run cat descriptions use deterministic safe variation instead of one byte-identical description forever.
+Slot 16 EN cats / #008 succeeded locally. Next target = slot 17 AI EN.
 
-Commands:
+## 8. YouTube uploader
+
+Entry point:
 
 ```powershell
-.\.venv\Scripts\vv.exe longrun-next --dry-run
-.\.venv\Scripts\vv.exe longrun-next
-.\.venv\Scripts\vv.exe longrun-batch --count 3
-```
-
-Existing non-empty long-run MP4 files are resume markers just like the pilot. Attempt state is written to `runtime/long_run/state.json`.
-
-## 8. Windows scheduled generation
-
-User approved a **one-week test at up to 3 generated videos per night**.
-
-Chosen Moscow-time triggers:
-
-```text
-01:30 MSK
-03:30 MSK
-05:30 MSK
+.\.venv\Scripts\vv-youtube.exe status
+.\.venv\Scripts\vv-youtube.exe auth
+.\.venv\Scripts\vv-youtube.exe upload-ready --dry-run
+.\.venv\Scripts\vv-youtube.exe upload-ready
 ```
 
 Implementation:
 
-- `scripts/run-longrun-task.ps1` runs exactly one review-only `longrun-next` per invocation.
-- It runs `vv status` first, logs to `runtime/scheduler/longrun-task.log`, and uses an exclusive lock to prevent overlapping renders.
-- It never runs `git pull`, never auto-updates code, and never publishes.
-- A failed generation exits nonzero; the next scheduled trigger resumes the same missing slot through existing long-run resume semantics.
-- `scripts/install-longrun-task.ps1` now supports one Windows Scheduled Task with multiple daily triggers.
-- Default installer schedule is `01:30,03:30,05:30`; `-At "HH:mm"` remains valid for a single custom trigger, and comma/semicolon-separated times are supported.
-- Task is `StartWhenAvailable`, `IgnoreNew`, battery-safe, with a four-hour execution limit.
-- Because `IgnoreNew` is enabled, three triggers mean **up to** three videos/day; a still-running earlier render prevents overlap rather than spawning a second renderer.
-- Current cost estimate from observed pilot/long-run usage for 21 generated videos/week is roughly **$0.25–0.50 OpenAI**, with the hard `$10` guard unchanged.
-- Scheduler installation is explicit and local; no password is requested/stored.
+- OAuth scopes: `youtube.upload` + `youtube.readonly`.
+- Desktop-app OAuth JSON expected at `runtime/youtube/client_secret.json`.
+- Token stored `runtime/youtube/token.json`.
+- Bound channel stored `runtime/youtube/channel.json`.
+- `auth` prints channel title + ID; user must verify before first real backlog upload.
+- each successful ready upload writes `<metadata>.youtube.json` receipt.
+- `upload-ready` skips receipts and is safe to rerun after interruption.
+- queue defaults oldest slot first; `--newest --limit 1` is scheduler path for newly generated video.
+- full setup guide: `docs/YOUTUBE_PUBLISHING_RU.md`.
 
-## 9. Architecture constraints
+## 9. Windows scheduled generation + publication
 
-- `VV_knopka` is orchestration/business logic.
-- Do not vendor/fork all MoneyPrinterTurbo into Git history.
-- Local ignored `MoneyPrinterTurbo/` checkout is allowed.
-- Use MPT only for `ai_short` where practical.
-- Edge TTS remains default AI-short TTS; cat compilation has no voiceover.
-- Keep secrets out of Git. `.env` must never be committed.
-- Real meow binary stays local/ignored or via `CAT_MEOW_FILE`.
+Approved one-week test schedule, Moscow time:
 
-## 10. Git workflow
+```text
+01:30
+03:30
+05:30
+```
+
+`run-longrun-task.ps1` per trigger:
+
+1. obtains exclusive scheduler lock;
+2. checks generation status and YouTube uploader status;
+3. retries one older pending upload first;
+4. generates exactly one next long-run slot;
+5. uploads the newest pending ready video;
+6. logs to `runtime/scheduler/longrun-task.log`.
+
+If YouTube retry fails, it refuses to generate another slot until publication recovers. If generation succeeds but upload fails, next trigger retries pending publication first. `IgnoreNew` prevents overlap. No `git pull`/auto-update inside scheduled task.
+
+Default installer creates one task with all three triggers:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1
+```
+
+## 10. Architecture constraints
+
+- `VV_knopka` = orchestration/business logic.
+- Do not vendor MoneyPrinterTurbo.
+- Edge TTS remains default AI-short TTS.
+- Keep secrets out of Git; `.env` and `runtime/` are ignored.
+- Real meow stays local/ignored or via `CAT_MEOW_FILE`.
+
+## 11. Git workflow
 
 Development branch: `mvp/pilot-scaffold`.
-Draft review vehicle: PR #1 into `main`.
+Draft PR #1 into `main` stays open/draft/unmerged until explicit user decision.
 
-- Continue on the existing branch/PR unless there is a concrete reason to split.
-- Keep `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md` current.
-- GitHub wins over docs on mechanical facts such as SHA/CI/file list.
-- PR #1 remains draft/open/unmerged until an explicit user decision.
+Keep `AGENT.md`, `PROJECT_HANDOFF_RU.md`, and `PROGRESS_RU.md` current after substantive work.
 
-## 11. Current milestone
+## 12. Immediate continuation
 
-The pilot/conveyor format has been visually accepted and **the first real post-pilot long-run slot has succeeded locally**.
+YouTube publishing code is implemented, but real publishing cannot happen until local OAuth is configured.
 
-Confirmed on the user's machine:
+Next local sequence:
 
-```text
-slot-16-en-animals.mp4
-slot-16-en-animals.upload.json
-Long-run conveyor outputs: slot-16-en-animals.mp4
-```
+1. `git pull` + reinstall editable dependencies;
+2. create/enable a Google Cloud project with YouTube Data API v3 and a **Desktop app** OAuth client;
+3. save downloaded OAuth JSON as `runtime/youtube/client_secret.json` (never paste it into chat);
+4. run `vv-youtube auth` and verify printed channel title/ID;
+5. run `vv-youtube upload-ready --dry-run`;
+6. run `vv-youtube upload-ready` to publish existing ready backlog;
+7. install/reinstall the 3-trigger scheduler; future generation then publishes automatically.
 
-The successful retry validated the cooled local-history fallback. The scheduler runner dry-run then correctly resolved **slot 17 / ai_short / EN** and showed:
-
-```text
-OpenAI spent: $0.1885 / $10.00
-auto_publish: False
-publication gate: PASS
-long_run: True
-```
-
-The multi-trigger scheduler installer is now on the branch. Immediate continuation:
-
-1. pull the latest scheduler installer;
-2. optionally run `scripts/install-longrun-task.ps1 -DryRun` and expect the three default triggers;
-3. register the task with `scripts/install-longrun-task.ps1` (no `-At` needed for the approved 01:30/03:30/05:30 schedule);
-4. verify task state/next run and inspect `runtime/scheduler/longrun-task.log` after the first night;
-5. publishing remains manual/review-first.
-
-## 12. Language / title policy
+## 13. Language / title policy
 
 - Never publish translated duplicates of the same cat episode.
-- Long-run cat cadence: `en, en, en, en, ru`.
-- Do not use `Daily Dose of Cats` or a close imitation.
-- On-card cats remain `#NNN — Котики` / `#NNN — Cats`.
-- Upload-facing title family remains `Котики, которые сделали мой день 😹 #NNN #shorts` / `Cats That Made My Day 😹 #NNN #shorts`.
-- AI fact titles come from each specific plan; do not use one repeated generic template.
+- Cat cadence `en,en,en,en,ru`.
+- Do not imitate `Daily Dose of Cats`.
+- Cats titles remain `Котики, которые сделали мой день 😹 #NNN #shorts` / `Cats That Made My Day 😹 #NNN #shorts`.
+- AI titles remain plan-specific.
 
-## 13. Context persistence
+## 14. Context persistence
 
-At the end of every substantial work session, update handoff/progress so a fresh chat can resume from GitHub without relying on conversational memory.
+At the end of every substantial session update handoff/progress so a fresh chat can resume from GitHub without relying on conversational memory.
