@@ -116,13 +116,14 @@ The four proof videos have manual QUALITY PASS:
 3. Slot 3 EN `ai_short` = QUALITY PASS.
 4. Slot 4 EN `animal_compilation` = QUALITY PASS.
 
-YouTube sourcing status:
+Conveyor validation has now produced final ready outputs through **slot 13** on the user's machine. Slots 5–13 have completed through resumable `pilot-next` / `pilot-batch` runs, including full unattended AI -> cats -> AI batches.
 
-- First production-safe YouTube CC clip: `I_pdwiLlvuc` / Kawaiipets / 2160×3840 / audio -14.8 dB / full clean gate PASS 0.99.
-- Earlier Pawcsu, livestream/chat, stitched-compilation and bad-aspect candidates remain rejected.
-- The accepted slot-2 mixed render used only one YouTube clip because only one YouTube source had passed all gates. This is expected; do not force a quota.
+Remaining frozen-pilot slots:
 
-Current development milestone is **conveyor validation**, not more format experimentation:
+- slot 14 EN `animal_compilation`;
+- slot 15 EN `ai_short`.
+
+Current development milestone is **finish the last two pilot slots and visually review the completed 15-video set**, not more format experimentation.
 
 - `vv pilot-next` renders the next missing manifest slot.
 - `vv pilot-batch --count N` renders several missing slots and stops on the first failure.
@@ -131,9 +132,10 @@ Current development milestone is **conveyor validation**, not more format experi
 - For AI slots the conveyor may start the local MoneyPrinterTurbo process if it can find the local MPT Python environment; if MPT was already running, it leaves that external process alone.
 - Each successful render writes a `.upload.json` sidecar containing the proposed YouTube title/description, attributions, and explicit review-only/no-auto-publish locks.
 - Cat cross-episode source reuse is audited before highlights/render.
+- Remote stock with confirmed missing audio is filtered before Luna/candidate-cap accounting.
 - Keep `auto_publish=false`; uploader/OAuth is a later explicit phase.
 
-Immediate local validation should use `vv pilot-next --dry-run` first. With slots 1–4 already rendered on the user's PC, it should identify slot 5 EN AI as next. Then run one real `vv pilot-next` before using larger batches or Windows Task Scheduler.
+Immediate local continuation: `vv pilot-next --dry-run` should identify slot 14. If correct, `vv pilot-batch --count 2` should attempt slot 14 cats and slot 15 facts.
 
 ## 10. Language / title policy
 
