@@ -13,7 +13,8 @@ from .animal_v3 import render_cat_v3
 from .budget import BudgetLedger
 from .cat_compilation import build_generic_cat_plan
 from .gates import publication_gate
-from .manifest import build_manifest, write_manifest
+from .long_run_conveyor import run_longrun_batch
+from .manifest import resolve_slot, write_manifest
 from .material_fallback import CuratedMaterialFallbackError, load_duration_sufficient_materials
 from .mpt import MoneyPrinterTurboClient
 from .mpt_health import require_mpt_available
@@ -26,10 +27,10 @@ from .source_history import audit_cat_source_reuse
 
 
 def _slot(settings, number: int):
-    slots = {slot.slot: slot for slot in build_manifest(settings)}
-    if number not in slots:
-        raise SystemExit(f"slot must be 1..{len(slots)}")
-    return slots[number]
+    try:
+        return resolve_slot(settings, number)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _multi_source_audit_exhausted(slot_dir, *, expected_anchor: str | None = None) -> bool:
@@ -116,6 +117,11 @@ def main() -> None:
     batch = sub.add_parser("pilot-batch", help="Render several missing pilot slots, stopping on first failure")
     batch.add_argument("--count", type=int, default=3)
     batch.add_argument("--dry-run", action="store_true")
+    long_next = sub.add_parser("longrun-next", help="Render the next missing post-pilot slot")
+    long_next.add_argument("--dry-run", action="store_true")
+    long_batch = sub.add_parser("longrun-batch", help="Render post-pilot slots indefinitely in configured order")
+    long_batch.add_argument("--count", type=int, default=3)
+    long_batch.add_argument("--dry-run", action="store_true")
     plan.add_argument("--topic", default=None, help="Explicit topic/animal requested by the user")
     args = parser.parse_args()
 
@@ -136,6 +142,7 @@ def main() -> None:
         print(f"OpenAI spent: ${ledger.spent_usd():.4f} / ${settings.budget_usd:.2f}")
         print(f"auto_publish: {settings.auto_publish}")
         print(f"publication gate: {'PASS' if publication_gate(settings).passed else 'FAIL'}")
+        print(f"long_run: {bool(settings.raw.get('long_run', {}).get('enabled', False))}")
         return
 
     if args.command in {"pilot-next", "pilot-batch"}:
@@ -146,6 +153,23 @@ def main() -> None:
             raise SystemExit(f"Pilot conveyor stopped: {exc}") from exc
         if outputs:
             print("Pilot conveyor outputs:")
+            for output in outputs:
+                print(output)
+        return
+
+    if args.command in {"longrun-next", "longrun-batch"}:
+        count = 1 if args.command == "longrun-next" else max(int(args.count), 0)
+        try:
+            outputs = run_longrun_batch(
+                settings,
+                config_path=config_path,
+                count=count,
+                dry_run=bool(args.dry_run),
+            )
+        except RuntimeError as exc:
+            raise SystemExit(f"Long-run conveyor stopped: {exc}") from exc
+        if outputs:
+            print("Long-run conveyor outputs:")
             for output in outputs:
                 print(output)
         return
