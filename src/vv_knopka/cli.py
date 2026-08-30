@@ -15,6 +15,7 @@ from .gates import publication_gate
 from .manifest import build_manifest, write_manifest
 from .material_fallback import CuratedMaterialFallbackError, load_duration_sufficient_materials
 from .mpt import MoneyPrinterTurboClient
+from .mpt_health import require_mpt_available
 from .openai_client import OpenAIPlanner
 from .pexels_curator import prepare_pexels_materials
 from .settings import load_settings
@@ -151,6 +152,14 @@ def main() -> None:
         if not plan_path.exists():
             raise SystemExit(f"missing {plan_path}; run `vv plan {slot.slot}` first")
         content = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        # Fail before material preparation if the separate local MPT service is
+        # not running. This matters for unattended/conveyor operation and avoids
+        # wasting provider/vision work only to discover a refused localhost port.
+        try:
+            require_mpt_available(settings)
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
 
         materials = _prepare_ai_materials(
             settings,
