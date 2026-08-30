@@ -3,7 +3,7 @@ import json
 import pytest
 
 from vv_knopka.settings import Settings
-from vv_knopka.source_history import audit_cat_source_reuse
+from vv_knopka.source_history import audit_cat_source_reuse, prior_rendered_cat_identities
 
 
 def _settings(tmp_path):
@@ -59,3 +59,17 @@ def test_source_reuse_gate_rejects_two_or_more_repeats(tmp_path):
         audit_cat_source_reuse(settings, slot=4, source_manifest=current)
     payload = json.loads((current.parent / "source_reuse_audit.json").read_text(encoding="utf-8"))
     assert payload["passed"] is False
+
+
+def test_history_discovers_rendered_longrun_cat_slots(tmp_path):
+    settings = _settings(tmp_path)
+    ready = settings.runtime_dir / "ready_for_review"
+    ready.mkdir(parents=True)
+    (ready / "slot-16-en-animals.mp4").write_bytes(b"video")
+    _write_sources(
+        settings.runtime_dir / "slots" / "16" / "sources.json",
+        [("pexels", "longrun-1")],
+    )
+
+    prior = prior_rendered_cat_identities(settings, before_slot=18)
+    assert ("pexels", "longrun-1") in prior
