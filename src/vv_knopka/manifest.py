@@ -41,7 +41,7 @@ def build_manifest(settings: Settings) -> list[Slot]:
 
 
 def longrun_start_slot(settings: Settings) -> int:
-    return int(settings.raw["pilot"]["total_shorts"]) + 1
+    return int(settings.raw.get("pilot", {}).get("total_shorts", 15)) + 1
 
 
 def longrun_enabled(settings: Settings) -> bool:
@@ -114,7 +114,7 @@ def longrun_slot(settings: Settings, number: int) -> Slot:
 def resolve_slot(settings: Settings, number: int) -> Slot:
     """Resolve a pilot slot or, after the pilot boundary, a deterministic long-run slot."""
     number = int(number)
-    total = int(settings.raw["pilot"]["total_shorts"])
+    total = int(settings.raw.get("pilot", {}).get("total_shorts", 15))
     if 1 <= number <= total:
         return build_manifest(settings)[number - 1]
     if number > total:
