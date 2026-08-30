@@ -19,7 +19,7 @@ RU slots:     1,2
 - Slot 1 RU AI Short (octopus) = manual **QUALITY PASS**.
 - Slot 2 RU cat compilation = manual **QUALITY PASS** after the latest mixed YouTube+stock render.
 - Cat format: generic numbered cats, Impact cards, real meow, no voiceover, no BGM, strict near-9:16 sources.
-- Latest shown local pytest: **81 passed in 0.55s** before the newest aspect-preflight regression tests.
+- Latest shown local pytest: **81 passed in 0.55s** before the newest aspect-preflight/MPT-health regression tests.
 - Last shown OpenAI ledger: **$0.0618 / $10.00** before the final successful YouTube candidate review; do not infer a newer number.
 
 ## First production-safe YouTube CC clip
@@ -93,6 +93,51 @@ User considers the project close to conveyor launch. Before batch automation, pr
 
 Slot 3 previously had a poor relevance result (2/8), so do not weaken relevance gating merely to get an output. Slot 4 should reuse the now-accepted cat visual/audio/card format.
 
+## Slot 3 EN current state
+
+User already ran:
+
+```powershell
+.\.venv\Scripts\vv.exe plan 3
+.\.venv\Scripts\vv.exe render-ai 3
+```
+
+`plan 3` succeeded and wrote `runtime/slots/03/plan.json`. `render-ai 3` successfully found/reused **4 unique approved sources / 79.0s reusable footage**, then failed when creating the MoneyPrinterTurbo task with `httpx.ConnectError [WinError 10061]`.
+
+This is an infrastructure blocker only: the separate local MoneyPrinterTurbo API was not listening. The slot-3 plan/material cache should be reused; do not regenerate it because of this failure.
+
+MoneyPrinterTurbo is a separate local upstream service. Start it from the ignored local checkout in a separate terminal:
+
+```powershell
+cd D:\KiraS\VV_knopka\MoneyPrinterTurbo
+uv run python main.py
+```
+
+(or `python main.py` from an already-active MPT environment). `http://127.0.0.1:8080/docs` should then be reachable.
+
+A new `src/vv_knopka/mpt_health.py` preflight is wired into `vv render-ai`: future runs check MPT **before** preparing materials and fail with a short actionable startup message instead of a long connection traceback. It does not auto-start MPT yet; automatic process lifecycle belongs in the later conveyor runner.
+
+GitHub CI for the MPT-health code head:
+
+```text
+86 passed in 0.64s
+Verify pilot lock: success
+```
+
+At that check the Windows-bootstrap job was still running; recheck live CI before a full-workflow claim.
+
+Immediate slot-3 continuation:
+
+```powershell
+cd D:\KiraS\VV_knopka
+git pull
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\vv.exe render-ai 3
+```
+
+Do not rerun `vv plan 3`; inspect the rendered EN facts video manually after MPT completes.
+
 ## Title direction
 
 Keep on-card cat identity simple:
@@ -126,12 +171,13 @@ After slot 3 and slot 4 both receive manual QUALITY PASS, implement a **local re
 - inspect the deterministic 15-slot manifest;
 - find the next unrendered eligible slot;
 - run the correct pipeline;
+- manage/check the local MPT process for AI slots;
 - stop/fail closed on budget, source or quality gates;
 - write outputs only to `runtime/ready_for_review`;
 - never publish automatically (`auto_publish=false` remains frozen);
 - keep logs/checkpoints so interrupted runs are resumable.
 
-Only after this runner is proven locally should optional Windows Task Scheduler cadence be added. The local PC/services (including MPT for AI shorts) must be available for scheduled runs.
+Only after this runner is proven locally should optional Windows Task Scheduler cadence be added. The local PC/services must be available for scheduled runs.
 
 ## Git / release
 
