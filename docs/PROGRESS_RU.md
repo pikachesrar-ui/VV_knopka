@@ -158,11 +158,9 @@ Added regression coverage for:
 - test-only import remains under `runtime/test_only` and never creates production sources;
 - test-only render refuses a missing publication lock.
 
-GitHub CI `test` job passed on the first YouTube-source code head; a newer head including `cc-search` is still to be checked before claiming full CI success.
+Latest final-head GitHub CI `test` job: **54 passed**, `Verify pilot lock` = success. `windows-bootstrap` was still running at the last check, so do not claim the whole workflow is complete yet.
 
 ## Next local checkpoint
-
-After CI/current pull:
 
 ```powershell
 git pull
