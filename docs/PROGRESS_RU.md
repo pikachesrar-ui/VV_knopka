@@ -5,66 +5,59 @@
 ## Подтверждено на ПК пользователя
 
 - Python `3.11.0`.
-- Последний локальный pytest: **95 passed in 0.63s**.
-- Последний явно показанный OpenAI ledger: **$0.0887 / $10.00** до последних cat-source retries; не угадывать более новое значение.
+- Последний локальный pytest: **99 passed in 0.67s**.
+- Последний явно показанный OpenAI ledger: **$0.1036 / $10.00**.
 - `auto_publish=false`; publication gate = `PASS`.
 - Slot 1 RU AI = manual **QUALITY PASS**.
 - Slot 2 RU cats = manual **QUALITY PASS**.
 - Slot 3 EN AI facts = manual **QUALITY PASS**.
 - Slot 4 EN cats = manual **QUALITY PASS**.
-- Slot 5 EN AI = **первый успешный настоящий conveyor render**.
+- Slot 5 EN AI = первый успешный настоящий conveyor render.
+- Slot 6 EN cats = **успешный conveyor render после deep fresh-source sourcing**.
+- Slot 7 EN AI = **успешный conveyor render в том же batch**.
 
-Slot 5 был создан полностью через `vv pilot-next`: plan-on-demand -> 8 curated stock materials -> MPT task -> `runtime/ready_for_review/slot-05-en-ai.mp4` + `.upload.json`.
+Slot 6 успешно собрал 6 audible vertical licensed sources, прошёл cross-episode reuse audit и highlight selection, затем FFmpeg сделал `runtime/ready_for_review/slot-06-en-animals.mp4` + `.upload.json`. Финальный файл: 1080x1920, ~35.75 s. В concat были предупреждения `Non-monotonic DTS`, но render завершился и final MP4 был создан.
 
-## Slot 6 cat sourcing — реальный bottleneck
+Slot 7 затем без ручного вмешательства создал plan, 8 curated stock materials, MPT task и `runtime/ready_for_review/slot-07-en-ai.mp4` + `.upload.json`.
 
-Первый batch после slot 5 остановился на 5 reused Pexels source IDs. History-aware v3 начал исключать старые IDs до render.
+Это уже подтверждает, что один `pilot-batch` способен последовательно завершить cat -> AI и продолжить к следующему slot.
 
-После pull пользователь подтвердил **95 passed in 0.63s** и повторил:
+## Slot 8 — кодовый Pixabay blocker
 
-```powershell
-.\.venv\Scripts\vv.exe pilot-batch --count 3
-```
-
-Новый history-aware sourcing уже не переиспользовал старую пятёрку, но fresh pool оказался слишком маленьким:
+Тот же batch дошёл до slot 8 EN cats и упал не на quality/source gate, а на Python bug:
 
 ```text
-RuntimeError: Vertical audible-source gate found only 2/5 usable cat clips.
-See runtime/slots/06/animal_audio_sources.json.
+AttributeError: module 'vv_knopka.animal_audio_sources' has no attribute 'choose_pixabay_file'
 ```
 
-Это полезный fail-closed: rights/audio/near-9:16/history gates не были ослаблены. Причина найдена в search depth: stock collectors в основном брали первую страницу популярных Pexels/Pixabay результатов, поэтому после исключения ранее использованных IDs пул быстро истощался.
+Причина: `animal_audio_sources_v4.py` deep Pixabay collector обращался к `_base.choose_pixabay_file` и далее должен был обратиться к `_base._text_matches_anchor`, но оба helpers определены в `pexels_curator.py` и не экспортируются базовым `animal_audio_sources` module.
 
-## Deep fresh-stock sourcing — IMPLEMENTED
+Исправлено:
 
-Новый `src/vv_knopka/animal_audio_sources_v4.py`:
+- `choose_pixabay_file` импортируется напрямую из `pexels_curator`;
+- `_text_matches_anchor` импортируется оттуда же;
+- добавлен regression test с реальным Pixabay-like payload, проверяющий file selection + tag/anchor metadata path.
 
-1. исключает IDs предыдущих реально отрендеренных cat episodes **во время сбора**, а не после заполнения `max_candidates`;
-2. пагинирует Pexels/Pixabay до **4 страниц на query**;
+Latest code-head test job после фикса:
+
+```text
+100 passed in 0.60s
+Verify pilot lock: success
+```
+
+Windows-bootstrap для exact head на момент проверки мог ещё выполняться; не утверждать full workflow green без live recheck.
+
+## Deep fresh-stock sourcing
+
+`src/vv_knopka/animal_audio_sources_v4.py`:
+
+1. исключает IDs предыдущих реально отрендеренных cat episodes во время сбора;
+2. пагинирует Pexels/Pixabay до 4 страниц на query;
 3. добавляет query diversity: `cat`, `kitten`, `cute cat`, `funny cat`, `cat playing`, `kitten playing`, `cat meowing`, `cat purring`, `house cat`, `pet cat`;
-4. сохраняет прежние duration / near-9:16 / vision / audible-audio / license gates;
-5. candidate cap не повышен бесконтрольно — задача пагинации в том, чтобы заполнить существующий cap **свежими** IDs вместо старых популярных результатов.
+4. сохраняет duration / near-9:16 / vision / audible-audio / license gates;
+5. candidate cap заполняется свежими IDs, а не уже использованными popular results.
 
-Audit получает `deep_stock_search` с параметрами поиска.
-
-## Resume failed cat-source attempts — IMPLEMENTED
-
-Новый `src/vv_knopka/animal_audio_sources_v5.py` решает вторую потерю эффективности.
-
-При fail `2/5` базовый pipeline уже записал два успешно проверенных свежих источника в `runtime/slots/06/animal_audio_sources.json`, но из-за fail-closed ещё не создал финальный `sources.json` с ними.
-
-На следующем retry v5:
-
-- читает `selected_sources` предыдущего failed audit;
-- восстанавливает только локально существующие `pexels` / `pixabay` файлы;
-- не восстанавливает source IDs из предыдущих отрендеренных episodes;
-- не восстанавливает YouTube через этот shortcut;
-- кладёт эти свежие источники обратно в working source manifest;
-- затем v4 ищет только недостающие свежие клипы.
-
-Это уменьшает повторные downloads/vision review после безопасного fail.
-
-Текущий `vv` entrypoint остаётся `cli_v2`, но теперь он подключает `animal_audio_sources_v5`.
+`animal_audio_sources_v5.py` делает failed-source retry resumable через `animal_audio_sources.json -> selected_sources` для локальных Pexels/Pixabay clips, если audit успел быть записан.
 
 ## Cat production / YouTube CC
 
@@ -91,30 +84,21 @@ Successful new renders produce `.upload.json` with proposed title/description, l
 
 Cat external title family: `Cats That Made My Day 😹 #NNN #shorts`; on-card identity remains `#NNN — Cats`. AI title is derived from the actual fact plan.
 
-## CI
-
-Latest code-head test job after paginated sourcing + failed-audit resume:
-
-```text
-99 passed in 0.65s
-Verify pilot lock: success
-```
-
-Windows-bootstrap for that exact head was still running at the time of the check; do not claim full workflow green without a new live check.
-
 ## Immediate next local step
+
+Slots 6 and 7 now have final MP4s, while slot 8 does not. Therefore after pulling the Pixabay fix, `pilot-next --dry-run` should identify slot 8.
+
+Recommended validation:
 
 ```powershell
 cd D:\KiraS\VV_knopka
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv.exe pilot-batch --count 3
+.\.venv\Scripts\vv.exe pilot-next --dry-run
+.\.venv\Scripts\vv.exe pilot-next
 ```
 
-Expected local tests around **99 passed**. Slot 6 should recover the two fresh sources from its previous failed audit, exclude every prior rendered cat source ID while collecting, and paginate deeper for the remaining clips.
-
-If slot 6 still cannot reach 5 usable sources, inspect the new `runtime/slots/06/animal_audio_sources.json` diagnostics before changing policy. Do not weaken rights/audio/aspect/clean/history gates; next escalation would be smarter source-provider expansion or larger pagination/search caps, not heavy source reuse.
+Expected local tests around **100 passed**. `pilot-next` should retry only slot 8, not regenerate slots 6/7. If slot 8 succeeds visually, continue with another `pilot-batch --count 3` for subsequent pending slots.
 
 Draft PR #1 remains open/draft and unmerged.
