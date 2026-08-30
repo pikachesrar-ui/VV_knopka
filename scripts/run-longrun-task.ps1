@@ -31,6 +31,21 @@ function Invoke-Logged {
     return $LASTEXITCODE
 }
 
+function Get-PendingUploadCount {
+    $Output = & $YouTubeExe "pending-count" 2>&1
+    $ExitCode = $LASTEXITCODE
+    if ($ExitCode -ne 0) {
+        $Output | ForEach-Object { Write-TaskLog ("youtube-pending: {0}" -f $_) }
+        throw "vv-youtube pending-count failed with exit code $ExitCode"
+    }
+    $Text = (($Output | Select-Object -Last 1) | Out-String).Trim()
+    $Count = 0
+    if (-not [int]::TryParse($Text, [ref]$Count)) {
+        throw "Could not parse pending upload count from: $Text"
+    }
+    return $Count
+}
+
 $LockStream = $null
 try {
     try {
@@ -66,15 +81,23 @@ try {
         throw "vv-youtube status failed with exit code $ExitCode"
     }
 
-    # First heal one older failed/pending publication, if any. In dry-run this is
-    # a preview only. Once the initial backlog has been explicitly uploaded this
-    # normally becomes a no-op.
-    $PreUploadArgs = @("upload-ready", "--limit", "1")
-    if ($DryRun) { $PreUploadArgs += "--dry-run" }
-    $ExitCode = Invoke-Logged -Prefix "youtube-pre" -Exe $YouTubeExe -Arguments $PreUploadArgs
-    if ($ExitCode -ne 0) {
-        Write-TaskLog "FAIL: pending YouTube retry failed; refusing to generate another slot until publication recovers."
-        exit $ExitCode
+    # While any ready backlog exists, each trigger spends its single publication
+    # opportunity on exactly one old/pending video and does NOT generate another
+    # slot. This drains the backlog and keeps scheduled upload pressure <= 3/day.
+    $PendingBefore = Get-PendingUploadCount
+    Write-TaskLog ("youtube-pending: {0} ready uploads before this trigger." -f $PendingBefore)
+    if ($PendingBefore -gt 0) {
+        $BacklogArgs = @("upload-ready", "--limit", "1")
+        if ($DryRun) { $BacklogArgs += "--dry-run" }
+        $ExitCode = Invoke-Logged -Prefix "youtube-backlog" -Exe $YouTubeExe -Arguments $BacklogArgs
+        if ($ExitCode -ne 0) {
+            Write-TaskLog "FAIL: pending YouTube upload is deferred/failed; refusing to generate another slot until publication recovers."
+            exit $ExitCode
+        }
+
+        $PendingAfter = Get-PendingUploadCount
+        Write-TaskLog ("BACKLOG: handled one pending upload; {0} remain. Skipping generation this trigger." -f $PendingAfter)
+        exit 0
     }
 
     $LongRunArgs = @("longrun-next")
@@ -85,13 +108,13 @@ try {
         exit $ExitCode
     }
 
-    # Dry-run cannot create a new ready file, so only preview the existing newest
-    # pending upload. Real runs publish the newly rendered newest ready video.
+    # Dry-run cannot create a new ready file, so this only previews current state.
+    # Real runs publish the newly rendered newest ready video.
     $PostUploadArgs = @("upload-ready", "--limit", "1", "--newest")
     if ($DryRun) { $PostUploadArgs += "--dry-run" }
     $ExitCode = Invoke-Logged -Prefix "youtube-post" -Exe $YouTubeExe -Arguments $PostUploadArgs
     if ($ExitCode -ne 0) {
-        Write-TaskLog "FAIL: generation completed but YouTube upload failed. The next trigger will retry pending publication first."
+        Write-TaskLog "FAIL: generation completed but YouTube upload is deferred/failed. The next trigger will drain pending publication first."
         exit $ExitCode
     }
 
