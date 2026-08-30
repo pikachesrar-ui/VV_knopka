@@ -25,11 +25,18 @@ User visually accepted proof pair in both branches:
 
 Last explicitly shown local OpenAI ledger was `$0.1036 / $10.00`; do not guess newer value without new `vv status` output.
 
-## Conveyor validation status
+## Frozen pilot generation — COMPLETE 15/15
 
-Final ready outputs are now user-confirmed through **slot 13**.
+User has now confirmed final ready outputs for every manifest slot. The final batch produced:
 
-Successful conveyor sequence so far:
+```text
+runtime/ready_for_review/slot-14-en-animals.mp4
+runtime/ready_for_review/slot-15-en-ai.mp4
+```
+
+Therefore slots 1–15 all have final `ready_for_review` MP4s on the user's machine.
+
+Successful conveyor progression included:
 
 - slot 5 EN AI — SUCCESS;
 - slot 6 EN cats — SUCCESS;
@@ -39,18 +46,13 @@ Successful conveyor sequence so far:
 - slot 10 EN cats — SUCCESS after remote-audio prefilter improvement;
 - slot 11 EN AI — SUCCESS;
 - slot 12 EN cats — SUCCESS;
-- slot 13 EN AI — SUCCESS.
+- slot 13 EN AI — SUCCESS;
+- slot 14 EN cats — SUCCESS;
+- slot 15 EN AI — SUCCESS.
 
-Most recent `pilot-batch --count 3` completed slots 11 -> 12 -> 13 without interruption. Slot 12 produced a final 1080x1920 ~35.75 s cat Short and upload metadata; slot 13 then completed plan-on-demand, 8 curated stock materials, MPT render and upload metadata.
+This is strong end-to-end evidence that the review-first conveyor can sequence both pipelines, resume after safe failures/code fixes, and finish the fixed manifest without regenerating completed slots.
 
-This is strong end-to-end evidence that the review-first conveyor can sequence AI -> cats -> AI autonomously and resume without regenerating completed slots.
-
-Remaining pilot slots:
-
-```text
-slot 14 — EN animal_compilation
-slot 15 — EN ai_short
-```
+Important distinction: **generation complete != publication approved**. Explicit manual QUALITY PASS is recorded only for slots 1–4. The remaining generated videos still need human visual review before publication.
 
 ## Cat sourcing architecture
 
@@ -67,7 +69,7 @@ Remote-audio prefilter in `animal_audio_sources_v4.py` runs before Luna/candidat
 
 Cross-episode final reuse gate permits at most one incidental repeated `provider + provider_id`; 2+ reused identities fail closed.
 
-First accepted clean YouTube CC reference remains `I_pdwiLlvuc` / Kawaiipets / 2160x3840 / audio -14.8 dB / clean gate PASS 0.99. Do not force a YouTube quota. YouTube Data API is for discovery/license metadata, not an official media-download endpoint; production acquisition should prefer explicitly downloadable/licensed stock or independently authorized source files.
+YouTube reference `I_pdwiLlvuc` / Kawaiipets passed project metadata/license-declaration + geometry/audio/clean-footage gates and slot 2 preserves attribution. Do not describe this as proof that YouTube acquisition itself is platform-compliant or that full chain-of-title is established. YouTube Data API is discovery/license metadata, not an official media-download endpoint. Long-run production acquisition should prefer explicitly downloadable/licensed stock or independently authorized source files.
 
 ## Review-first conveyor
 
@@ -88,29 +90,31 @@ First accepted clean YouTube CC reference remains `I_pdwiLlvuc` / Kawaiipets / 2
 
 Each successful render creates `.upload.json` with proposed title/description, language/pipeline/video path, required attribution, `review_required=true`, `auto_publish=false`, `publication_allowed_by_conveyor=false`.
 
-## Immediate local continuation
+## Metadata review first 10
 
-Because slots 1–13 have ready outputs, the next pending slot must be slot 14.
+User uploaded sidecars for slots 1–10. Review found:
 
-```powershell
-cd D:\KiraS\VV_knopka
-.\.venv\Scripts\vv.exe pilot-next --dry-run
-```
+- cat series numbering is correct (`#001` slot 2 through `#005` slot 10);
+- AI titles are specific to the fact topic rather than a generic repeated template;
+- safety/review flags are preserved;
+- slot 2 attribution is present;
+- long-run improvements worth adding after pilot review: subject cooldown for AI facts and non-identical cat descriptions.
 
-Expected:
+Do not rebuild the frozen pilot solely for these metadata refinements.
 
-```text
-slot 14: animal_compilation / en
-```
+## Immediate continuation
 
-Then finish the frozen pilot with:
+The frozen 15-slot generation phase is done. Next work should **not** be another `pilot-batch`.
 
-```powershell
-.\.venv\Scripts\vv.exe pilot-batch --count 2
-```
+Recommended sequence:
 
-Expected: slot 14 cats, then slot 15 AI facts. After both complete, visually review the newest generated MP4s before changing publication policy. Do not enable automatic upload merely because the conveyor completed; Windows Task Scheduler and YouTube uploader/OAuth are a later explicit phase.
+1. Human visual review of the generated set, especially later unattended outputs (cats and AI facts).
+2. Run `vv status` for final local budget/state checkpoint.
+3. If quality is acceptable, mark conveyor validation complete.
+4. Implement long-run/unbounded generation mode instead of the finite 15-slot manifest, including durable episode numbering/history, fact-subject cooldown, cat-description variation, and shared source history/pool behavior.
+5. Configure Windows Task Scheduler only after long-run mode is ready.
+6. YouTube uploader/OAuth remains a separate explicit phase; keep review-first/manual publication until the user explicitly changes policy.
 
 ## Git / release
 
-Continue on `mvp/pilot-scaffold`, Draft PR #1. Do not merge until separate user decision after local conveyor validation/review.
+Continue on `mvp/pilot-scaffold`, Draft PR #1. Do not merge until separate user decision after review. PR remains the review vehicle for the pilot work.
