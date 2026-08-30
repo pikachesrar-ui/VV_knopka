@@ -53,9 +53,12 @@ Until the user explicitly changes them:
 - Current aspect tolerance from 9/16 = `0.08`.
 - Fewer than 5 unique usable clips -> fail closed.
 - Every production clip keeps provenance/licensing metadata.
-- Cross-episode source history is artifact-based and works beyond the pilot: at most one incidental reused identity is allowed by the final gate; 2+ fails closed.
 - Remote files confirmed to have no audio are filtered before Luna/candidate-cap accounting.
 - Pexels/Pixabay are the normal automated downloadable stock path.
+- Frozen pilot source reuse remains all-history protected.
+- Long-run source reuse uses a **rolling cooldown of the previous 5 rendered cat episodes**. A source older than that window may return as fallback; using it again restarts its cooldown.
+- Long-run sourcing is **fresh-first**: never-used candidates are ranked before cooled-down historical candidates.
+- Final reuse audit blocks heavy reuse inside the protected recent window while separately reporting cooled-down historical reuse.
 
 ## 6. YouTube / UGC compliance wording
 
@@ -79,6 +82,7 @@ Current config:
 - first long-run cat is slot 16 / cat episode `#008` / EN;
 - fifth long-run cat is slot 24 / cat episode `#012` / RU;
 - AI fact subject cooldown = most recent 6 distinct AI visual anchors;
+- cat source cooldown = previous 5 rendered cat episodes;
 - long-run cat descriptions use deterministic safe variation instead of one byte-identical description forever.
 
 Commands:
@@ -113,27 +117,34 @@ Draft review vehicle: PR #1 into `main`.
 
 ## 10. Current milestone
 
-The pilot/conveyor format has been visually accepted and the project is now in **long-run local validation**.
+The pilot/conveyor format has been visually accepted and the project is in **long-run local validation**.
 
-Implemented on the branch:
+First real long-run attempt on the user's machine correctly selected slot 16 EN cats but failed safely at sourcing:
 
-- deterministic post-pilot slot resolver;
-- unbounded `longrun-next` / `longrun-batch` conveyor;
-- durable long-run attempt state;
-- cat episode numbering continues after pilot (`#008+`);
-- cat language cycle and description variation;
-- AI recent-subject cooldown;
-- artifact-based cat source history beyond slot 15;
-- CI dry-run for the long-run CLI.
+```text
+Vertical audible-source gate found only 1/5 usable cat clips
+```
 
-Latest tested code job after these changes: **108 passed** with safety lock PASS. Recheck live CI before stronger workflow claims.
+Root cause: the old unbounded history exclusion permanently banned every source used in the seven pilot cat episodes, exhausting the finite vertical+audible Pexels/Pixabay stock pool.
 
-Immediate local validation after pull:
+Current fix on the branch:
 
-1. run pytest/status;
-2. run `vv longrun-next --dry-run` and expect **slot 16 EN animal_compilation**;
-3. only after that run one real `vv longrun-next`;
-4. inspect that output before enabling Windows Task Scheduler.
+- pilot keeps all-history protection;
+- long-run protects only the previous 5 rendered cat episodes;
+- never-used stock is still searched/ranked first;
+- older cooled-down stock is fallback only;
+- a reused source becomes protected again immediately after the new episode renders;
+- source audit records cooled-down reuse separately;
+- no aspect/audio/license/vision/minimum-count gate was weakened.
+
+Latest tested code job for this fix: **111 passed** with safety lock PASS and long-run dry-run still resolving slot 16. Recheck live workflow before claiming the Windows job is complete.
+
+Immediate local continuation after pull:
+
+1. install editable + pytest;
+2. `vv longrun-next --dry-run` should still show slot 16;
+3. retry exactly one `vv longrun-next`;
+4. inspect slot 16 output/audits before enabling Windows Task Scheduler.
 
 Task Scheduler comes after one real long-run slot succeeds. Publishing remains manual/review-first.
 
