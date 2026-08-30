@@ -57,9 +57,12 @@ Until the user explicitly changes it:
 
 ## 5. YouTube / UGC source rules
 
-- YouTube Creative Commons Attribution is an allowed production candidate only after the source metadata is re-verified as CC BY and attribution is preserved.
-- `vv-cat-youtube cc-search` is the no-key discovery path for verified-CC candidates.
-- `vv-cat-youtube cc <slot> --url ...` may download/import only after CC verification, then the normal 9:16/audio gates still apply.
+- YouTube Creative Commons Attribution is an allowed production candidate only after rights evidence is verified and attribution is preserved.
+- User now has `YouTube Data API v3` enabled and a local `YOUTUBE_API_KEY` in ignored `.env`; never ask for the key or commit it.
+- `vv-cat-youtube cc-search` must **prefer the official YouTube Data API** when the key is present: `search.list(videoLicense=creativeCommon)` plus `videos.list` and `status.license == creativeCommon`.
+- The no-key YouTube CC-filter/yt-dlp path remains fallback/research only (`--no-key`) because yt-dlp license metadata is optional.
+- Preferred production import is `vv-cat-youtube cc-import <slot> --candidate N` from a saved official CC report. It must recheck current `status.license == creativeCommon` through the API immediately before download.
+- The imported source still must pass near-9:16, duration and audible-audio gates before entering production `sources.json`.
 - Standard/unverified YouTube media is **not** production media merely because the current use is a local experiment.
 - A separate test-only path may accept an already-local file for private quality comparison, but it must stay under `runtime/test_only`, carry `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, and never enter production `sources.json` or `runtime/ready_for_review`.
 - Do not add automatic downloading of standard/unverified YouTube/TikTok media as the normal workflow.
@@ -103,10 +106,11 @@ Slot 2 cat base format now also has an important manual checkpoint:
 2. Narrow themes were rejected in favor of generic `#001 — Котики`.
 3. Near-9:16 gate is locally confirmed: the latest user render selected six sources and **all six were exactly 720×1280 (9:16)**.
 4. User's verdict on this generic vertical render: **«да, норм»**.
-5. Current focus is no longer fixing orientation; it is testing whether verified YouTube Creative Commons can supply funnier/more UGC-like cats than Pexels.
-6. Keep Pexels/Pixabay as licensed fallback.
-7. Ordinary unverified YouTube files, if used for private quality comparison, stay in the isolated test-only flow and are never production candidates.
-8. Only after cat sourcing is accepted, return to slot 3 / remaining pilot.
+5. Current focus is testing whether officially verified YouTube Creative Commons can supply funnier/more UGC-like cats than Pexels.
+6. Google Cloud/YouTube Data API key is now available locally, so official API CC discovery is preferred over no-key discovery.
+7. Keep Pexels/Pixabay as licensed fallback.
+8. Ordinary unverified YouTube files, if used for private quality comparison, stay in the isolated test-only flow and are never production candidates.
+9. Only after cat sourcing is accepted, return to slot 3 / remaining pilot.
 
 ## 10. Language policy for cats
 
