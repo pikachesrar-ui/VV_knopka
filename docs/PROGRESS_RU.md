@@ -9,51 +9,43 @@
 - Последний показанный OpenAI ledger: **$0.0340 / $10.00**.
 - Slot 1 RU AI Short = manual QUALITY PASS.
 - Cat renderer = local FFmpeg; real meow + Impact; no voiceover/BGM.
-- Generic slot 2 `#001 — Котики` пользователь оценил как **нормальный**.
+- Generic slot 2 `#001 — Котики` пользователь оценил как нормальный.
 - Vertical gate локально подтверждён: 6/6 selected Pexels sources = **720x1280 / aspect 0.5625**.
 
-## Старый CC discovery — исчерпан
+## YouTube Creative Commons — текущий путь
 
-Пользователь дважды запустил старый metadata-only CC search:
+Pexels работает, но footage может выглядеть слишком stock-like. Текущая цель — найти более живых/смешных котов через YouTube Creative Commons и оставить Pexels/Pixabay fallback.
 
-```text
-vv-cat-youtube cc-search
-Verified CC cat candidates: 0
+Старые no-key попытки через optional yt-dlp `license` дали 0 кандидатов даже на 6000 дней; этот путь больше не является основным.
 
-vv-cat-youtube cc-search --days 6000 --limit 15 --scan-per-query 20
-Verified CC cat candidates: 0
-```
+### Google Cloud / YouTube Data API — ТЕПЕРЬ ДОСТУПЕН
 
-Вывод: расширение окна не помогает. Причина архитектурная: поле `license` у yt-dlp необязательное, поэтому отсутствие поля нельзя трактовать как доказательство Standard license.
+Пользователь смог:
 
-## YouTube CC search v2 — IMPLEMENTED
+- войти в Google Cloud Console;
+- выбрать проект `VV Knopka`;
+- включить YouTube Data API v3;
+- создать API key без необходимости OAuth/channel login;
+- сохранить ключ локально в `.env` как `YOUTUBE_API_KEY`.
 
-Новый production entry point всё ещё:
+Ключ никогда не коммитить и не просить вставлять в чат.
 
-```powershell
-vv-cat-youtube
-```
+## `vv-cat-youtube` v3 — официальный API preferred
 
-но `pyproject.toml` теперь маршрутизирует его в:
+`pyproject.toml` теперь маршрутизирует:
 
 ```text
-src/vv_knopka/youtube_cat_source_v2.py
+vv-cat-youtube = vv_knopka.youtube_cat_source_v3:main
 ```
 
-### `cc-search` v2
-
-Использует **YouTube Creative Commons advanced-search filter** через настоящий YouTube search URL (`sp=`), который поддерживается `YoutubeSearchURLIE` в актуальном yt-dlp.
-
-Flow:
+Если `YOUTUBE_API_KEY` присутствует, `cc-search` автоматически использует официальный YouTube Data API:
 
 ```text
-YouTube CC search filter
--> filtered video IDs
--> full yt-dlp metadata hydration
--> explicit Standard license => reject
--> direct CC license => accept (metadata+filter evidence)
--> empty license field => accept only because candidate came from YouTube CC filter
--> report
+search.list with videoLicense=creativeCommon
+-> videos.list details
+-> status.license == creativeCommon
+-> ranked CC candidates
+-> runtime/trends/youtube-cat-cc-official.json
 ```
 
 Команда:
@@ -62,70 +54,58 @@ YouTube CC search filter
 vv-cat-youtube cc-search
 ```
 
-Defaults: 6000 days, 20 scan/query, top 15; queries include funny cat shorts / cats being cats / funny kittens shorts / cat fails shorts.
+Defaults: 6000 days, scan-per-query 30 (API max capped at 50), limit 15, default query `cat|kitten`.
 
-Report:
+Это публичные metadata-запросы; OAuth/channel access не нужен. Если ключ отсутствует или указать `--no-key`, остаётся no-key YouTube CC-filter fallback.
 
-```text
-runtime/trends/youtube-cat-cc-filtered.json
-```
+### Safe official import
 
-Report diagnostics per query:
-
-- `filtered_results`
-- `hydrated`
-- `accepted`
-- exact `search_url`
-
-Это позволит понять причину даже если результат снова `0`.
-
-### `cc-import`
-
-Импорт теперь предпочтительно идёт **по rank из сохранённого CC-filter report**, а не по произвольному URL:
+После выбора кандидата:
 
 ```powershell
 vv-cat-youtube cc-import 2 --candidate N
 ```
 
-Перед download снова проверяются video ID и текущие metadata. Если текущие metadata явно говорят Standard/non-CC, импорт fail-closed даже при старом filter evidence.
+Для official API report импорт перед download ещё раз вызывает `videos.list` и требует текущий:
 
-Успешный candidate далее проходит:
+```text
+status.license == creativeCommon
+```
+
+Только после этого:
 
 ```text
 yt-dlp download
 -> near-9:16 ffprobe gate
--> duration gate
--> audible-audio gate
+-> duration >= clip_seconds
+-> audible audio gate
 -> production sources.json
 -> attribution.json
 ```
 
-Pexels/Pixabay затем могут заполнить оставшиеся позиции до target 6.
+Rights metadata сохраняет `rights_verified=true`, `rights_verification_method=youtube_data_api_status_license`, attribution и `api_status_license=creativeCommon`.
 
-Строгий старый URL mode `vv-cat-youtube cc 2 --url ...` сохранён для случаев, когда yt-dlp прямо сообщает CC license.
+## Test-only ordinary YouTube остаётся изолированным
 
-## Ordinary YouTube — test-only path остаётся
-
-Обычные/unverified YouTube clips автоматически не считаются разрешёнными. Уже локальный exact file можно добавить только в изолированный pool:
+Стандартные/unverified YouTube clips не становятся production-safe. Уже локальный exact file можно использовать только через:
 
 ```powershell
 vv-cat-youtube test-add 2 --url "https://youtube..." --file "D:\path\cat.mp4" --confirm-match
 vv-cat-youtube test-render 2
 ```
 
-Storage/output только under `runtime/test_only/slot-02/`; `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`. Не попадает в production sources или `ready_for_review`.
+Storage only `runtime/test_only/slot-02/`; обязательны `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
 
 ## Tests / CI
 
-Новый v2 добавил regression tests на:
+Official API v3 добавил regression coverage для:
 
-- наличие YouTube CC filter в search URL;
-- пустой yt-dlp `license` допускается только при CC-filter provenance;
-- explicit Standard license reject;
-- CC report provenance обязателен;
-- import recheck rejects current explicit non-CC.
+- API discovery/dedupe;
+- official `creativeCommon` evidence in report;
+- report provenance gate;
+- API key required for recheck before import.
 
-GitHub CI `test` job на code head `2e56412...`: **58 passed in 0.49s**, `Verify pilot lock` = success. Windows bootstrap на последней проверке ещё выполнялся отдельно.
+GitHub CI `test` job on code head `042ae76...`: **62 passed in 0.41s**, `Verify pilot lock` = success. Windows bootstrap выполнялся отдельно на последней проверке.
 
 ## Следующая точка на ПК
 
@@ -137,18 +117,13 @@ git pull
 .\.venv\Scripts\vv-cat-youtube.exe cc-search
 ```
 
-Ожидаемый local test count: **58 passed**.
+Ожидаемый console prefix при корректно подхваченном ключе:
 
-Если кандидаты есть — прислать top list и выбрать `N`, затем:
-
-```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate N
+```text
+YouTube CC search: official YouTube Data API (videoLicense=creativeCommon)
+Public metadata only; no OAuth, no channel login, no media download
 ```
 
-Если снова `0`, прислать:
+Если API вернёт кандидатов — прислать top list и выбрать N. Если ошибка 403/400 — прислать текст ошибки без ключа.
 
-```powershell
-Get-Content .\runtime\trends\youtube-cat-cc-filtered.json -Raw
-```
-
-Нельзя merge Draft PR #1 без отдельного решения после визуального review.
+Draft PR #1 не merge без отдельного решения после visual review.
