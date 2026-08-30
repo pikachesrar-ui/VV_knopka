@@ -141,7 +141,7 @@ Upload-limit regressions added for:
 - stopping backlog cleanly at limit after prior success;
 - pending count ignoring receipted videos.
 
-Code checkpoint `573bc4f2eb904da20fab03456f90391079144914` Ubuntu test job:
+Code checkpoint `573bc4f2eb904da20fab03456f90391079144914`, workflow `33328852436`:
 
 ```text
 121 passed in 0.82s
@@ -149,7 +149,13 @@ publication gate: PASS
 long_run: True
 ```
 
-Windows bootstrap/scheduler job for that run was still in progress at the first checkpoint; recheck live before claiming full workflow green. Docs commits after code checkpoint move branch HEAD.
+Workflow fully **success**:
+
+- Ubuntu tests green;
+- Windows bootstrap green;
+- Windows scheduler dry-run green.
+
+Docs commits after code checkpoint move branch HEAD.
 
 ## Immediate continuation
 
