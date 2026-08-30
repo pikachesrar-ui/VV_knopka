@@ -94,6 +94,27 @@ So far, **0 YouTube CC clips are accepted for production**:
 
 Pexels/Pixabay remain the accepted licensed fallback. Do not loosen clean gates merely to increase yield.
 
+## New official search after three remembered rejects
+
+User reran `cc-search` with the current v6/v5.1 stack:
+
+```text
+Known full/preview-gate rejects skipped: 3
+Thumbnail prescreen: 2 selected / 30 reviewed / 42 raw CC after reject memory
+Creative Commons cat candidates: 2
+```
+
+Current saved official report candidates:
+
+```text
+01 cQE-s_wsclw | 1,947,387 views | OMG Cute Cat Domino Reaction #shorts | Hilarious Cats | clean-thumb=0.98
+02 I_pdwiLlvuc | 225,755 views | Cutest Angry Cat You’ll Ever See 😾❤️ | Kawaiipets | clean-thumb=0.90
+```
+
+Both channel names are somewhat generic/aggregator-like, so neither should be trusted from metadata alone. Candidate 1 is the first recommended temporal-preflight test because its title looks like one specific cat reaction and it has the stronger thumbnail confidence. The low-res temporal preflight remains the deciding next gate.
+
+Do **not** rerun `cc-search` before testing these ranks, because the saved report/rank numbers may change.
+
 ## clean-footage v2 / CLI
 
 Current CLI routes through:
@@ -117,29 +138,33 @@ Reject memory is version-aware:
 
 - old obvious branding/UI/caption rejects remain remembered;
 - stale v1 collage-only rejects were eligible for one v2 recheck;
-- `hxXfevBB9Zs` is now rejected by current v2 behavior and should be remembered going forward.
+- `hxXfevBB9Zs` is now rejected by current v2 behavior and is remembered going forward.
 
 ## Tests / CI
 
-Latest code-head CI test job before this local recheck:
+Latest code-head CI test job before the latest search:
 
 ```text
 81 passed in 0.52s
 Verify pilot lock: success
 ```
 
-User then independently confirmed local **81 passed in 0.55s**.
+User independently confirmed local **81 passed in 0.55s**.
 
 Draft PR #1 remains review-only; do not merge without explicit user decision after visual review.
 
 ## Immediate next local step
 
-Now rerun official search so reject memory removes the newly confirmed bad candidate:
+Do not rerun search. Test current candidate 1 through the low-res temporal preflight:
 
 ```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-search
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 1
 ```
 
-If zero clean candidates remain, do not weaken the gates. Expand the official API query set toward more likely raw/self-shot footage (for example `my cat`, `cat home video`, `kitten playing home`, `cat reaction home video`) and/or scan a larger diverse channel pool while preserving exact CC verification, one-per-channel diversity and both clean gates.
+If candidate 1 is rejected, then test candidate 2 from the same saved report:
 
-Send the complete new `cc-search` output before importing another candidate.
+```powershell
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 2
+```
+
+A preflight reject is expected to stop before production-quality download. A PASS proceeds to full media, real 9:16/audio checks and the final full-quality clean gate. Send the complete output after candidate 1 before changing search state.
