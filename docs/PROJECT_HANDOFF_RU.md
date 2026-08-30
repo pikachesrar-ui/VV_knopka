@@ -111,7 +111,7 @@ Long-run automated production должен предпочитать Pexels/Pixab
 
 ## Tests / CI
 
-Последний code test-job для source-cooldown fix:
+Code-head `487ccd6946c2a3e5ed405f6619f904e02d3dd7bf` полностью прошёл CI:
 
 ```text
 111 passed in 0.70s
@@ -120,7 +120,7 @@ long_run: True
 vv longrun-next --dry-run -> slot 16 EN cats
 ```
 
-На момент фиксации Ubuntu `test` job green; Windows job этого code run ещё выполнялся. Docs commits после code-head двигают branch HEAD, поэтому exact workflow state всегда recheck live.
+Workflow run `33323215094` завершён `success`, включая Ubuntu test и Windows bootstrap. Docs commits после code-head двигают branch HEAD, поэтому этот exact CI относится к указанному code commit.
 
 ## Immediate local continuation
 
