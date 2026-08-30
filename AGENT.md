@@ -77,6 +77,8 @@ Until the user explicitly changes it:
 - The clean-footage gate is a presentation/provenance-risk filter, not a substitute for the Creative Commons license check or human review.
 - Standard/unverified YouTube media is not production media merely because current use is local testing.
 - Do not add automatic downloading of standard/unverified YouTube/TikTok media as the normal workflow.
+- YouTube Data API license metadata is uploader-declared evidence, not proof of full chain-of-title or permission to acquire media by any particular method.
+- Do not describe a project-gate PASS as proof that YouTube acquisition itself is platform-compliant.
 - Reddit/community posts are references only; a public post is not reuse permission.
 
 ## 6. YouTube/content-safety rules
@@ -116,26 +118,26 @@ The four proof videos have manual QUALITY PASS:
 3. Slot 3 EN `ai_short` = QUALITY PASS.
 4. Slot 4 EN `animal_compilation` = QUALITY PASS.
 
-Conveyor validation has now produced final ready outputs through **slot 13** on the user's machine. Slots 5–13 have completed through resumable `pilot-next` / `pilot-batch` runs, including full unattended AI -> cats -> AI batches.
+**Frozen pilot generation is now COMPLETE: 15/15 ready outputs exist on the user's machine.**
 
-Remaining frozen-pilot slots:
+- AI slots completed: 1,3,5,7,9,11,13,15.
+- Cat slots completed: 2,4,6,8,10,12,14.
+- Final user-confirmed outputs: `slot-14-en-animals.mp4` and `slot-15-en-ai.mp4`.
+- Slots 5–15 were produced through resumable `pilot-next` / `pilot-batch` runs, including unattended multi-slot AI -> cats -> AI sequences.
 
-- slot 14 EN `animal_compilation`;
-- slot 15 EN `ai_short`.
+Generation completion is **not** publication approval. Manual QUALITY PASS is explicitly recorded only for slots 1–4; the rest of the completed set requires visual review before publishing.
 
-Current development milestone is **finish the last two pilot slots and visually review the completed 15-video set**, not more format experimentation.
+Current development milestone is **review the completed 15-video set, then design long-run generation**, not more frozen-pilot batching.
 
-- `vv pilot-next` renders the next missing manifest slot.
-- `vv pilot-batch --count N` renders several missing slots and stops on the first failure.
-- Existing non-empty `runtime/ready_for_review` MP4 files are resumable completion markers.
+- Do not run more pilot batches merely because the command exists.
+- Existing non-empty `runtime/ready_for_review` MP4 files remain completion markers.
 - Conveyor state is written to `runtime/conveyor/state.json`.
-- For AI slots the conveyor may start the local MoneyPrinterTurbo process if it can find the local MPT Python environment; if MPT was already running, it leaves that external process alone.
-- Each successful render writes a `.upload.json` sidecar containing the proposed YouTube title/description, attributions, and explicit review-only/no-auto-publish locks.
+- Each successful render writes a `.upload.json` sidecar containing proposed YouTube title/description, attributions, and explicit review-only/no-auto-publish locks.
 - Cat cross-episode source reuse is audited before highlights/render.
 - Remote stock with confirmed missing audio is filtered before Luna/candidate-cap accounting.
 - Keep `auto_publish=false`; uploader/OAuth is a later explicit phase.
 
-Immediate local continuation: `vv pilot-next --dry-run` should identify slot 14. If correct, `vv pilot-batch --count 2` should attempt slot 14 cats and slot 15 facts.
+After visual review, next architecture work should be long-run/unbounded mode rather than extending the fixed 15-slot manifest. Recommended additions: durable episode counters/history, AI fact-subject cooldown, slight cat-description variation, and durable shared source history/pool behavior. Windows Task Scheduler comes after long-run mode is ready.
 
 ## 10. Language / title policy
 
@@ -146,6 +148,8 @@ Immediate local continuation: `vv pilot-next --dry-run` should identify slot 14.
 - On-card cats remain `#NNN — Котики` / `#NNN — Cats`.
 - Upload-facing cat title family is `Котики, которые сделали мой день 😹 #NNN #shorts` / `Cats That Made My Day 😹 #NNN #shorts`.
 - AI fact upload titles come from the specific plan title/hook and append `#shorts`; do not use one repeated generic `Did You Know...?` template.
+- Long-run AI planning should avoid repeating the same animal/topic too soon; implement a recent-subject cooldown before unattended scheduling.
+- Long-run cat descriptions should not be byte-identical forever; add small safe variation without keyword stuffing.
 
 ## 11. Context persistence
 
