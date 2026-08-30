@@ -9,91 +9,146 @@
 ## Локально подтверждено
 
 - Windows path `D:\KiraS\VV_knopka`, `.venv` Python 3.11.
-- Latest shown OpenAI ledger before clean-review: **$0.0509 / $10.00**; publication gate PASS.
+- Latest shown OpenAI ledger **$0.0530 / $10.00**; publication gate PASS.
+- Latest shown local pytest **73 passed in 0.47s** before v5.1 pull.
 - Slot 1 octopus = manual QUALITY PASS.
 - Cat renderer local FFmpeg; Impact + real meow; no voiceover/BGM.
 - Production cats = broad generic `#NNN — Котики` / `#NNN — Cats`; narrow themes abandoned.
 - Generic vertical slot 2 baseline manually accepted as normal.
 - Strict near-9:16 stock baseline validated: six Pexels sources exactly 720×1280 / aspect 0.5625.
 
-## YouTube Data API / CC
+## YouTube Data API / Creative Commons
 
 User has Google Cloud project `VV Knopka`, enabled YouTube Data API v3 and stores `YOUTUBE_API_KEY` locally in ignored `.env`. Never ask for or commit the key.
 
-Official API CC discovery works: `search.list(videoLicense=creativeCommon)` plus `videos.status.license=creativeCommon` returned 15 real CC candidates.
+Official API discovery works with `search.list(videoLicense=creativeCommon)` plus `videos.status.license=creativeCommon` verification.
 
-First imported candidates 1, 8, 14 were all technically valid CC, 2160×3840 and audible, but all came from `Pawcsu` and were visually packaged with `Pawcsu/@Pawcsu` branding + large captions.
+## Full clean-footage gate — proven useful
 
-## Full clean-footage gate — confirmed locally
+Three first Pawcsu CC imports were technically valid (CC, 2160×3840, audible) but visually packaged. `cc-clean 2` rejected all 3 at confidence 0.99–1.00 for `Pawcsu/@Pawcsu`, avatar/branding and large added captions. This is desired. Never crop/blur branding merely to make such media pass.
 
-User ran `vv-cat-youtube cc-clean 2` and got:
+A production YouTube clip must ultimately carry `clean_footage_approved=true`.
 
-```text
-YouTube clean-footage audit: 0 kept / 3 reviewed
-[REJECT] 3YVtMMK1Uoc | confidence=0.99 | Pawcsu/@Pawcsu branding + large headline caption
-[REJECT] 8IYWJiho1fQ | confidence=1.00 | Pawcsu/@Pawcsu branding + large caption
-[REJECT] 9DL-J0hKxtM | confidence=1.00 | Pawcsu branding/avatar/handle + large headline caption
-```
+## v5 official search — local result
 
-This is the desired behavior. Do not crop/blur such branding to make a source pass. Production `sources.json` no longer contains those three YouTube entries; downloaded files remain only for audit/local inspection.
-
-Full import gate remains:
+Thumbnail-prescreened search produced:
 
 ```text
-official CC recheck -> download -> near-9:16 -> duration -> audible audio -> 4-frame Luna clean review -> production only on PASS
+Thumbnail prescreen: 2 selected / 30 reviewed / 45 raw CC
+Creative Commons cat candidates: 2
 ```
 
-Any production YouTube clip must carry `clean_footage_approved=true`.
-
-## Current implementation: YouTube CC v5 prescreen
-
-`pyproject.toml` now maps:
+Candidates:
 
 ```text
-vv-cat-youtube = vv_knopka.youtube_cat_source_v5:main
+01 nWieRK7Fw-g | 10,628,088 views | 태어나서 깻잎 처음 맛본 고양이의 반응ㅋㅋㅋ | 걸뽀 | clean-thumb=0.90
+02 hxXfevBB9Zs | 1,347,892 views | 🐱😻 Kucing Kaget!!! 🤣🤣🤣🤣🤣 | Kumpulan Video Hewan Lucu | clean-thumb=0.90
 ```
+
+Candidate 2 looked like an aggregator/compilation channel from its channel name and was not preferred.
+
+## Critical finding: thumbnail PASS can still hide packaged video
+
+User ran:
+
+```powershell
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 1
+```
+
+The full 2160×3840 source downloaded, then strict clean gate rejected it:
+
+```text
+ValueError: YouTube CC candidate passed the license/format gates but failed the clean-footage anti-repost gate:
+Frames visibly include livestream/social chat UI, creator branding, and large Korean caption overlays in a split-screen presentation.
+```
+
+So thumbnail-only prescreen is useful but insufficient. The final temporal gate worked correctly.
+
+## Current implementation: v5.1 low-resolution temporal preflight
 
 New module:
 
 ```text
-src/vv_knopka/youtube_cc_prescreen.py
+src/vv_knopka/youtube_cc_preflight.py
 ```
 
-Official `cc-search` v5 now does:
+`vv-cat-youtube` still routes to `youtube_cat_source_v5:main`, but the v5 implementation has been upgraded to v5.1 behavior.
+
+### Search
+
+Official `cc-search` now does:
 
 ```text
-exact YouTube API CC search
--> default queries: funny cat / funny kitten / cat playing / cat reaction
--> larger ranked CC pool
--> enrich canonical channel + thumbnail
--> max one candidate per channel
+exact API CC search
+-> funny cat / funny kitten / cat playing / cat reaction
+-> reject-memory filter for locally failed video IDs
+-> one candidate per channel
 -> Luna thumbnail prescreen
--> require domestic cat
--> reject branding/@handle/avatar/social UI/watermark/large caption/split-screen/ranking/repost packaging
--> save only clean-looking candidates to official report
+-> official report
 ```
 
-Thumbnail prescreen is only a cheap prefilter. It does not replace the final 4-frame gate after `cc-import` downloads the actual video.
-
-Expected v5 header:
+Expected header:
 
 ```text
-YouTube CC search v5: official API + clean thumbnail prescreen
-No OAuth/channel login; thumbnails only at prescreen; no media download
+YouTube CC search v5.1: official API + clean thumbnail prescreen + reject memory
 ```
 
-Output candidate label is `[API-CC+CLEAN?]` and includes `clean-thumb=<confidence>`.
+Known failed video IDs are read from:
+
+```text
+runtime/slots/*/youtube_clean_reviews/*.json
+```
+
+If `clean_footage_approved=false`, that video ID is omitted from future official search results before thumbnail review. This should exclude `nWieRK7Fw-g` on the next run.
+
+### Import
+
+Official `cc-import` now uses two visual stages:
+
+```text
+1. official API status.license=creativeCommon recheck
+2. LOW-RES preview download (prefer <=360p)
+3. 4-frame Luna clean-footage review on preview
+4. if PREVIEW REJECT -> stop; DO NOT download production-quality media
+5. if PREVIEW PASS -> download full-quality source
+6. real ffprobe near-9:16 + duration + audible-audio gates
+7. full-quality 4-frame Luna clean review
+8. only final PASS may remain in production sources.json
+```
+
+Expected pass output begins:
+
+```text
+Low-res temporal clean preflight: PASS | confidence=...
+```
+
+and later:
+
+```text
+Full clean-footage gate: PASS | confidence=...
+```
+
+This preserves the strict final gate while avoiding full-quality downloads for obviously packaged/chat/overlay videos.
+
+The yt-dlp warning about missing JS runtime was non-fatal in the observed candidate-1 run; download succeeded. It is not the cause of the clean rejection.
 
 ## Tests / CI
 
-Latest code-head CI after v5:
+Preflight/reject-memory regression tests cover:
+
+- reading failed clean-review video IDs;
+- filtering known rejects from search candidate pools;
+- low-res preflight rejection before production import;
+- low-res preflight pass metadata.
+
+GitHub code-head CI:
 
 ```text
-73 passed in 0.59s
+77 passed in 0.59s
 Verify pilot lock: success
 ```
 
-Windows-bootstrap was still running at that check. Recheck live final-head CI before claiming the entire latest workflow is green.
+Windows-bootstrap was still running at that exact check. Documentation commits followed; always inspect live final HEAD/CI before making a stronger claim.
 
 ## Immediate next local step
 
@@ -105,17 +160,9 @@ git pull
 .\.venv\Scripts\vv-cat-youtube.exe cc-search
 ```
 
-Expected pytest ≈ **73 passed**. `cc-search` now makes a few small Luna thumbnail-review calls under the existing `$10` budget.
+Expected pytest ≈ **77 passed**.
 
-User should send the complete new `cc-search` output. IMPORTANT: v5 overwrites `runtime/trends/youtube-cat-cc-official.json`; after that, candidate numbers refer to the new clean-prescreened report, not the old 15-item list.
-
-Then import promising candidates one by one:
-
-```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate N
-```
-
-A thumbnail PASS may still fail the strict full-video gate; do not bypass it. Once several clean YouTube CC clips pass, render slot 2 and compare against the accepted Pexels baseline.
+Send the new `cc-search` output. The previously rejected `nWieRK7Fw-g` should be skipped. Do not import from the stale two-candidate report after re-running search; use the new candidate ranks.
 
 ## Ordinary YouTube test-only
 
