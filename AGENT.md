@@ -33,14 +33,14 @@ Until the user explicitly changes it:
 - One YouTube channel for the pilot.
 - Project-side OpenAI budget cap: **$10 USD**.
 - `auto_publish=false` and human review required.
-- Outputs only to `runtime/ready_for_review`.
+- Production outputs only to `runtime/ready_for_review`.
 - Do not silently add paid providers or increase paid usage.
 
 ## 4. Current cat production rules
 
 - Cat renderer = local FFmpeg; MoneyPrinterTurbo is not needed.
-- **Production mode is now a broad cat compilation, not a narrow themed episode.**
-- `render-animal` must ignore stale `trend-theme.json` and build a generic cat plan (`Котики` / `Cats`).
+- **Production mode is a broad cat compilation, not a narrow themed episode.**
+- `render-animal` ignores stale `trend-theme.json` and builds a generic cat plan (`Котики` / `Cats`).
 - Reddit/community/theme tooling may remain as research/reference tooling, but it does not drive production rendering unless the user explicitly changes this decision again.
 - No voiceover.
 - No background music.
@@ -49,15 +49,23 @@ Until the user explicitly changes it:
 - Intro/inter-clip cards repeat the unique numbered episode title; end card is localized.
 - Windows card font = accepted **Impact** (`C:\Windows\Fonts\impact.ttf`); do not restart font experiments without a concrete reason.
 - Cat stock must have genuine audible source audio; effectively silent clips fail closed.
-- Cat source footage must already be vertical and close to **9:16**. Landscape 16:9, square, and visibly-wide portrait footage must fail the source gate rather than relying on blur-fill to disguise it.
+- Cat source footage must already be vertical and close to **9:16**. Landscape 16:9, square, and visibly-wide portrait footage fail the source gate rather than relying on blur-fill.
 - Current configured width/height tolerance from 9/16 is `0.08`.
 - Cached/local/imported clips must be checked with real `ffprobe` dimensions as well as provider metadata.
-- If fewer than 5 unique licensed, audible, vertical clips are available, fail closed.
-- Every accepted clip keeps provenance/licensing metadata.
-- Do not implement raw social reposting as the default workflow.
+- If fewer than 5 unique licensed, audible, vertical production clips are available, fail closed.
+- Every production clip keeps provenance/licensing metadata.
+
+## 5. YouTube / UGC source rules
+
+- YouTube Creative Commons Attribution is an allowed production candidate only after the source metadata is re-verified as CC BY and attribution is preserved.
+- `vv-cat-youtube cc-search` is the no-key discovery path for verified-CC candidates.
+- `vv-cat-youtube cc <slot> --url ...` may download/import only after CC verification, then the normal 9:16/audio gates still apply.
+- Standard/unverified YouTube media is **not** production media merely because the current use is a local experiment.
+- A separate test-only path may accept an already-local file for private quality comparison, but it must stay under `runtime/test_only`, carry `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, and never enter production `sources.json` or `runtime/ready_for_review`.
+- Do not add automatic downloading of standard/unverified YouTube/TikTok media as the normal workflow.
 - Reddit/community posts are references only; a public post is not reuse permission.
 
-## 5. YouTube/content-safety rules
+## 6. YouTube/content-safety rules
 
 - The system is not a mass-upload spam bot.
 - Avoid highly repetitive or near-duplicate uploads.
@@ -65,7 +73,7 @@ Until the user explicitly changes it:
 - Preserve AI-disclosure metadata where relevant.
 - Human review remains required before publishing during the pilot.
 
-## 6. Architecture constraints
+## 7. Architecture constraints
 
 - `VV_knopka` is orchestration/business logic.
 - Do not vendor/fork the entire MoneyPrinterTurbo codebase into Git history without a strong reason.
@@ -75,7 +83,7 @@ Until the user explicitly changes it:
 - Keep secrets out of Git. `.env` must never be committed.
 - Real meow binary stays local/ignored (`runtime/assets/...`) or via `CAT_MEOW_FILE`.
 
-## 7. Git workflow
+## 8. Git workflow
 
 Development branch: `mvp/pilot-scaffold`.
 Draft review vehicle: **PR #1** into `main`.
@@ -85,26 +93,28 @@ Draft review vehicle: **PR #1** into `main`.
 - Keep `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md` current.
 - GitHub wins over docs on mechanical facts such as SHA/CI/file list.
 
-## 8. Current milestone
+## 9. Current milestone
 
 Slot 1 Russian AI Short (octopus) has manual **QUALITY PASS**.
 
-Current focus = finalizing slot 2 cat format:
+Slot 2 cat base format now also has an important manual checkpoint:
 
 1. Impact cards / real meow / no voice / no BGM are accepted.
-2. User manually reviewed the first trend-themed render as only “more or less”.
-3. Two concrete problems were identified: landscape 16:9 stock looks bad, and narrow themes make otherwise-valid cat clips feel unrelated.
-4. Production decision: revert to a simple broad cat compilation and require near-9:16 source footage.
-5. Next local validation should rerender slot 2 and inspect whether all selected sources are vertical and the generic `#001 — Котики` framing feels coherent.
-6. Only after cat format/sourcing is accepted, return to slot 3 / remaining pilot.
+2. Narrow themes were rejected in favor of generic `#001 — Котики`.
+3. Near-9:16 gate is locally confirmed: the latest user render selected six sources and **all six were exactly 720×1280 (9:16)**.
+4. User's verdict on this generic vertical render: **«да, норм»**.
+5. Current focus is no longer fixing orientation; it is testing whether verified YouTube Creative Commons can supply funnier/more UGC-like cats than Pexels.
+6. Keep Pexels/Pixabay as licensed fallback.
+7. Ordinary unverified YouTube files, if used for private quality comparison, stay in the isolated test-only flow and are never production candidates.
+8. Only after cat sourcing is accepted, return to slot 3 / remaining pilot.
 
-## 9. Language policy for cats
+## 10. Language policy for cats
 
 - Never publish translated duplicates of the same cat episode.
 - Long-run cadence: `en, en, en, en, ru` (80% EN / 20% RU).
 - Frozen pilot: slot 2 RU, remaining six cat slots EN.
 - Do not use `Daily Dose of Cats` or a close imitation.
 
-## 10. Context persistence
+## 11. Context persistence
 
 At the end of every substantial work session, update handoff/progress so a fresh chat can resume from GitHub without relying on conversational memory.
