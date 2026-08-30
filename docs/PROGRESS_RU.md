@@ -6,37 +6,28 @@
 
 - Python `3.11.0`.
 - Frozen pilot полностью отрендерен: **15/15** и визуально принят пользователем.
-- После первого long-run pull:
+- Последний показанный long-run test run:
 
 ```text
-108 passed in 0.99s
-OpenAI spent: $0.1786 / $10.00
-auto_publish: False
-publication gate: PASS
-long_run: True
+111 passed in 1.23s
+vv longrun-next --dry-run -> slot 16 animal_compilation / en
 ```
 
-- `vv longrun-next --dry-run` корректно определил:
-
-```text
-slot 16: animal_compilation / en -> ...slot-16-en-animals.mp4
-```
-
-## Первый реальный long-run slot — safe failure
-
-`vv longrun-next` начал slot 16 EN cats, но sourcing остановился:
+- Реальный retry slot 16 снова остановился fail-closed:
 
 ```text
 Vertical audible-source gate found only 1/5 usable cat clips
 ```
 
-Это подтвердило, что schedule/CLI/resume работают, но старая all-history source exclusion не подходит для бесконечной эксплуатации: после семи pilot cat episodes почти весь доступный vertical + audible stock уже считался навсегда запрещённым.
+`runtime/slots/16` не удалять: failed audit содержит один уже принятый fresh local source.
 
-Не удалять `runtime/slots/16`: failed audit содержит один уже валидированный fresh clip и v5 recovery может его переиспользовать при retry.
+## Уточнённый root cause
 
-## Fix — rolling cat source cooldown
+Rolling cooldown сам по себе не решает depletion. Он делает старые IDs снова **разрешёнными**, но current Pexels/Pixabay search не обязан заново вернуть те же старые IDs. Поэтому slot16 снова остался на `1/5`, хотя cat #001/#002 уже вышли из cooldown.
 
-Текущая политика:
+## Fix — cooled local history fallback
+
+Текущая long-run policy:
 
 ```toml
 [long_run]
@@ -45,36 +36,37 @@ cat_source_cooldown_episodes = 5
 
 Поведение:
 
-- pilot slots сохраняют all-history source protection;
-- long-run защищает source IDs из последних 5 rendered cat episodes;
-- более старый source становится eligible fallback;
-- после повторного использования source снова попадает в cooldown;
-- never-used stock ранжируется раньше cooled-down reuse;
-- последние 5 episodes исключаются ещё до Luna/candidate selection;
-- final audit отдельно показывает recent protected overlap и `reused_cooled_down_sources`;
-- provenance/commercial-use, near-9:16, audible audio, Luna relevance и minimum 5 unique clips не ослаблены.
+- pilot сохраняет all-history source protection;
+- long-run блокирует IDs последних 5 rendered cat episodes;
+- never-used remote stock остаётся первым приоритетом;
+- older cooled-down remote IDs допустимы как fallback;
+- после фактического fresh minimum-count failure система дополнительно может seed локальные Pexels/Pixabay files из rendered episodes вне cooldown;
+- local historical files повторно проходят current near-9:16 и audible-audio проверки перед acceptance;
+- YouTube и прочие providers этим fallback не импортируются;
+- на retry после существующего minimum-count audit accepted fresh clips сначала восстанавливаются, затем cooled local history добавляется **без повторения того же fresh discovery pass**;
+- если fresh failure случается впервые, recover+local fallback выполняется в том же `vv longrun-next` invocation;
+- final reuse audit отдельно фиксирует cooled-down reuse и продолжает fail-closed на protected recent overlap.
 
-Для slot 16 / cat #008 protected episodes = cat #003–#007; sources из #001/#002 могут вернуться только после fresh search как fallback.
+Для slot 16 protected cat episodes = #003–#007. Eligible local fallback = ранние #001/#002. Один свежий slot16 clip должен остаться первым в manifest.
 
 ## Tests / CI
 
-Новые regressions проверяют:
-
-- rolling window выбирает ровно последние 5 rendered cat slots;
-- старые cooled-down identities не считаются recent reuse failure;
-- fresh Pexels result на более глубокой странице приоритетнее старого cooled candidate с первой страницы;
-- существующий pilot all-history reuse gate остаётся прежним.
-
-Code-head `487ccd6946c2a3e5ed405f6619f904e02d3dd7bf`:
+Code-head `91e2932e2d9e3e2868288584664fabb6f84bc3d9`:
 
 ```text
-111 passed in 0.70s
+114 passed in 0.69s
 publication gate: PASS
 long_run: True
 vv longrun-next --dry-run -> slot 16 EN cats
 ```
 
-Workflow run `33323215094` завершён `success`: Ubuntu test и Windows bootstrap оба green. Последующие docs-only commits двигают branch HEAD; exact CI выше относится к указанному code commit.
+Ubuntu test job green. Windows bootstrap этого run на момент последней проверки ещё выполнялся; recheck live before claiming full workflow green. Docs-only commits после code-head двигают branch HEAD.
+
+Новые regressions проверяют:
+
+- local history seed не берёт recent-blocked source;
+- retry с failed `1/5` audit сохраняет fresh clip и затем добавляет cooled local stock;
+- first fresh minimum failure может перейти к local fallback в том же invocation.
 
 ## Long-run schedule / other features
 
@@ -102,7 +94,7 @@ git pull
 .\.venv\Scripts\vv.exe longrun-next --dry-run
 ```
 
-Ожидается около `111 passed` и снова slot 16.
+Ожидается около `114 passed` и снова slot 16.
 
 Потом:
 
@@ -110,6 +102,6 @@ git pull
 .\.venv\Scripts\vv.exe longrun-next
 ```
 
-Если slot 16 успешно готов — визуально проверить его и `runtime/slots/16/source_reuse_audit.json`, после чего следующий milestone = Windows Task Scheduler. Publication остаётся manual/review-first; `auto_publish=false`.
+Не чистить slot16 перед retry. Если slot 16 успешно готов — визуально проверить его и `runtime/slots/16/source_reuse_audit.json`, после чего следующий milestone = Windows Task Scheduler. Publication остаётся manual/review-first; `auto_publish=false`.
 
 Draft PR #1 остаётся open/draft/unmerged.
