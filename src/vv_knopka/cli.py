@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -18,6 +19,8 @@ from .mpt import MoneyPrinterTurboClient
 from .mpt_health import require_mpt_available
 from .openai_client import OpenAIPlanner
 from .pexels_curator import prepare_pexels_materials
+from .pilot_conveyor import run_batch
+from .publication_metadata import write_upload_metadata
 from .settings import load_settings
 
 
@@ -103,14 +106,20 @@ def main() -> None:
     sub.add_parser("status")
     plan = sub.add_parser("plan")
     plan.add_argument("slot", type=int)
-    plan.add_argument("--topic", default=None, help="Explicit topic/animal requested by the user")
     ai = sub.add_parser("render-ai")
     ai.add_argument("slot", type=int)
     animal = sub.add_parser("render-animal")
     animal.add_argument("slot", type=int)
+    next_cmd = sub.add_parser("pilot-next", help="Render the next missing pilot slot into ready_for_review")
+    next_cmd.add_argument("--dry-run", action="store_true")
+    batch = sub.add_parser("pilot-batch", help="Render several missing pilot slots, stopping on first failure")
+    batch.add_argument("--count", type=int, default=3)
+    batch.add_argument("--dry-run", action="store_true")
+    plan.add_argument("--topic", default=None, help="Explicit topic/animal requested by the user")
     args = parser.parse_args()
 
-    settings = load_settings(args.config)
+    config_path = Path(args.config).resolve()
+    settings = load_settings(config_path)
     ledger = BudgetLedger(settings)
 
     if args.command == "init-pilot":
@@ -126,6 +135,18 @@ def main() -> None:
         print(f"OpenAI spent: ${ledger.spent_usd():.4f} / ${settings.budget_usd:.2f}")
         print(f"auto_publish: {settings.auto_publish}")
         print(f"publication gate: {'PASS' if publication_gate(settings).passed else 'FAIL'}")
+        return
+
+    if args.command in {"pilot-next", "pilot-batch"}:
+        count = 1 if args.command == "pilot-next" else max(int(args.count), 0)
+        try:
+            outputs = run_batch(settings, config_path=config_path, count=count, dry_run=bool(args.dry_run))
+        except RuntimeError as exc:
+            raise SystemExit(f"Pilot conveyor stopped: {exc}") from exc
+        if outputs:
+            print("Pilot conveyor outputs:")
+            for output in outputs:
+                print(output)
         return
 
     slot = _slot(settings, args.slot)
@@ -153,9 +174,6 @@ def main() -> None:
             raise SystemExit(f"missing {plan_path}; run `vv plan {slot.slot}` first")
         content = json.loads(plan_path.read_text(encoding="utf-8"))
 
-        # Fail before material preparation if the separate local MPT service is
-        # not running. This matters for unattended/conveyor operation and avoids
-        # wasting provider/vision work only to discover a refused localhost port.
         try:
             require_mpt_available(settings)
         except RuntimeError as exc:
@@ -177,16 +195,15 @@ def main() -> None:
         task = mpt.wait(task_id)
         (slot_dir / "mpt-task.json").write_text(json.dumps(task, ensure_ascii=False, indent=2), encoding="utf-8")
         output = settings.runtime_dir / "ready_for_review" / f"slot-{slot.slot:02d}-{slot.language}-ai.mp4"
-        print(mpt.download_video(task, output))
+        rendered = Path(mpt.download_video(task, output))
+        print(rendered)
+        print(f"Upload metadata: {write_upload_metadata(settings, slot=slot, output=rendered, slot_dir=slot_dir)}")
         return
 
     if args.command == "render-animal":
         if slot.pipeline != "animal_compilation":
             raise SystemExit("render-animal can only be used on animal_compilation slots")
 
-        # Product decision after manual review: cat videos are broad cat compilations,
-        # not narrow themed episodes. A narrow title made otherwise-good cat clips
-        # look irrelevant when stock could not consistently satisfy the theme.
         content = build_generic_cat_plan(slot.language)
         effective_plan = slot_dir / "effective-plan.json"
         effective_plan.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -196,11 +213,6 @@ def main() -> None:
         )
 
         source_manifest = slot_dir / "sources.json"
-
-        # Cat compilations are fully local FFmpeg renders. MoneyPrinterTurbo does
-        # not need to be running. Before editing, require licensed stock with
-        # genuine source audio and a vertical Short-friendly source frame. YouTube
-        # sources additionally require the clean-footage anti-repost vision gate.
         source_manifest = ensure_audio_animal_sources(
             settings,
             content,
@@ -238,7 +250,7 @@ def main() -> None:
         print(f"End card: {episode_data['end_text']}")
 
         output = settings.runtime_dir / "ready_for_review" / f"slot-{slot.slot:02d}-{slot.language}-animals.mp4"
-        print(
+        rendered = Path(
             render_cat_v3(
                 settings,
                 source_manifest,
@@ -248,6 +260,8 @@ def main() -> None:
                 language=slot.language,
             )
         )
+        print(rendered)
+        print(f"Upload metadata: {write_upload_metadata(settings, slot=slot, output=rendered, slot_dir=slot_dir)}")
         return
 
 
