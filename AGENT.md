@@ -52,7 +52,7 @@ Until the user explicitly changes it:
 - If fewer than 5 unique licensed, audible, vertical production clips are available, fail closed.
 - Every production clip keeps provenance/licensing metadata.
 - Do not force a minimum YouTube-source quota per episode. Grow the accepted clean-source pool over time and retain Pexels/Pixabay as safe fallback.
-- Before scale, preserve cross-episode source history/duplicate controls so accepted clips are not overused.
+- Cross-episode source reuse is audited before highlights/render. One incidental repeated source is allowed; 2+ already-used source identities in one new cat episode fail closed and require refreshing that slot's source pool.
 
 ## 5. YouTube / UGC source rules
 
@@ -109,10 +109,12 @@ Draft review vehicle: PR #1 into `main`.
 
 ## 9. Current milestone
 
-Both Russian proof-of-format videos have manual QUALITY PASS:
+The four proof videos have manual QUALITY PASS:
 
-1. Slot 1 RU AI Short (octopus) = QUALITY PASS.
-2. Slot 2 RU cat compilation = QUALITY PASS after the latest mixed YouTube+stock render.
+1. Slot 1 RU `ai_short` = QUALITY PASS.
+2. Slot 2 RU `animal_compilation` = QUALITY PASS.
+3. Slot 3 EN `ai_short` = QUALITY PASS.
+4. Slot 4 EN `animal_compilation` = QUALITY PASS.
 
 YouTube sourcing status:
 
@@ -120,20 +122,28 @@ YouTube sourcing status:
 - Earlier Pawcsu, livestream/chat, stitched-compilation and bad-aspect candidates remain rejected.
 - The accepted slot-2 mixed render used only one YouTube clip because only one YouTube source had passed all gates. This is expected; do not force a quota.
 
-Immediate next milestone before conveyor launch:
+Current development milestone is **conveyor validation**, not more format experimentation:
 
-1. Slot 3 EN `ai_short` quality test. Previous EN relevance attempt was poor; keep relevance gates strict.
-2. Slot 4 EN `animal_compilation` quality test using the accepted cat format.
-3. Freeze external YouTube title policy: cats use simple numbered on-card identity but more natural/hooky upload titles; fact titles are specific to the actual hook/topic rather than a repeated template.
-4. After both English tests pass, implement a local review-first pilot conveyor runner that finds the next unrendered manifest slot, runs the correct pipeline, respects source/budget gates, writes only to `runtime/ready_for_review`, is resumable, and never auto-publishes.
-5. Only after the runner is proven locally may Windows Task Scheduler cadence be added.
+- `vv pilot-next` renders the next missing manifest slot.
+- `vv pilot-batch --count N` renders several missing slots and stops on the first failure.
+- Existing non-empty `runtime/ready_for_review` MP4 files are resumable completion markers.
+- Conveyor state is written to `runtime/conveyor/state.json`.
+- For AI slots the conveyor may start the local MoneyPrinterTurbo process if it can find the local MPT Python environment; if MPT was already running, it leaves that external process alone.
+- Each successful render writes a `.upload.json` sidecar containing the proposed YouTube title/description, attributions, and explicit review-only/no-auto-publish locks.
+- Cat cross-episode source reuse is audited before highlights/render.
+- Keep `auto_publish=false`; uploader/OAuth is a later explicit phase.
 
-## 10. Language policy for cats
+Immediate local validation should use `vv pilot-next --dry-run` first. With slots 1–4 already rendered on the user's PC, it should identify slot 5 EN AI as next. Then run one real `vv pilot-next` before using larger batches or Windows Task Scheduler.
+
+## 10. Language / title policy
 
 - Never publish translated duplicates of the same cat episode.
-- Long-run cadence: `en, en, en, en, ru` (80% EN / 20% RU).
+- Long-run cat cadence: `en, en, en, en, ru` (80% EN / 20% RU).
 - Frozen pilot: slot 2 RU, remaining six cat slots EN.
 - Do not use `Daily Dose of Cats` or a close imitation.
+- On-card cats remain `#NNN — Котики` / `#NNN — Cats`.
+- Upload-facing cat title family is `Котики, которые сделали мой день 😹 #NNN #shorts` / `Cats That Made My Day 😹 #NNN #shorts`.
+- AI fact upload titles come from the specific plan title/hook and append `#shorts`; do not use one repeated generic `Did You Know...?` template.
 
 ## 11. Context persistence
 
