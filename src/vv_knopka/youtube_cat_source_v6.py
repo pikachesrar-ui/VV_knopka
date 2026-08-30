@@ -9,8 +9,8 @@ from . import youtube_clean_footage_v2 as _clean_v2
 
 
 def _known_rejected_video_ids_v2(runtime_dir: Path) -> set[str]:
-    """Keep durable obvious packaging rejects, but expire ambiguous v1 collage-only decisions."""
-    rejected: set[str] = set()
+    """Keep deterministic format rejects and durable clean-packaging rejects."""
+    rejected = _preflight.known_preflight_rejected_video_ids(runtime_dir)
     current_prompt = _clean_v2.current_clean_prompt_version()
     for path in runtime_dir.glob("slots/*/youtube_clean_reviews/*.json"):
         try:
