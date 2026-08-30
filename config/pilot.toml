@@ -87,6 +87,10 @@ pixabay_vision_max_candidates = 40
 vision_min_confidence = 0.72
 vision_max_estimated_cost_per_call_usd = 0.03
 highlight_vision_max_estimated_cost_usd = 0.05
+# YouTube CC is production-eligible only after a second visual gate confirms
+# the downloaded source is clean footage, not another account's packaged Short/repost.
+youtube_clean_vision_min_confidence = 0.78
+youtube_clean_vision_max_estimated_cost_usd = 0.02
 
 [audio]
 # Global transition SFX remain disabled. Animal-only meow is scoped under [animal].
