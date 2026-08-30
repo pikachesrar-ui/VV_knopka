@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from .settings import Settings
+
+
+_READY_ANIMAL_RE = re.compile(r"^slot-(\d+)-(?:en|ru)-animals\.mp4$", re.IGNORECASE)
 
 
 def _identity(item: dict[str, Any]) -> tuple[str, str] | None:
@@ -34,13 +38,25 @@ def _manifest_identities(path: Path) -> set[tuple[str, str]]:
     return result
 
 
+def _rendered_cat_slots(settings: Settings, *, before_slot: int) -> list[int]:
+    """Discover rendered cat slots from artifacts instead of the finite pilot manifest."""
+    ready_dir = settings.runtime_dir / "ready_for_review"
+    if not ready_dir.exists():
+        return []
+    result: set[int] = set()
+    for path in ready_dir.glob("slot-*-*-animals.mp4"):
+        match = _READY_ANIMAL_RE.match(path.name)
+        if not match or path.stat().st_size <= 0:
+            continue
+        slot = int(match.group(1))
+        if slot < int(before_slot):
+            result.add(slot)
+    return sorted(result)
+
+
 def prior_rendered_cat_identities(settings: Settings, *, before_slot: int) -> set[tuple[str, str]]:
     used: set[tuple[str, str]] = set()
-    animal_slots = {int(value) for value in settings.raw["content"]["animal_slots"]}
-    for slot in sorted(value for value in animal_slots if value < int(before_slot)):
-        ready = settings.runtime_dir / "ready_for_review" / f"slot-{slot:02d}-*-animals.mp4"
-        if not any(settings.runtime_dir.glob(str(ready.relative_to(settings.runtime_dir)))):
-            continue
+    for slot in _rendered_cat_slots(settings, before_slot=before_slot):
         used |= _manifest_identities(settings.runtime_dir / "slots" / f"{slot:02d}" / "sources.json")
     return used
 
