@@ -6,104 +6,129 @@
 
 - Python `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний показанный OpenAI ledger: **$0.0618 / $10.00** (до последнего candidate-1 preflight/import; не угадывать более новый ledger).
-- Последний локальный pytest: **81 passed in 0.55s** (до нового aspect-preflight фикса).
-- Slot 1 RU AI Short = manual QUALITY PASS.
+- Последний показанный OpenAI ledger: **$0.0618 / $10.00** до последнего успешного YouTube clean-review; не угадывать более новый ledger.
+- Последний показанный локальный pytest: **81 passed in 0.55s** до последних aspect-preflight regression tests.
+- Slot 1 RU AI Short (octopus) = manual **QUALITY PASS**.
+- Slot 2 RU cats = manual **QUALITY PASS** after successful mixed YouTube+stock render.
 - Cat renderer = local FFmpeg; real meow + Impact; no voiceover/BGM.
-- Generic slot 2 `#001 — Котики` пользователь оценил как нормальный.
-- Vertical gate подтверждён: accepted stock baseline = 6/6 Pexels clips at **720x1280 / aspect 0.5625**.
+- Production output remains review-first under `runtime/ready_for_review`.
 
-## Official YouTube Creative Commons works locally
+## Первый принятый YouTube CC production source
 
-User enabled YouTube Data API v3 and stores `YOUTUBE_API_KEY` only in ignored `.env`. Never ask for or commit the key.
-Official API discovery + exact `status.license=creativeCommon` works.
-
-## Proven rejects so far
-
-- Three Pawcsu CC clips: reject for visible account branding + large captions.
-- `nWieRK7Fw-g`: reject for livestream/social chat UI, creator branding and Korean caption overlays.
-- `hxXfevBB9Zs`: after contact-sheet-aware v2 recheck, reject as real stitched multi-clip sequence.
-
-Do not crop/blur branding and do not weaken gates merely to raise yield.
-
-## Current search report
-
-Latest user search:
+Current saved-report candidate #2 successfully passed the complete production path:
 
 ```text
-Known full/preview-gate rejects skipped: 3
-Thumbnail prescreen: 2 selected / 30 reviewed / 42 raw CC after reject memory
-Creative Commons cat candidates: 2
-01 cQE-s_wsclw | 1,947,387 views | OMG Cute Cat Domino Reaction #shorts | Hilarious Cats | clean-thumb=0.98
-02 I_pdwiLlvuc | 225,755 views | Cutest Angry Cat You’ll Ever See 😾❤️ | Kawaiipets | clean-thumb=0.90
+I_pdwiLlvuc | Cutest Angry Cat You’ll Ever See 😾❤️ | Kawaiipets
+Rights evidence: youtube_data_api_status_license
+License: YouTube Creative Commons Attribution
+Dimensions: 2160x3840
+Audio mean: -14.8 dB
+Full clean-footage gate: PASS | confidence=0.99
 ```
 
-Do not rerun `cc-search` before testing these current ranks.
+Clean review found the same clearly visible cat in a consistent setting with no creator branding, social UI or added captions. This is the **first YouTube CC source accepted for production**.
 
-## cQE-s_wsclw — FORMAT REJECT FOUND
+All earlier problematic candidates remain rejected:
 
-User tested current candidate 1. Its low-res clean preflight had passed, so production media was downloaded. Deterministic production validation then rejected it:
+- 3 Pawcsu clips — branding/handle/large captions.
+- `nWieRK7Fw-g` — livestream/chat UI + branding/captions.
+- `hxXfevBB9Zs` — real stitched multi-clip sequence after contact-sheet-aware v2 recheck.
+- `cQE-s_wsclw` — full source 502×720, outside near-9:16 tolerance; deterministic preview format gate was added so future cases fail before Luna/full download.
+
+## Latest slot 2 mixed render — QUALITY PASS
+
+User rendered slot 2 after accepting `I_pdwiLlvuc`.
+
+Final output:
 
 ```text
-ValueError: YouTube cat source is 502x720; production/test cat sources must already be near 9:16 portrait
+runtime/ready_for_review/slot-02-ru-animals.mp4
+1080x1920
+~35.75 s
 ```
 
-`502/720 ≈ 0.6972`, whereas 9:16 is `0.5625`; with configured tolerance `0.08`, this is outside the accepted range. The rejection is correct, but it happened too late: full media had already downloaded and the visual preflight had already run.
+FFmpeg emitted several `Non-monotonic DTS` warnings during concat, but completed the render and final faststart copy successfully.
 
-## Aspect/duration preflight — IMPLEMENTED
+User verdict: the result is **better and now liked/accepted**. Treat slot 2 RU cat format as manual QUALITY PASS.
 
-`src/vv_knopka/youtube_cc_preflight.py` now runs deterministic preview gates **before Luna**:
+The render used only one YouTube clip because only one YouTube CC source had passed every production gate at that point. This is expected, not a selector failure. Remaining material came from accepted stock fallback.
+
+## Source-pool optimization decision
+
+Do **not** force a minimum YouTube quota per episode. That would either fail unnecessarily or pressure the system to weaken gates.
+
+Preferred long-run behavior:
 
 ```text
-low-res preview download
--> real ffprobe dimensions
--> near-9:16 check using the same source_aspect_tolerance
--> minimum duration check
--> ONLY THEN Luna temporal clean review
--> ONLY THEN production-quality download
+background/source acquisition
+-> accumulate reusable clean YouTube CC pool over time
+-> retain Pexels/Pixabay fallback
+-> renderer prefers varied accepted sources when available
+-> never require unsafe/unverified media merely to hit a YouTube count
 ```
 
-So a future `502x720` candidate must fail before OpenAI vision spend and before full-quality download.
+As the clean YouTube pool grows to several clips, later compilations should naturally contain more YouTube-origin footage. Add duplicate/history controls before large-scale reuse so the same clip is not overused across episodes.
 
-Deterministic format rejects are written to:
+## Current launch phase
+
+Both Russian proof-of-format videos are now accepted:
+
+1. slot 1 RU AI fact Short = QUALITY PASS;
+2. slot 2 RU cat compilation = QUALITY PASS.
+
+Next before starting the remaining pilot conveyor:
+
+1. **English cat test:** slot 4 (`animal_compilation`, EN) using the accepted cat format.
+2. **English AI-fact test:** slot 3 (`ai_short`, EN); previous slot-3 relevance attempt was poor, so material relevance gate remains important.
+3. Freeze YouTube title policy. Keep simple numbered cat on-card identity, but YouTube-facing titles should be more natural/hooky; AI-fact titles should be topic-specific rather than a repeated template.
+4. Add a local review-first conveyor runner that processes the next unrendered pilot slot(s), writes only to `runtime/ready_for_review`, respects the `$10` budget and never publishes automatically.
+5. Optionally wire that runner to Windows Task Scheduler only after both English test videos pass manual review.
+
+Frozen manifest reminder from `config/pilot.toml`:
 
 ```text
-runtime/slots/<slot>/youtube_preflight_rejects/<video-id>.json
+AI slots:     1,3,5,7,9,11,13,15
+Animal slots: 2,4,6,8,10,12,14
+RU slots:     1,2
 ```
 
-with `durable_reject=true`. Reject memory now includes those files as well as clean-review rejects. Transient preview decode/tool failures are auditable but **not** durable rejects, so a temporary yt-dlp/ffprobe problem does not permanently poison a candidate.
+So the two immediate English tests are slot **3 facts** and slot **4 cats**.
 
-Current v6 version-aware reject memory was updated to preserve these deterministic format rejects while retaining the previous clean-review version rules.
+## Current title direction
+
+Recommended cat YouTube title family (external title, not necessarily the black-card title):
+
+```text
+RU: Котики, которые сделали мой день 😹 #001 #shorts
+EN: Cats That Made My Day 😹 #002 #shorts
+```
+
+Keep the internal/on-card cat series identity simple (`#NNN — Котики` / `#NNN — Cats`). Avoid copying `Daily Dose of Cats` naming.
+
+AI-fact titles should be generated from the actual fact/hook, for example:
+
+```text
+Octopuses Have 3 Hearts — Here’s Why 🐙 #shorts
+```
+
+Avoid using one identical `Did You Know...?` template for every upload.
 
 ## Tests / CI
 
-New regression coverage verifies:
+Code-head aspect-preflight regression CI test job completed successfully including `Verify pilot lock`; Windows bootstrap state should be rechecked if making a full-CI claim. Draft PR #1 remains review-only and must not be merged merely because the RU proof videos passed.
 
-- `502x720` is rejected at low-res format preflight;
-- Luna is not called for that deterministic reject;
-- a durable format-reject audit is written;
-- format rejects are included in future search reject-memory;
-- existing temporal clean preflight behavior remains intact.
+## Immediate next development step
 
-GitHub CI `test` job on code head `0644e8aebef937a5348a224ba4dfe32594513a53` completed successfully, including `Test` and `Verify pilot lock`. Windows-bootstrap was still running at that exact check.
-
-## Immediate next local step
-
-Pull/reinstall, then re-run current candidate 1 **once** from the still-current two-candidate report:
+Proceed with the English proof pair before general batch automation:
 
 ```powershell
-git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 1
+# English AI-fact test
+.\.venv\Scripts\vv.exe run-ai 3
+
+# English cat test (after confirming enough active sources)
+.\.venv\Scripts\vv.exe render-animal 4
 ```
 
-Expected behavior: it should now fail at `low-resolution format preflight before Luna/full download` with dimensions near the same `502x720` aspect (the exact low-res dimensions may be scaled but aspect should match), and create a durable reject audit. The already-downloaded full file can remain on disk for audit; it must not enter production.
+If the actual CLI syntax has changed, inspect `vv --help` / current CLI before telling the user to run these exact commands. Do not guess.
 
-Then, **without rerunning search**, test current candidate 2:
-
-```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 2
-```
-
-Send the output for candidate 2 (and candidate 1 if behavior differs from expectation). Draft PR #1 remains review-only; do not merge without explicit user decision after visual review.
+After both English outputs pass manual review, implement the local pilot conveyor runner and then produce the remaining 11 pilot slots under review-first mode.
