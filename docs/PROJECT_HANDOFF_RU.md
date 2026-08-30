@@ -1,186 +1,139 @@
 # VV_knopka — PROJECT HANDOFF (RU)
 
-Актуальный контекст для нового чата. GitHub — source of truth для code/commit/CI. Рабочая ветка: `mvp/pilot-scaffold`. Draft PR #1 открыт; не merge без отдельного решения пользователя.
+GitHub = source of truth. Ветка `mvp/pilot-scaffold`. Draft PR #1 открыт; не merge без отдельного решения пользователя.
 
-## Pilot — завершён и принят
+## Что завершено
 
-Frozen pilot: 15 Shorts, 8 × `ai_short`, 7 × `animal_compilation`; slot 1 RU AI, slot 2 RU cats, остальные EN.
+- Frozen pilot: 15/15 Shorts, визуально принят пользователем.
+- Первый real long-run slot 16 EN cats / #008 успешно завершён.
+- Следующий deterministic target = slot 17 AI EN.
+- Long-run scheduler = до 3 запусков за ночь: 01:30, 03:30, 05:30 МСК.
+- Последний показанный ledger: `$0.1885 / $10.00`.
 
-Пользователь завершил все 15 ready outputs и после просмотра сообщил, что всё нормально. Pilot не надо перегенерировать ради последующих metadata refinements.
+## Новое явное решение пользователя: auto-publish
 
-Финальный явно показанный pilot status:
+Пользователь попросил:
 
-```text
-OpenAI spent: $0.1786 / $10.00
-auto_publish: False
-publication gate: PASS
-```
+1. будущие generated Shorts сразу выкладывать на YouTube;
+2. уже готовые ролики тоже выложить.
 
-## Long-run — первый реальный slot SUCCESS
-
-Slot 16 EN cats / cat episode #008 успешно завершён на ПК пользователя:
-
-```text
-D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.mp4
-Upload metadata: D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.upload.json
-Long-run conveyor outputs:
-D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.mp4
-```
-
-Следующий deterministic target = slot 17 `ai_short` / EN.
-
-После scheduler runner dry-run пользователь показал:
-
-```text
-OpenAI spent: $0.1885 / $10.00
-auto_publish: False
-publication gate: PASS
-long_run: True
-slot 17: ai_short / en -> ...slot-17-en-ai.mp4
-SUCCESS: scheduled longrun-next completed.
-```
-
-## Long-run cat source policy
-
-Config:
+Поэтому pilot исторически остаётся `auto_publish=false`, но новая секция `[youtube]` намеренно:
 
 ```toml
-[long_run]
-cat_source_cooldown_episodes = 5
+enabled = true
+auto_publish = true
+privacy_status = "public"
+category_id = "15"
+made_for_kids = false
+notify_subscribers = false
 ```
 
-Политика:
+Не откатывать это обратно в review-only без нового решения пользователя.
 
-- Frozen pilot сохраняет all-history protection.
-- Long-run блокирует IDs последних 5 rendered cat episodes.
-- Never-used remote stock ищется/ранжируется первым.
-- Более старый source допустим как fallback; после reuse его cooldown начинается заново.
-- Если fresh remote pass не достигает minimum count, система может seed локальные Pexels/Pixabay files из rendered episodes вне cooldown.
-- Исторические local files заново проходят текущие near-9:16 и audible-audio gates.
-- Retry после minimum-count failure восстанавливает уже принятые local files из failed audit.
-- YouTube/прочие providers local-history fallback не импортирует.
-- Final reuse audit отдельно показывает cooled-down historical reuse.
+## YouTube uploader — реализован
 
-Все quality/safety gates остаются: provenance/commercial-use, near-9:16, audible source audio, Luna relevance, minimum 5 unique clips, fail-closed behavior.
-
-## Long-run commands
-
-```powershell
-.\.venv\Scripts\vv.exe longrun-next --dry-run
-.\.venv\Scripts\vv.exe longrun-next
-.\.venv\Scripts\vv.exe longrun-batch --count 3
-```
-
-- `$10` hard OpenAI budget guard;
-- `auto_publish=false` / human review;
-- AI slot: plan-on-demand -> MPT -> ready output;
-- cat slot: licensed sourcing -> gates -> FFmpeg -> ready output;
-- stop on first failure;
-- existing non-empty MP4 = resume marker;
-- attempt history: `runtime/long_run/state.json`.
-
-AI fact subject cooldown = последние 6 distinct visual anchors. Long-run cat descriptions имеют deterministic variation. Cat numbering продолжается с #008.
-
-## Windows Task Scheduler — approved 3/night test
-
-Пользователь хочет недельный тест с несколькими роликами и одобрил **до 3 generated videos/night**.
-
-Chosen Moscow-time schedule:
+Новые файлы/CLI:
 
 ```text
-01:30 MSK
-03:30 MSK
-05:30 MSK
+src/vv_knopka/youtube_uploader.py
+src/vv_knopka/youtube_cli.py
+docs/YOUTUBE_PUBLISHING_RU.md
+vv-youtube
 ```
 
-`run-longrun-task.ps1`:
-
-- запускает ровно один `longrun-next` за каждый trigger;
-- сначала выполняет `vv status`;
-- пишет лог в `runtime/scheduler/longrun-task.log`;
-- использует exclusive file lock;
-- при ошибке возвращает nonzero и следующий trigger resume того же missing slot;
-- не делает `git pull`, не обновляет код, не публикует;
-- `-DryRun` вызывает только `longrun-next --dry-run`.
-
-`install-longrun-task.ps1` теперь поддерживает **одну Windows Scheduled Task с несколькими daily triggers**.
-
-Default install без `-At` = approved schedule 01:30,03:30,05:30:
+Команды:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1
+.\.venv\Scripts\vv-youtube.exe status
+.\.venv\Scripts\vv-youtube.exe auth
+.\.venv\Scripts\vv-youtube.exe upload-ready --dry-run
+.\.venv\Scripts\vv-youtube.exe upload-ready
 ```
 
-Также сохраняется custom usage:
+Поведение:
+
+- OAuth Desktop app JSON: `runtime/youtube/client_secret.json`.
+- Token: `runtime/youtube/token.json`.
+- Channel binding: `runtime/youtube/channel.json`.
+- scopes = `youtube.upload` + `youtube.readonly`.
+- `auth` открывает browser OAuth и печатает channel title + ID.
+- uploader fail-closed, если текущий OAuth channel ID отличается от сохранённого binding.
+- каждый successful upload пишет `<slot...upload>.youtube.json` receipt.
+- receipt предотвращает duplicate upload при retry.
+- `upload-ready` идёт по slot order; `--newest --limit 1` используется scheduler для только что созданного ролика.
+- requested и actual privacy сохраняются отдельно.
+
+Важно: официальный YouTube `videos.insert` может принудительно ограничить upload до `private` для API projects, подпадающих под YouTube audit requirement. Не утверждать, что ролик public, если API response вернул private.
+
+## Existing backlog
+
+На пользовательском ПК ready backlog сейчас минимум slots 1–16. После OAuth:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "12:00"
-powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "01:00,03:00,05:00"
+.\.venv\Scripts\vv-youtube.exe upload-ready --dry-run
+.\.venv\Scripts\vv-youtube.exe upload-ready
 ```
 
-Task behavior:
+Первый вызов preview-only. Второй загружает все pending по возрастанию slot. При interruption уже успешные slots будут пропущены по receipts.
 
-- current interactive Windows user, password not requested/stored;
-- `StartWhenAvailable`;
-- `MultipleInstances=IgnoreNew`;
-- execution limit 4h;
-- battery run allowed;
-- because overlap is ignored, schedule means **up to 3 videos/day**, not forced parallel renders.
+## Scheduler после auto-publish
 
-For a 7-day test maximum = 21 generated videos. Based on observed pilot/long-run OpenAI spend, planning estimate is roughly **$0.25–0.50 for the week**, while hard project cap remains $10.
+`run-longrun-task.ps1` теперь:
+
+1. lock;
+2. `vv status`;
+3. `vv-youtube status`;
+4. retry одного старого pending upload;
+5. `vv longrun-next`;
+6. upload newest pending ready video;
+7. log.
+
+Если pending YouTube retry не прошёл, scheduler не создаёт новый slot до восстановления публикации. Если generation прошёл, а post-upload упал, следующий trigger сначала повторяет pending upload.
+
+Installer остаётся одной Windows task с default triggers:
+
+```text
+01:30
+03:30
+05:30
+```
+
+## Long-run cat sourcing
+
+- last 5 rendered cat episodes source IDs protected;
+- fresh remote Pexels/Pixabay first;
+- cooled old stock fallback only;
+- local cooled history can seed after fresh minimum failure;
+- local history revalidated 9:16 + audible audio;
+- provenance/commercial-use/Luna/minimum-count gates unchanged.
+
+## Budget / safety
+
+- OpenAI hard cap `$10` unchanged.
+- Не добавлять paid providers без explicit approval.
+- OAuth/token/client secret не коммитить и не просить пользователя вставлять в чат.
+- `runtime/` ignored.
+- PR #1 stays draft/open/unmerged.
 
 ## Tests / CI
 
-Multi-trigger scheduler code commits:
+YouTube uploader regressions добавлены для:
 
-```text
-92145209f9bc68eba3fcbe5e7a2e27725cd2f036  installer
-6838930aeba02441176d5fabd6bb9653697be48f  CI coverage
-```
+- numeric slot-order backlog;
+- newest dry-run selection without OAuth/network;
+- idempotent receipt skip.
 
-Workflow run `33326252717` completed **success**:
+После uploader code Ubuntu job прошёл **117 tests**. Windows job для этого head нужно recheck live перед утверждением полного workflow success.
 
-- Ubuntu test green;
-- Windows bootstrap green;
-- default 3-trigger installer dry-run green;
-- custom single-trigger `-At "12:00"` dry-run green.
+## Immediate continuation
 
-Ubuntu result:
+Нужна только локальная OAuth-настройка:
 
-```text
-114 passed in 0.64s
-publication gate: PASS
-long_run: True
-```
-
-## YouTube / acquisition wording
-
-YouTube Data API = discovery/reference/license metadata, не media-download endpoint. Uploader-declared CC не доказывает chain-of-title и не разрешает любой способ acquisition. Технический clean/geometry/audio PASS не называть доказательством platform compliance.
-
-Long-run automated production должен предпочитать Pexels/Pixabay, owned/creator-supplied или independently authorized downloadable files. yt-dlp capability != official YouTube/API permission.
-
-## Immediate local continuation
-
-Подтянуть latest scheduler installer:
-
-```powershell
-cd D:\KiraS\VV_knopka
-git pull
-powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -DryRun
-```
-
-Dry-run должен показать три времени: `01:30, 03:30, 05:30` и ничего не зарегистрировать.
-
-Если всё верно, реальная установка одной task с тремя triggers:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1
-```
-
-После установки проверить `Registered`, `State`, `Triggers: 3`, `Next run`, затем после первой ночи смотреть `runtime/scheduler/longrun-task.log` и новые files в `runtime/ready_for_review`.
-
-Publishing остаётся manual/review-first; uploader/OAuth не добавлены.
-
-## Git
-
-PR #1 остаётся draft/open/unmerged. Не merge без отдельного решения пользователя.
+1. `git pull`;
+2. `pip install -e ".[dev]"`;
+3. Google Cloud: enable YouTube Data API v3, создать OAuth client типа Desktop app;
+4. сохранить JSON в `runtime/youtube/client_secret.json`;
+5. `vv-youtube auth`;
+6. пользователь присылает только напечатанные channel title + ID, НЕ JSON/token;
+7. после подтверждения канала — dry-run backlog и реальный backlog upload;
+8. затем install scheduler.
