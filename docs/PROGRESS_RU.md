@@ -7,7 +7,7 @@
 - Python `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
 - Последний показанный OpenAI ledger: **$0.0618 / $10.00** до последнего успешного YouTube clean-review; не угадывать более новый ledger.
-- Последний показанный локальный pytest: **81 passed in 0.55s** до последних aspect-preflight regression tests.
+- Последний показанный локальный pytest: **81 passed in 0.55s** до последних aspect-preflight / MPT-health regression tests.
 - Slot 1 RU AI Short (octopus) = manual **QUALITY PASS**.
 - Slot 2 RU cats = manual **QUALITY PASS** after successful mixed YouTube+stock render.
 - Cat renderer = local FFmpeg; real meow + Impact; no voiceover/BGM.
@@ -71,15 +71,15 @@ As the clean YouTube pool grows to several clips, later compilations should natu
 
 ## Current launch phase
 
-Both Russian proof-of-format videos are now accepted:
+Both Russian proof-of-format videos are accepted:
 
 1. slot 1 RU AI fact Short = QUALITY PASS;
 2. slot 2 RU cat compilation = QUALITY PASS.
 
 Next before starting the remaining pilot conveyor:
 
-1. **English cat test:** slot 4 (`animal_compilation`, EN) using the accepted cat format.
-2. **English AI-fact test:** slot 3 (`ai_short`, EN); previous slot-3 relevance attempt was poor, so material relevance gate remains important.
+1. **English AI-fact test:** slot 3 (`ai_short`, EN); previous slot-3 relevance attempt was poor, so material relevance gate remains important.
+2. **English cat test:** slot 4 (`animal_compilation`, EN) using the accepted cat format.
 3. Freeze YouTube title policy. Keep simple numbered cat on-card identity, but YouTube-facing titles should be more natural/hooky; AI-fact titles should be topic-specific rather than a repeated template.
 4. Add a local review-first conveyor runner that processes the next unrendered pilot slot(s), writes only to `runtime/ready_for_review`, respects the `$10` budget and never publishes automatically.
 5. Optionally wire that runner to Windows Task Scheduler only after both English test videos pass manual review.
@@ -92,7 +92,58 @@ Animal slots: 2,4,6,8,10,12,14
 RU slots:     1,2
 ```
 
-So the two immediate English tests are slot **3 facts** and slot **4 cats**.
+## Slot 3 EN — current state / MPT blocker
+
+User successfully created:
+
+```text
+runtime/slots/03/plan.json
+```
+
+Then ran `vv render-ai 3`. The material stage succeeded and found/reused:
+
+```text
+Using duration-sufficient approved stock: 4 unique sources, 79.0s reusable footage
+Curated stock materials: 4
+```
+
+Render then failed before creating an MPT task with:
+
+```text
+httpx.ConnectError / WinError 10061
+```
+
+This means the separate local MoneyPrinterTurbo API was not running/listening at the configured local endpoint. It is not an OpenAI/material-selection failure. The already prepared slot-3 plan/material cache can be reused; do not regenerate them just because MPT was offline.
+
+MoneyPrinterTurbo remains a separate upstream service and should be started from the local ignored checkout in another terminal. Current upstream documented API startup:
+
+```powershell
+cd D:\KiraS\VV_knopka\MoneyPrinterTurbo
+uv run python main.py
+```
+
+(or `python main.py` from its active environment). API docs should then be reachable at `http://127.0.0.1:8080/docs`.
+
+## MPT early health preflight — IMPLEMENTED
+
+New module:
+
+```text
+src/vv_knopka/mpt_health.py
+```
+
+`vv render-ai SLOT` now checks MPT reachability **before** preparing/reviewing materials. If MPT is offline, it exits with a short actionable message telling the user to start `uv run python main.py`, instead of doing provider/vision work first and ending in a long `httpx.ConnectError` traceback.
+
+This is intentionally only a health preflight for now. VV_knopka does **not** automatically spawn or kill MoneyPrinterTurbo yet. Process lifecycle should be implemented with the future `pilot-next`/conveyor runner so unattended operation can start MPT safely and know when it is ready.
+
+GitHub CI on the MPT-health code head:
+
+```text
+86 passed in 0.64s
+Verify pilot lock: success
+```
+
+Windows-bootstrap was still running at that exact check; do not claim the entire workflow complete without rechecking.
 
 ## Current title direction
 
@@ -113,22 +164,27 @@ Octopuses Have 3 Hearts — Here’s Why 🐙 #shorts
 
 Avoid using one identical `Did You Know...?` template for every upload.
 
-## Tests / CI
+## Immediate next local step
 
-Code-head aspect-preflight regression CI test job completed successfully including `Verify pilot lock`; Windows bootstrap state should be rechecked if making a full-CI claim. Draft PR #1 remains review-only and must not be merged merely because the RU proof videos passed.
-
-## Immediate next development step
-
-Proceed with the English proof pair before general batch automation:
+Start MPT in a second PowerShell:
 
 ```powershell
-# English AI-fact test
-.\.venv\Scripts\vv.exe run-ai 3
-
-# English cat test (after confirming enough active sources)
-.\.venv\Scripts\vv.exe render-animal 4
+cd D:\KiraS\VV_knopka\MoneyPrinterTurbo
+uv run python main.py
 ```
 
-If the actual CLI syntax has changed, inspect `vv --help` / current CLI before telling the user to run these exact commands. Do not guess.
+Verify `http://127.0.0.1:8080/docs`, then in the VV_knopka terminal:
 
-After both English outputs pass manual review, implement the local pilot conveyor runner and then produce the remaining 11 pilot slots under review-first mode.
+```powershell
+cd D:\KiraS\VV_knopka
+git pull
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\vv.exe render-ai 3
+```
+
+Expected test count around **86 passed**. Do **not** rerun `vv plan 3`; existing plan and 4-source/79s material cache should be reused.
+
+After slot 3 renders, visually inspect it. If EN AI facts pass, render slot 4 EN cats. After both EN proofs pass, implement the local review-first conveyor runner and only then consider Windows Task Scheduler / later upload OAuth.
+
+Draft PR #1 remains review-only; do not merge without explicit user decision after visual review.
