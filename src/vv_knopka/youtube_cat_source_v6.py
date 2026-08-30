@@ -8,14 +8,6 @@ from . import youtube_cc_preflight as _preflight
 from . import youtube_clean_footage_v2 as _clean_v2
 
 
-# Patch only the clean-review dependency points before v5 is imported.
-# The established API/search/download implementation remains unchanged.
-_v4.review_clean_youtube_footage = _clean_v2.review_clean_youtube_footage
-_v4.clean_review_clip_metadata = _clean_v2.clean_review_clip_metadata
-_preflight.review_clean_youtube_footage = _clean_v2.review_clean_youtube_footage
-_preflight.clean_review_clip_metadata = _clean_v2.clean_review_clip_metadata
-
-
 def _known_rejected_video_ids_v2(runtime_dir: Path) -> set[str]:
     """Keep durable obvious packaging rejects, but expire ambiguous v1 collage-only decisions."""
     rejected: set[str] = set()
@@ -40,13 +32,20 @@ def _known_rejected_video_ids_v2(runtime_dir: Path) -> set[str]:
     return rejected
 
 
-_preflight.known_rejected_video_ids = _known_rejected_video_ids_v2
-
-# Import after dependency patching so v5 binds the patched helpers.
-from . import youtube_cat_source_v5 as _v5  # noqa: E402
+def _activate_v2_gate() -> None:
+    """Patch only CLI dependency points; importing this module has no global side effects."""
+    _v4.review_clean_youtube_footage = _clean_v2.review_clean_youtube_footage
+    _v4.clean_review_clip_metadata = _clean_v2.clean_review_clip_metadata
+    _preflight.review_clean_youtube_footage = _clean_v2.review_clean_youtube_footage
+    _preflight.clean_review_clip_metadata = _clean_v2.clean_review_clip_metadata
+    _preflight.known_rejected_video_ids = _known_rejected_video_ids_v2
 
 
 def main() -> None:
+    _activate_v2_gate()
+    # Import only after activation so v5 binds the patched helper functions.
+    from . import youtube_cat_source_v5 as _v5
+
     _v5.main()
 
 
