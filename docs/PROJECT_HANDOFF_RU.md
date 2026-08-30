@@ -37,40 +37,21 @@ Current schedule:
 
 Pipeline cycle configurable через `[long_run].pipeline_cycle`, сейчас `animal_compilation, ai_short`. AI language сейчас EN. Cat long-run language cycle начинает новый цикл после pilot: `en,en,en,en,ru`.
 
-## Первый реальный long-run запуск
+## Реальный slot 16 — два safe failures
 
-На ПК пользователя после pull/install/tests:
-
-```text
-108 passed in 0.99s
-OpenAI spent: $0.1786 / $10.00
-auto_publish: False
-publication gate: PASS
-long_run: True
-slot 16: animal_compilation / en -> ...slot-16-en-animals.mp4
-```
-
-Реальный `vv longrun-next` корректно начал slot 16, но sourcing остановился fail-closed:
+На ПК пользователя long-run CLI/schedule подтверждены локально. Последний показанный retry:
 
 ```text
-Vertical audible-source gate found only 1/5 usable cat clips
+111 passed in 1.23s
+vv longrun-next --dry-run -> slot 16 animal_compilation / en
+vv longrun-next -> Vertical audible-source gate found only 1/5 usable cat clips
 ```
 
-Это не CLI/renderer bug. Причина — старое правило source history навсегда исключало все IDs из семи pilot cat episodes. Для бесконечного режима finite Pexels/Pixabay vertical+audible pool при таком правиле неизбежно истощается.
+Rolling cooldown уже был активен, поэтому второй `1/5` уточнил root cause: просто разрешить старые IDs недостаточно. Pexels/Pixabay current search не обязан снова вернуть именно те старые IDs, которые уже использовались в ранних episodes.
 
-## Long-run cat source cooldown — текущий fix
+Не удалять `runtime/slots/16`: там уже есть failed audit и один принятый fresh local clip.
 
-Новая политика не ослабляет license/audio/aspect/vision/minimum-count gates.
-
-- Frozen pilot сохраняет исходную all-history защиту.
-- Long-run: source блокируется, если он использовался в **любом из последних 5 rendered cat episodes**.
-- После выхода из этого окна source снова eligible как fallback.
-- Если его снова используют, cooldown начинается заново автоматически, потому что новый ready episode попадает в artifact history.
-- Never-used stock имеет приоритет над cooled-down reuse.
-- Последние 5 cat episodes остаются полностью защищены на этапе sourcing.
-- Final reuse audit проверяет protected recent window и отдельно записывает `reused_cooled_down_sources`.
-
-Для slot 16 / cat #008 это означает: источники cat #003–#007 защищены; достаточно старые sources из #001/#002 могут вернуться только если свежего stock не хватает.
+## Long-run cat source policy — текущий fix
 
 Config:
 
@@ -79,9 +60,20 @@ Config:
 cat_source_cooldown_episodes = 5
 ```
 
-`animal_audio_sources_v4.py` теперь разделяет remote candidates на never-used и cooled-down historical. Сначала сканирует/ранжирует fresh; cooled-down stock заполняет остаток candidate pool только как fallback. Confirmed-silent remote media по-прежнему отбрасывается до Luna.
+Политика:
 
-`animal_audio_sources_v5.py` recovery также использует active protected window, поэтому валидированный local stock из failed attempt можно восстановить, если он не является recent-blocked.
+- Frozen pilot сохраняет all-history protection.
+- Long-run блокирует source IDs из последних 5 rendered cat episodes.
+- Более старый source становится eligible fallback; после reuse его cooldown начинается заново.
+- Never-used remote stock ищется/ранжируется первым.
+- Если fresh remote pass реально не достигает minimum count, система может использовать **локальные Pexels/Pixabay файлы из rendered episodes, вышедших из cooldown**.
+- Исторический local file не считается автоматически годным: base pipeline повторно проверяет текущие near-9:16 и audible-audio gates.
+- На retry после уже записанного minimum-count failure accepted clips восстанавливаются из `animal_audio_sources.json`, а cooled local history подмешивается сразу, чтобы не оплачивать бессмысленное повторение того же fresh discovery pass.
+- На первом fresh failure fallback происходит в том же invocation: recover accepted -> seed cooled local -> rerun validators.
+- YouTube/другие providers не подмешиваются этим fallback; только Pexels/Pixabay.
+- Final reuse audit продолжает блокировать protected recent overlap и отдельно показывает cooled-down reuse.
+
+Для slot 16 / cat #008 protected episodes = cat #003–#007; local files из cat #001/#002 могут использоваться как fallback. Один fresh clip slot16 остаётся первым кандидатом.
 
 ## Остальной long-run функционал
 
@@ -111,22 +103,26 @@ Long-run automated production должен предпочитать Pexels/Pixab
 
 ## Tests / CI
 
-Code-head `487ccd6946c2a3e5ed405f6619f904e02d3dd7bf` полностью прошёл CI:
+Code-head `91e2932e2d9e3e2868288584664fabb6f84bc3d9` после local-history fallback:
 
 ```text
-111 passed in 0.70s
+114 passed in 0.69s
 publication gate: PASS
 long_run: True
 vv longrun-next --dry-run -> slot 16 EN cats
 ```
 
-Workflow run `33323215094` завершён `success`, включая Ubuntu test и Windows bootstrap. Docs commits после code-head двигают branch HEAD, поэтому этот exact CI относится к указанному code commit.
+Ubuntu test job green. На момент фиксации Windows bootstrap этого run ещё выполнялся; recheck live перед утверждением полного workflow success. Docs commits после code-head двигают branch HEAD.
+
+Regression coverage дополнительно проверяет:
+
+- cooled local history берётся только вне protected recent window;
+- retry с existing `1/5` audit сначала сохраняет fresh clip, затем добавляет cooled local stock;
+- первый fresh minimum failure может перейти к local-history fallback в том же invocation.
 
 ## Immediate local continuation
 
-На ПК пользователя не удалять `runtime/slots/16`: один уже найденный fresh clip из failed audit полезен для recovery.
-
-После pull:
+После pull не удалять `runtime/slots/16`.
 
 ```powershell
 cd D:\KiraS\VV_knopka
@@ -136,13 +132,15 @@ git pull
 .\.venv\Scripts\vv.exe longrun-next --dry-run
 ```
 
-Ожидание: около **111 passed**, dry-run всё ещё slot 16 EN cats.
+Ожидание: около **114 passed**, dry-run всё ещё slot 16 EN cats.
 
-Затем retry одного slot:
+Затем:
 
 ```powershell
 .\.venv\Scripts\vv.exe longrun-next
 ```
+
+Для текущего slot16 retry система должна использовать existing failed audit, восстановить fresh local source, добавить cooled local Pexels/Pixabay из ранних episodes и повторно проверить их перед render.
 
 Если slot 16 SUCCESS, проверить MP4 + `source_reuse_audit.json`; затем можно переходить к Windows Task Scheduler. YouTube uploader/OAuth остаётся отдельной фазой; публикация пока manual/review-first.
 
