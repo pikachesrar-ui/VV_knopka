@@ -4,8 +4,27 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .manifest import Slot
+from .manifest import Slot, animal_episode_number_for_slot, longrun_start_slot
 from .settings import Settings
+
+
+_CAT_DESCRIPTIONS_EN = (
+    "A short collection of cute and funny cats.",
+    "A quick dose of playful, curious and dramatic cats.",
+    "A few cats being charming, chaotic and completely themselves.",
+    "Cute cat moments, tiny surprises and a little feline chaos.",
+    "A short mix of playful cats and unexpectedly funny reactions.",
+    "Thirty-something seconds of cats doing what cats do best.",
+)
+
+_CAT_DESCRIPTIONS_RU = (
+    "Небольшая подборка милых и смешных котиков.",
+    "Короткая подборка любопытных, игривых и немного хаотичных котиков.",
+    "Несколько милых кошачьих моментов и неожиданных реакций.",
+    "Котики, немного хаоса и несколько забавных моментов.",
+    "Короткий микс игривых котиков и смешных кошачьих реакций.",
+    "Полминуты котиков, которые просто делают свои кошачьи дела.",
+)
 
 
 def _with_shorts(title: str) -> str:
@@ -18,8 +37,19 @@ def _with_shorts(title: str) -> str:
 
 
 def _cat_episode_number(settings: Settings, slot: int) -> int:
-    animal_slots = [int(value) for value in settings.raw["content"]["animal_slots"]]
-    return animal_slots.index(int(slot)) + 1
+    return animal_episode_number_for_slot(settings, slot)
+
+
+def _cat_description(settings: Settings, *, slot: Slot, episode: int) -> str:
+    # Preserve byte-stable pilot metadata; variation starts only after the frozen pilot.
+    if slot.slot < longrun_start_slot(settings):
+        return (
+            "Небольшая подборка милых и смешных котиков."
+            if slot.language == "ru"
+            else "A short collection of cute and funny cats."
+        )
+    variants = _CAT_DESCRIPTIONS_RU if slot.language == "ru" else _CAT_DESCRIPTIONS_EN
+    return variants[(max(int(episode), 1) - 1) % len(variants)]
 
 
 def _required_attributions(slot_dir: Path) -> list[str]:
@@ -52,10 +82,9 @@ def build_upload_metadata(
         episode = _cat_episode_number(settings, slot.slot)
         if slot.language == "ru":
             title = f"Котики, которые сделали мой день 😹 #{episode:03d} #shorts"
-            description = "Небольшая подборка милых и смешных котиков."
         else:
             title = f"Cats That Made My Day 😹 #{episode:03d} #shorts"
-            description = "A short collection of cute and funny cats."
+        description = _cat_description(settings, slot=slot, episode=episode)
         attributions = _required_attributions(slot_dir)
     else:
         plan_path = slot_dir / "plan.json"
