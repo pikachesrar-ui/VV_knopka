@@ -10,147 +10,142 @@ Before changing code or giving project-status claims:
 2. Read `docs/PROJECT_HANDOFF_RU.md` completely.
 3. Read `docs/PROGRESS_RU.md` completely for the newest operational checkpoint.
 4. Check the current repository state, active branch, and draft PR #1.
-5. Treat GitHub as the source of truth for code/history; handoff as product intent; `PROGRESS_RU.md` as the live checkpoint.
+5. Treat GitHub as source of truth for code/history; handoff as product intent; `PROGRESS_RU.md` as the live checkpoint.
 
 ## 2. Project goal
 
-Build a review-first short-form video production pipeline for a 15-video YouTube Shorts pilot under **Animals / Nature Curiosities**.
-
-Two pipelines:
+Build a review-first short-form video production pipeline under **Animals / Nature Curiosities** with two formats:
 
 - `ai_short`: original animal/nature fact/story Short through MoneyPrinterTurbo.
 - `animal_compilation`: cat compilation assembled locally with FFmpeg.
 
-## 3. Frozen pilot scope
+The original 15-video pilot is complete and serves as immutable validation history. Current development extends the same review-first system into deterministic unbounded generation.
 
-Until the user explicitly changes it:
+## 3. Frozen pilot — immutable history
 
 - 15 Shorts total.
-- 8 `ai_short`.
-- 7 `animal_compilation`.
-- Exactly 2 Russian experiments total: slot 1 AI + slot 2 cats.
-- Remaining 13 Shorts are English.
-- One YouTube channel for the pilot.
-- Project-side OpenAI budget cap: **$10 USD**.
-- `auto_publish=false` and human review required.
+- 8 `ai_short`, 7 `animal_compilation`.
+- Slot 1 RU AI + slot 2 RU cats; slots 3–15 EN.
+- All 15 ready outputs were generated on the user's machine.
+- User subsequently reported the generated set looks normal/acceptable.
+- Final explicitly shown OpenAI ledger after the pilot: **$0.1786 / $10.00**.
+- Do not rebuild the frozen pilot solely for later metadata refinements.
+
+## 4. Safety locks
+
+Until the user explicitly changes them:
+
+- Project-side OpenAI cap: **$10 USD**.
+- `auto_publish=false`.
+- Human review required.
 - Production outputs only to `runtime/ready_for_review`.
 - Do not silently add paid providers or increase paid usage.
+- No uploader/OAuth in the current phase.
+- Do not merge PR #1 merely because tests pass.
 
-## 4. Current cat production rules
+## 5. Cat production rules
 
 - Cat renderer = local FFmpeg; MoneyPrinterTurbo is not needed.
-- Production mode is a broad cat compilation, not a narrow themed episode.
-- `render-animal` builds a generic cat plan (`Котики` / `Cats`).
-- No voiceover.
-- No background music.
-- One fixed real meow on black intro/transition/end cards.
-- No loud bass/drop/impact/boom SFX.
-- Windows card font = accepted Impact (`C:\Windows\Fonts\impact.ttf`).
-- Cat stock must have genuine audible source audio; effectively silent clips fail closed.
-- Cat source footage must already be vertical and close to 9:16. Current configured width/height tolerance from 9/16 is `0.08`.
-- Cached/local/imported clips must be checked with real ffprobe dimensions as well as provider metadata.
-- If fewer than 5 unique licensed, audible, vertical production clips are available, fail closed.
+- Broad/generic cat compilation; no voiceover and no BGM.
+- Real meow on black intro/transition/end cards; no bass/drop/impact/boom SFX.
+- Windows card font = `C:\Windows\Fonts\impact.ttf` with safe fallback elsewhere.
+- Source footage must be licensed/commercial-use allowed, audible, already vertical and close to 9:16.
+- Current aspect tolerance from 9/16 = `0.08`.
+- Fewer than 5 unique usable clips -> fail closed.
 - Every production clip keeps provenance/licensing metadata.
-- Do not force a minimum YouTube-source quota per episode. Grow the accepted clean-source pool over time and retain Pexels/Pixabay as safe fallback.
-- Cross-episode source reuse is audited before highlights/render. One incidental repeated source is allowed; 2+ already-used source identities in one new cat episode fail closed and require refreshing that slot's source pool.
+- Cross-episode source history is artifact-based and works beyond the pilot: at most one incidental reused identity is allowed by the final gate; 2+ fails closed.
+- Remote files confirmed to have no audio are filtered before Luna/candidate-cap accounting.
+- Pexels/Pixabay are the normal automated downloadable stock path.
 
-## 5. YouTube / UGC source rules
+## 6. YouTube / UGC compliance wording
 
-- YouTube Creative Commons Attribution is an allowed production candidate only after rights evidence is verified, attribution is preserved, and the media passes all source-quality gates.
-- User has YouTube Data API v3 enabled and a local `YOUTUBE_API_KEY` in ignored `.env`; never ask for the key or commit it.
-- `vv-cat-youtube cc-search` must prefer the official YouTube Data API when the key is present: `search.list(videoLicense=creativeCommon)` plus `videos.list` and `status.license == creativeCommon`.
-- Current `vv-cat-youtube` entrypoint is `youtube_cat_source_v6:main`.
-- Official search uses funny-cat query diversity, one candidate per channel, Luna thumbnail prescreen, and local reject memory.
-- Thumbnail prescreen is only a cheap prediction; it never bypasses temporal clean review.
-- Official `cc-import` must recheck `status.license == creativeCommon`, then download a low-res preview.
-- Before Luna, the low-res preview must pass deterministic real-file geometry/duration checks: near-9:16 using the same configured tolerance and minimum clip duration. Deterministic format rejects are durable and included in future search reject-memory.
-- Only after deterministic preview PASS may Luna run the temporal clean review. Full-quality download happens only after both preview stages pass.
-- Full media still must pass real near-9:16, duration, audible-audio, and final clean-footage gates.
-- Clean-footage v2 is contact-sheet-aware: the outer 2x2 analysis sheet is generated by our pipeline and must never itself be treated as source split-screen/collage evidence.
-- `source_frame_collage=true` only if an individual source-frame tile itself contains split-screen/collage/ranking layout.
-- `multi_clip_sequence=true` only with strong evidence that unrelated source clips are sequentially stitched together; ordinary movement/reframing/time progression is not enough.
-- Reject prominent creator/channel names, `@handles`, avatars/banners, social-platform watermarks/UI, large added meme/headline captions, actual split-screen/collage/ranking layouts, and actual already-compiled/repost packaging.
-- Do not crop/blur another account's branding to force a pass; reject the source instead.
-- Any production YouTube clip must carry `clean_footage_approved=true`.
-- Reject memory is version-aware and also includes deterministic durable preview format rejects. Transient preview decode/tool failures must not become permanent rejects.
-- The no-key YouTube CC-filter/yt-dlp path remains fallback/research only (`--no-key`).
-- The clean-footage gate is a presentation/provenance-risk filter, not a substitute for the Creative Commons license check or human review.
-- Standard/unverified YouTube media is not production media merely because current use is local testing.
-- Do not add automatic downloading of standard/unverified YouTube/TikTok media as the normal workflow.
-- YouTube Data API license metadata is uploader-declared evidence, not proof of full chain-of-title or permission to acquire media by any particular method.
-- Do not describe a project-gate PASS as proof that YouTube acquisition itself is platform-compliant.
+- YouTube Data API is used for discovery/reference/license metadata only; `videos.list` is not a media-download endpoint.
+- An uploader-declared Creative Commons license is evidence about declared metadata, not proof of full chain-of-title and not permission for an arbitrary acquisition method.
+- A project geometry/audio/clean-footage PASS is a technical gate only. Never describe it as proof that YouTube acquisition is platform-compliant.
+- `vv-cat-youtube` may be used for discovery/research and technical screening, but long-run production media should come from Pexels/Pixabay, creator-supplied/directly authorized files, owned footage, or another independently authorized downloadable source.
+- Do not describe yt-dlp technical ability as official YouTube/API permission.
+- If an independently authorized file originated from a YouTube reference, preserve attribution/rights evidence and run the same clean-footage/geometry/audio gates on that file.
 - Reddit/community posts are references only; a public post is not reuse permission.
 
-## 6. YouTube/content-safety rules
+## 7. Long-run schedule
 
-- The system is not a mass-upload spam bot.
-- Avoid highly repetitive or near-duplicate uploads.
-- Keep duplicate/similarity gates enabled.
-- Preserve AI-disclosure metadata where relevant.
-- Human review remains required before publishing during the pilot.
+Long-run starts at **slot 16** and is deterministic rather than driven by one fragile mutable counter.
 
-## 7. Architecture constraints
+Current config:
+
+- pipeline cycle: `animal_compilation`, `ai_short` (alternating cats/facts);
+- AI language: EN;
+- long-run cat language cycle starts fresh after the pilot: `en, en, en, en, ru`;
+- first long-run cat is slot 16 / cat episode `#008` / EN;
+- fifth long-run cat is slot 24 / cat episode `#012` / RU;
+- AI fact subject cooldown = most recent 6 distinct AI visual anchors;
+- long-run cat descriptions use deterministic safe variation instead of one byte-identical description forever.
+
+Commands:
+
+```powershell
+.\.venv\Scripts\vv.exe longrun-next --dry-run
+.\.venv\Scripts\vv.exe longrun-next
+.\.venv\Scripts\vv.exe longrun-batch --count 3
+```
+
+Existing non-empty long-run MP4 files are resume markers just like the pilot. Attempt state is written to `runtime/long_run/state.json`.
+
+## 8. Architecture constraints
 
 - `VV_knopka` is orchestration/business logic.
-- Do not vendor/fork the entire MoneyPrinterTurbo codebase into Git history without a strong reason.
+- Do not vendor/fork all MoneyPrinterTurbo into Git history.
 - Local ignored `MoneyPrinterTurbo/` checkout is allowed.
 - Use MPT only for `ai_short` where practical.
-- Edge TTS remains the default AI-short TTS; cat compilation has no voiceover.
+- Edge TTS remains default AI-short TTS; cat compilation has no voiceover.
 - Keep secrets out of Git. `.env` must never be committed.
-- Real meow binary stays local/ignored (`runtime/assets/...`) or via `CAT_MEOW_FILE`.
+- Real meow binary stays local/ignored or via `CAT_MEOW_FILE`.
 
-## 8. Git workflow
+## 9. Git workflow
 
 Development branch: `mvp/pilot-scaffold`.
 Draft review vehicle: PR #1 into `main`.
 
 - Continue on the existing branch/PR unless there is a concrete reason to split.
-- Do not merge PR #1 merely because tests pass; rendered pilot videos need visual review first.
 - Keep `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md` current.
 - GitHub wins over docs on mechanical facts such as SHA/CI/file list.
+- PR #1 remains draft/open/unmerged until an explicit user decision.
 
-## 9. Current milestone
+## 10. Current milestone
 
-The four proof videos have manual QUALITY PASS:
+The pilot/conveyor format has been visually accepted and the project is now in **long-run local validation**.
 
-1. Slot 1 RU `ai_short` = QUALITY PASS.
-2. Slot 2 RU `animal_compilation` = QUALITY PASS.
-3. Slot 3 EN `ai_short` = QUALITY PASS.
-4. Slot 4 EN `animal_compilation` = QUALITY PASS.
+Implemented on the branch:
 
-**Frozen pilot generation is now COMPLETE: 15/15 ready outputs exist on the user's machine.**
+- deterministic post-pilot slot resolver;
+- unbounded `longrun-next` / `longrun-batch` conveyor;
+- durable long-run attempt state;
+- cat episode numbering continues after pilot (`#008+`);
+- cat language cycle and description variation;
+- AI recent-subject cooldown;
+- artifact-based cat source history beyond slot 15;
+- CI dry-run for the long-run CLI.
 
-- AI slots completed: 1,3,5,7,9,11,13,15.
-- Cat slots completed: 2,4,6,8,10,12,14.
-- Final user-confirmed outputs: `slot-14-en-animals.mp4` and `slot-15-en-ai.mp4`.
-- Slots 5–15 were produced through resumable `pilot-next` / `pilot-batch` runs, including unattended multi-slot AI -> cats -> AI sequences.
+Latest tested code job after these changes: **108 passed** with safety lock PASS. Recheck live CI before stronger workflow claims.
 
-Generation completion is **not** publication approval. Manual QUALITY PASS is explicitly recorded only for slots 1–4; the rest of the completed set requires visual review before publishing.
+Immediate local validation after pull:
 
-Current development milestone is **review the completed 15-video set, then design long-run generation**, not more frozen-pilot batching.
+1. run pytest/status;
+2. run `vv longrun-next --dry-run` and expect **slot 16 EN animal_compilation**;
+3. only after that run one real `vv longrun-next`;
+4. inspect that output before enabling Windows Task Scheduler.
 
-- Do not run more pilot batches merely because the command exists.
-- Existing non-empty `runtime/ready_for_review` MP4 files remain completion markers.
-- Conveyor state is written to `runtime/conveyor/state.json`.
-- Each successful render writes a `.upload.json` sidecar containing proposed YouTube title/description, attributions, and explicit review-only/no-auto-publish locks.
-- Cat cross-episode source reuse is audited before highlights/render.
-- Remote stock with confirmed missing audio is filtered before Luna/candidate-cap accounting.
-- Keep `auto_publish=false`; uploader/OAuth is a later explicit phase.
+Task Scheduler comes after one real long-run slot succeeds. Publishing remains manual/review-first.
 
-After visual review, next architecture work should be long-run/unbounded mode rather than extending the fixed 15-slot manifest. Recommended additions: durable episode counters/history, AI fact-subject cooldown, slight cat-description variation, and durable shared source history/pool behavior. Windows Task Scheduler comes after long-run mode is ready.
-
-## 10. Language / title policy
+## 11. Language / title policy
 
 - Never publish translated duplicates of the same cat episode.
-- Long-run cat cadence: `en, en, en, en, ru` (80% EN / 20% RU).
-- Frozen pilot: slot 2 RU, remaining six cat slots EN.
+- Long-run cat cadence: `en, en, en, en, ru`.
 - Do not use `Daily Dose of Cats` or a close imitation.
 - On-card cats remain `#NNN — Котики` / `#NNN — Cats`.
-- Upload-facing cat title family is `Котики, которые сделали мой день 😹 #NNN #shorts` / `Cats That Made My Day 😹 #NNN #shorts`.
-- AI fact upload titles come from the specific plan title/hook and append `#shorts`; do not use one repeated generic `Did You Know...?` template.
-- Long-run AI planning should avoid repeating the same animal/topic too soon; implement a recent-subject cooldown before unattended scheduling.
-- Long-run cat descriptions should not be byte-identical forever; add small safe variation without keyword stuffing.
+- Upload-facing title family remains `Котики, которые сделали мой день 😹 #NNN #shorts` / `Cats That Made My Day 😹 #NNN #shorts`.
+- AI fact titles come from each specific plan; do not use one repeated generic template.
 
-## 11. Context persistence
+## 12. Context persistence
 
 At the end of every substantial work session, update handoff/progress so a fresh chat can resume from GitHub without relying on conversational memory.
