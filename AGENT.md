@@ -57,12 +57,15 @@ Until the user explicitly changes it:
 
 ## 5. YouTube / UGC source rules
 
-- YouTube Creative Commons Attribution is an allowed production candidate only after rights evidence is verified, attribution is preserved, **and the downloaded media passes the clean-footage gate**.
+- YouTube Creative Commons Attribution is an allowed production candidate only after rights evidence is verified, attribution is preserved, and the downloaded media passes the clean-footage gate.
 - User has `YouTube Data API v3` enabled and a local `YOUTUBE_API_KEY` in ignored `.env`; never ask for the key or commit it.
 - `vv-cat-youtube cc-search` must prefer the official YouTube Data API when the key is present: `search.list(videoLicense=creativeCommon)` plus `videos.list` and `status.license == creativeCommon`.
+- Current `vv-cat-youtube` entrypoint is `youtube_cat_source_v5:main`.
+- v5 official `cc-search` must prefilter before download: use funny-cat query diversity, enrich canonical channel/thumbnail, keep at most one candidate per channel, and run Luna thumbnail prescreen. Require a domestic cat and reject obvious account branding/@handles/avatars/social UI/watermarks/large captions/split-screen/ranking/repost packaging.
+- Thumbnail prescreen is only a cheap prediction. A candidate that passes it still must pass the strict downloaded-video 4-frame clean-footage gate during `cc-import`.
 - The no-key YouTube CC-filter/yt-dlp path remains fallback/research only (`--no-key`) because yt-dlp license metadata is optional.
-- Preferred production import is `vv-cat-youtube cc-import <slot> --candidate N` from a saved official CC report. It must recheck current `status.license == creativeCommon` through the API immediately before download.
-- Imported YouTube media must then pass near-9:16, duration, audible-audio **and clean-footage** gates.
+- Preferred production import is `vv-cat-youtube cc-import <slot> --candidate N` from the latest saved official CC report. It must recheck current `status.license == creativeCommon` through the API immediately before download.
+- Imported YouTube media must then pass near-9:16, duration, audible-audio and clean-footage gates.
 - Clean-footage gate is a Luna vision review over a 2x2 contact sheet sampled across the downloaded clip. Reject prominent creator/channel names, `@handles`, avatars/banners, social-platform watermarks/UI, large added meme/headline captions, split-screen/collage/ranking layouts, and obvious already-compiled/repost packaging. Allow incidental environmental text such as signs/labels/plates.
 - Do **not** crop/blur another account's branding to force a pass; reject the source instead.
 - Any production YouTube clip must carry `clean_footage_approved=true`. `render-animal` removes old/unreviewed YouTube imports from the active source manifest before selecting sources.
@@ -111,10 +114,10 @@ Slot 2 cat base format checkpoints:
 2. Narrow themes were rejected in favor of generic `#001 — Котики`.
 3. Near-9:16 gate is locally confirmed: one accepted all-stock render selected six sources and all six were exactly 720×1280 (9:16).
 4. User's verdict on the generic vertical render: **«да, норм»**.
-5. Official YouTube Data API CC discovery works locally and returned 15 candidates.
-6. User imported candidates 1, 8 and 14; all three were API-confirmed CC, 2160×3840 and audible. A mixed YouTube/Pexels render succeeded.
-7. Visual review exposed a new blocker: at least one imported Pawcsu Short visibly contains `Pawcsu/@Pawcsu`, avatar/verification badge and a large pre-added caption. User does not want this packaged/repost-like look.
-8. `youtube_cat_source_v4` + `youtube_clean_footage` now add the strict clean-footage vision gate. Current next local action is `cc-clean 2` on the three legacy imports, then inspect results before importing more CC candidates.
+5. Official YouTube Data API CC discovery works locally.
+6. First three imports (candidate 1/8/14) were API-confirmed CC, 2160×3840 and audible, but all were Pawcsu packaged Shorts.
+7. Local `cc-clean 2` result: **0 kept / 3 reviewed**. All three were correctly rejected with 0.99–1.00 confidence for Pawcsu/@Pawcsu branding + large added captions. This validates the full anti-repost gate.
+8. Current focus is `cc-search` v5: find cleaner CC candidates *before download* using multiple funny-cat queries, one candidate per channel, and thumbnail prescreen. Then import only new v5 candidate numbers; final 4-frame gate remains mandatory.
 9. Keep Pexels/Pixabay as licensed fallback.
 10. Only after cat sourcing is accepted, return to slot 3 / remaining pilot.
 
