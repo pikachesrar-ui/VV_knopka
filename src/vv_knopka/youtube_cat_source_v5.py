@@ -15,13 +15,16 @@ from .youtube_cat_source_v2 import import_cc_report_candidate as import_filter_r
 from .youtube_cat_source_v3 import (
     _DEFAULT_API_REPORT,
     _DEFAULT_NO_KEY_REPORT,
+    _api_report_candidate,
     import_api_report_candidate,
     search_cc_candidates_api,
     search_cc_candidates_no_key,
+    verify_api_cc_status,
     write_api_report,
     write_no_key_report,
 )
 from .youtube_cat_source_v4 import _clean_gate_imported_clip, clean_existing_youtube_sources
+from .youtube_cc_preflight import clean_preflight_candidate, filter_known_rejections, remove_preview
 from .youtube_cc_prescreen import prescreen_cc_candidates
 
 
@@ -47,7 +50,7 @@ def main() -> None:
     cc_search.add_argument("--report", default=None)
     cc_search.add_argument("--no-key", action="store_true", help="Force the legacy no-key CC-filter backend")
 
-    cc_import = sub.add_parser("cc-import", help="Import one CC candidate and require the full clean-footage gate")
+    cc_import = sub.add_parser("cc-import", help="Import one CC candidate after low-res and full clean-footage gates")
     cc_import.add_argument("slot", type=int)
     cc_import.add_argument("--candidate", type=int, required=True)
     cc_import.add_argument("--report", default=None)
@@ -76,11 +79,8 @@ def main() -> None:
         use_api = bool(api_key) and not args.no_key
         if use_api:
             queries = args.query or list(_CLEAN_DEFAULT_QUERIES)
-            # Search wider than the requested output so the thumbnail gate has
-            # room to reject packaged/repost-like candidates. The helper still
-            # caps each API search request at 50 results.
             pool_limit = min(max(int(args.limit) * 3, int(args.scan_per_query)), 50)
-            print("YouTube CC search v5: official API + clean thumbnail prescreen")
+            print("YouTube CC search v5.1: official API + clean thumbnail prescreen + reject memory")
             print("No OAuth/channel login; thumbnails only at prescreen; no media download")
             raw_candidates, warnings, diagnostics = search_cc_candidates_api(
                 api_key=api_key,
@@ -89,6 +89,9 @@ def main() -> None:
                 limit=pool_limit,
                 queries=queries,
             )
+            raw_before_reject_memory = len(raw_candidates)
+            raw_candidates, known_rejected = filter_known_rejections(raw_candidates, settings.runtime_dir)
+            diagnostics["known_clean_rejections_skipped"] = known_rejected
             ledger = BudgetLedger(settings)
             candidates, clean_audit, clean_stats = prescreen_cc_candidates(
                 settings,
@@ -99,6 +102,7 @@ def main() -> None:
             )
             diagnostics["clean_thumbnail_prescreen"] = clean_stats
             diagnostics["clean_thumbnail_prescreen_audit"] = clean_audit
+            diagnostics["raw_before_reject_memory"] = raw_before_reject_memory
             report_path = Path(args.report) if args.report else _DEFAULT_API_REPORT
             report = write_api_report(
                 report_path,
@@ -107,11 +111,13 @@ def main() -> None:
                 diagnostics=diagnostics,
             )
             evidence_label = "API-CC+CLEAN?"
+            if known_rejected:
+                print(f"Known full/preview-gate rejects skipped: {len(known_rejected)}")
             print(
                 "Thumbnail prescreen: "
                 f"{clean_stats.get('selected', 0)} selected / "
                 f"{clean_stats.get('reviewed', 0)} reviewed / "
-                f"{clean_stats.get('input', 0)} raw CC"
+                f"{clean_stats.get('input', 0)} raw CC after reject memory"
             )
         else:
             print("YouTube CC search fallback: platform CC filter + yt-dlp metadata hydration")
@@ -148,7 +154,7 @@ def main() -> None:
                 print(f"- {warning}")
         if candidates:
             print("Next: `vv-cat-youtube cc-import 2 --candidate N`")
-            print("Thumbnail CLEAN? is only a prescreen; cc-import still runs the strict four-frame gate.")
+            print("Import first downloads a low-res temporal preview; full media is downloaded only after preflight PASS.")
         else:
             print("No clean-looking CC candidates survived thumbnail prescreen. Inspect report diagnostics.")
         return
@@ -159,7 +165,32 @@ def main() -> None:
         if not report_path.exists():
             raise FileNotFoundError(f"CC report not found: {report_path}")
         report = json.loads(report_path.read_text(encoding="utf-8"))
+        preflight_preview: Path | None = None
+        preflight_metadata: dict[str, object] | None = None
+
         if report.get("source") == "youtube_data_api_cc_search":
+            candidate = _api_report_candidate(report, args.candidate)
+            video_id = str(candidate.get("video_id") or "").strip()
+            url = str(candidate.get("url") or "").strip()
+            if not video_id or not url:
+                raise ValueError("selected official CC candidate has no usable YouTube id/url")
+            if not api_key:
+                raise ValueError("YOUTUBE_API_KEY is required to recheck an official API CC candidate")
+
+            verified = verify_api_cc_status(api_key=api_key, video_id=video_id)
+            preflight_preview, _, preflight_metadata = clean_preflight_candidate(
+                settings,
+                slot=args.slot,
+                video_id=video_id,
+                url=url,
+                title=str(verified.get("title") or candidate.get("title") or ""),
+                creator=str(verified.get("creator") or candidate.get("channel_title") or ""),
+            )
+            print(
+                "Low-res temporal clean preflight: PASS | "
+                f"confidence={float(preflight_metadata.get('clean_footage_confidence') or 0):.2f} | "
+                f"{preflight_metadata.get('clean_footage_reason')}"
+            )
             source_manifest, attribution, clip = import_api_report_candidate(
                 settings,
                 slot=args.slot,
@@ -167,6 +198,7 @@ def main() -> None:
                 rank=args.candidate,
                 api_key=api_key,
             )
+            remove_preview(preflight_preview)
         else:
             source_manifest, attribution, clip = import_filter_report_candidate(
                 settings,
@@ -174,6 +206,7 @@ def main() -> None:
                 report_path=report_path,
                 rank=args.candidate,
             )
+
         clip, review = _clean_gate_imported_clip(
             settings,
             slot=args.slot,
@@ -188,7 +221,7 @@ def main() -> None:
         print(f"Dimensions: {clip['source_width']}x{clip['source_height']}")
         print(f"Audio mean: {clip['mean_volume_db']} dB")
         print(
-            f"Clean-footage gate: PASS | confidence={clip['clean_footage_confidence']:.2f} | "
+            f"Full clean-footage gate: PASS | confidence={clip['clean_footage_confidence']:.2f} | "
             f"{clip['clean_footage_reason']}"
         )
         print(f"Clean review: {review.get('review_file') or clip.get('clean_review_file')}")
