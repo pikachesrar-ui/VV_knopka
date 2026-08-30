@@ -16,15 +16,28 @@ auto_publish: False
 publication gate: PASS
 ```
 
-## Текущая фаза — long-run local validation
+## Long-run — первый реальный slot SUCCESS
 
-Long-run реализован отдельно от конечного pilot manifest, но сохраняет глобальную slot-нумерацию. Первый post-pilot slot = 16.
-
-Current schedule:
+После нескольких safe sourcing failures slot 16 EN cats / cat episode #008 успешно завершён на ПК пользователя:
 
 ```text
-16 cats EN  -> cat episode #008
+D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.mp4
+Upload metadata: D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.upload.json
+Long-run conveyor outputs:
+D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.mp4
+```
+
+Это подтверждает post-pilot resume, rolling cat cooldown и cooled local-history fallback в реальном запуске.
+
+Следующий deterministic target теперь:
+
+```text
 17 facts EN
+```
+
+Дальше schedule:
+
+```text
 18 cats EN  -> #009
 19 facts EN
 20 cats EN  -> #010
@@ -35,23 +48,7 @@ Current schedule:
 ...
 ```
 
-Pipeline cycle configurable через `[long_run].pipeline_cycle`, сейчас `animal_compilation, ai_short`. AI language сейчас EN. Cat long-run language cycle начинает новый цикл после pilot: `en,en,en,en,ru`.
-
-## Реальный slot 16 — два safe failures
-
-На ПК пользователя long-run CLI/schedule подтверждены локально. Последний показанный retry:
-
-```text
-111 passed in 1.23s
-vv longrun-next --dry-run -> slot 16 animal_compilation / en
-vv longrun-next -> Vertical audible-source gate found only 1/5 usable cat clips
-```
-
-Rolling cooldown уже был активен, поэтому второй `1/5` уточнил root cause: просто разрешить старые IDs недостаточно. Pexels/Pixabay current search не обязан снова вернуть именно те старые IDs, которые уже использовались в ранних episodes.
-
-Не удалять `runtime/slots/16`: там уже есть failed audit и один принятый fresh local clip.
-
-## Long-run cat source policy — текущий fix
+## Long-run cat source policy
 
 Config:
 
@@ -63,21 +60,18 @@ cat_source_cooldown_episodes = 5
 Политика:
 
 - Frozen pilot сохраняет all-history protection.
-- Long-run блокирует source IDs из последних 5 rendered cat episodes.
-- Более старый source становится eligible fallback; после reuse его cooldown начинается заново.
+- Long-run блокирует IDs последних 5 rendered cat episodes.
 - Never-used remote stock ищется/ранжируется первым.
-- Если fresh remote pass реально не достигает minimum count, система может использовать **локальные Pexels/Pixabay файлы из rendered episodes, вышедших из cooldown**.
-- Исторический local file не считается автоматически годным: base pipeline повторно проверяет текущие near-9:16 и audible-audio gates.
-- На retry после уже записанного minimum-count failure accepted clips восстанавливаются из `animal_audio_sources.json`, а cooled local history подмешивается сразу, чтобы не оплачивать бессмысленное повторение того же fresh discovery pass.
-- На первом fresh failure fallback происходит в том же invocation: recover accepted -> seed cooled local -> rerun validators.
-- YouTube/другие providers не подмешиваются этим fallback; только Pexels/Pixabay.
-- Final reuse audit продолжает блокировать protected recent overlap и отдельно показывает cooled-down reuse.
+- Более старый source допустим как fallback; после reuse его cooldown начинается заново.
+- Если fresh remote pass не достигает minimum count, система может seed локальные Pexels/Pixabay files из rendered episodes вне cooldown.
+- Исторические local files заново проходят текущие near-9:16 и audible-audio gates.
+- Retry после minimum-count failure восстанавливает уже принятые local files из failed audit и не обязан повторять тот же remote discovery pass.
+- YouTube/прочие providers local-history fallback не импортирует.
+- Final reuse audit отдельно показывает cooled-down historical reuse.
 
-Для slot 16 / cat #008 protected episodes = cat #003–#007; local files из cat #001/#002 могут использоваться как fallback. Один fresh clip slot16 остаётся первым кандидатом.
+Все quality/safety gates остаются: provenance/commercial-use, near-9:16, audible source audio, Luna relevance, minimum 5 unique clips, fail-closed behavior.
 
-## Остальной long-run функционал
-
-Commands:
+## Long-run commands
 
 ```powershell
 .\.venv\Scripts\vv.exe longrun-next --dry-run
@@ -85,7 +79,7 @@ Commands:
 .\.venv\Scripts\vv.exe longrun-batch --count 3
 ```
 
-- тот же `$10` hard budget guard;
+- `$10` hard OpenAI budget guard;
 - `auto_publish=false` / human review;
 - AI slot: plan-on-demand -> MPT -> ready output;
 - cat slot: licensed sourcing -> gates -> FFmpeg -> ready output;
@@ -93,7 +87,63 @@ Commands:
 - existing non-empty MP4 = resume marker;
 - attempt history: `runtime/long_run/state.json`.
 
-AI fact subject cooldown = последние 6 distinct visual anchors. Long-run cat descriptions имеют deterministic safe variation. Cat numbering продолжается с #008.
+AI fact subject cooldown = последние 6 distinct visual anchors. Long-run cat descriptions имеют deterministic variation. Cat numbering продолжается с #008.
+
+## Windows Task Scheduler — IMPLEMENTED, local install pending
+
+Добавлены:
+
+```text
+scripts/run-longrun-task.ps1
+scripts/install-longrun-task.ps1
+```
+
+`run-longrun-task.ps1`:
+
+- запускает ровно один `longrun-next`;
+- сначала выполняет `vv status`;
+- пишет лог в `runtime/scheduler/longrun-task.log`;
+- использует exclusive file lock, чтобы два scheduled run не рендерили одновременно;
+- при ошибке возвращает nonzero и оставляет resume на том же missing slot;
+- не делает `git pull`;
+- не обновляет код;
+- не публикует;
+- `-DryRun` вызывает только `longrun-next --dry-run`.
+
+`install-longrun-task.ps1`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "HH:mm"
+```
+
+- создаёт один DAILY task;
+- работает под текущим interactive Windows user без запроса/хранения пароля;
+- `StartWhenAvailable`;
+- `MultipleInstances=IgnoreNew`;
+- execution limit 4 hours;
+- разрешён запуск на батарее и не останавливается при переходе на батарею;
+- `-DryRun` ничего не регистрирует.
+
+Не выбирать время за пользователя: перед реальной установкой он должен назвать желаемое локальное время.
+
+## Tests / CI
+
+Scheduler code checkpoint `1844ddf3c5f39734989b99cf5c3a05df04ae33d6`:
+
+```text
+114 passed
+publication gate: PASS
+long_run: True
+```
+
+Workflow run `33325562523` завершён `success`:
+
+- Ubuntu test green;
+- Windows bootstrap green;
+- Windows scheduler runner dry-run green;
+- Windows scheduler installer dry-run green.
+
+Docs commits после этого checkpoint двигают branch HEAD; exact CI выше относится к указанному scheduler code commit.
 
 ## YouTube / acquisition wording
 
@@ -101,48 +151,25 @@ YouTube Data API = discovery/reference/license metadata, не media-download end
 
 Long-run automated production должен предпочитать Pexels/Pixabay, owned/creator-supplied или independently authorized downloadable files. yt-dlp capability != official YouTube/API permission.
 
-## Tests / CI
-
-Code-head `91e2932e2d9e3e2868288584664fabb6f84bc3d9` после local-history fallback:
-
-```text
-114 passed in 0.69s
-publication gate: PASS
-long_run: True
-vv longrun-next --dry-run -> slot 16 EN cats
-```
-
-Ubuntu test job green. На момент фиксации Windows bootstrap этого run ещё выполнялся; recheck live перед утверждением полного workflow success. Docs commits после code-head двигают branch HEAD.
-
-Regression coverage дополнительно проверяет:
-
-- cooled local history берётся только вне protected recent window;
-- retry с existing `1/5` audit сначала сохраняет fresh clip, затем добавляет cooled local stock;
-- первый fresh minimum failure может перейти к local-history fallback в том же invocation.
-
 ## Immediate local continuation
 
-После pull не удалять `runtime/slots/16`.
+После pull scheduler-кода:
 
 ```powershell
 cd D:\KiraS\VV_knopka
 git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe longrun-next --dry-run
+powershell -ExecutionPolicy Bypass -File .\scripts\run-longrun-task.ps1 -DryRun
 ```
 
-Ожидание: около **114 passed**, dry-run всё ещё slot 16 EN cats.
+Ожидание: safety status PASS и dry-run target = **slot 17 ai_short / en**. Рендериться в dry-run ничего не должно.
 
-Затем:
+После этого пользователь выбирает время ежедневного запуска. Реальная установка:
 
 ```powershell
-.\.venv\Scripts\vv.exe longrun-next
+powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "HH:mm"
 ```
 
-Для текущего slot16 retry система должна использовать existing failed audit, восстановить fresh local source, добавить cooled local Pexels/Pixabay из ранних episodes и повторно проверить их перед render.
-
-Если slot 16 SUCCESS, проверить MP4 + `source_reuse_audit.json`; затем можно переходить к Windows Task Scheduler. YouTube uploader/OAuth остаётся отдельной фазой; публикация пока manual/review-first.
+Publishing остаётся manual/review-first; uploader/OAuth не добавлены.
 
 ## Git
 
