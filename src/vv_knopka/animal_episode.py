@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .manifest import animal_episode_number_for_slot
 from .settings import Settings
 
 
@@ -14,15 +15,12 @@ _FORBIDDEN_SERIES_PHRASES = (
 
 
 def animal_episode_number(settings: Settings, slot: int) -> int:
-    """Return a stable 1-based episode number for animal-compilation slots."""
-    slots = [int(value) for value in settings.raw["content"]["animal_slots"]]
-    if slot not in slots:
-        raise ValueError(f"slot {slot} is not an animal-compilation slot")
-    return slots.index(slot) + 1
+    """Return stable 1-based cat episode numbering across pilot and long-run."""
+    return animal_episode_number_for_slot(settings, slot)
 
 
 def scheduled_animal_language(settings: Settings, episode_number: int) -> str:
-    """Return the long-run 80/20 EN/RU cadence for future cat episodes."""
+    """Return the configured long-run EN/RU cadence for cat episodes."""
     cycle = list(settings.raw.get("animal", {}).get("language_cycle", ["en", "en", "en", "en", "ru"]))
     if not cycle:
         cycle = ["en", "en", "en", "en", "ru"]
@@ -75,11 +73,10 @@ def build_episode_metadata(
     ]
 
     payload = {
-        "version": 2,
+        "version": 3,
         "episode_number": episode,
-        "pilot_language": language,
-        "production_language_cadence": "80% en / 20% ru; no duplicate translations",
-        "scheduled_language_after_pilot": scheduled_animal_language(settings, episode),
+        "language": language,
+        "production_language_cadence": "long-run cat cycle is config-driven; no duplicate translations",
         "display_title": display_title,
         "transition_cards": cards,
         "end_text": "Спасибо за просмотр" if language == "ru" else "Thanks for watching",
