@@ -9,7 +9,8 @@
 ## Локально подтверждено
 
 - Windows path `D:\KiraS\VV_knopka`, `.venv` Python 3.11.
-- Latest shown OpenAI ledger `$0.0340 / $10.00`; publication gate PASS.
+- Latest shown OpenAI ledger **$0.0509 / $10.00**; publication gate PASS.
+- Latest local pytest: **62 passed in 0.48s**.
 - Slot 1 octopus = manual QUALITY PASS.
 - Cat renderer local FFmpeg; Impact + real meow; no voiceover/BGM.
 - Production cats = broad generic `#NNN — Котики` / `#NNN — Cats`, narrow trend themes abandoned.
@@ -22,133 +23,103 @@ Pexels is technically acceptable but can feel stock-like. Goal: find funnier/mor
 
 Old no-key yt-dlp license discovery was exhausted: two scans, including 6000-day window, returned 0 verified CC because `license` is optional metadata.
 
-## Google Cloud / YouTube Data API — AVAILABLE
+## Google Cloud / YouTube Data API — WORKING LOCALLY
 
-Earlier Google Cloud signup looked unsuitable, but this changed on 2026-08-30: user successfully entered Google Cloud Console, selected project `VV Knopka`, enabled YouTube Data API v3, created an API key, and stored it locally in `.env` as:
-
-```text
-YOUTUBE_API_KEY=...
-```
+User successfully entered Google Cloud Console, selected project `VV Knopka`, enabled YouTube Data API v3, created an API key, and stored it locally in `.env` as `YOUTUBE_API_KEY`.
 
 Never ask user to paste the key. Never commit `.env` or secrets. Public metadata search does not require OAuth/channel access.
 
 ## Official `vv-cat-youtube` v3
 
-Entry point now maps to:
-
-```text
-src/vv_knopka/youtube_cat_source_v3.py
-```
-
-and `pyproject.toml` contains:
+`pyproject.toml` maps:
 
 ```text
 vv-cat-youtube = vv_knopka.youtube_cat_source_v3:main
 ```
 
-### `cc-search` — official API preferred
+### Successful official CC discovery
 
-If `YOUTUBE_API_KEY` exists:
+User ran:
 
 ```powershell
-vv-cat-youtube cc-search
+.\.venv\Scripts\vv-cat-youtube.exe cc-search
 ```
 
-uses:
-
-```text
-YouTube Data API search.list
-videoLicense=creativeCommon
-query default = cat|kitten
-wide lookback (default 6000 days)
--> videos.list snippet/statistics/status/contentDetails
--> status.license must equal creativeCommon
--> rank by views/day then views
--> runtime/trends/youtube-cat-cc-official.json
-```
-
-Defaults: `scan-per-query=30`, `limit=15`; API max per search is capped at 50 in code. Repeated `--query` can replace the default query. `--no-key` forces the old no-key CC-filter fallback.
-
-Expected prefix:
+and got:
 
 ```text
 YouTube CC search: official YouTube Data API (videoLicense=creativeCommon)
 Public metadata only; no OAuth, no channel login, no media download
+Creative Commons cat candidates: 15
+D:\KiraS\VV_knopka\runtime\trends\youtube-cat-cc-official.json
 ```
 
-### `cc-import` — official recheck before download
+Top 15 returned by the official API:
 
-Preferred import:
+```text
+[01]  9,490,575  Never about drinking water! 😼
+[02] 27,067,392  Bichinhos que nos entendem -gatos e pássaros
+[03] 58,256,969  Bichinhos que nos entendem - gatos e caixas
+[04] 34,953,145  Bichinhos que nos entendem - mamãe gata
+[05]  9,947,315  Wind swept rescue mission! 🤯
+[06] 10,979,204  Bichinhos que nos entendem -gatos e água
+[07] 33,876,469  Bichinhos que nos entendem -gatos e suas patinhas
+[08] 13,067,369  What was the reason for this? 👀
+[09]  9,894,205  Bichinhos que nos entendem-gatos e aspiradores
+[10] 27,289,448  Bichinhos que nos entendem -dando tilt nos gatos
+[11] 36,424,618  Bichinhos que nos entendem - gatos laranjas
+[12]  7,944,733  Ranking Best Big Cats Moments
+[13] 20,034,233  Bichinhos que nos entendem - gatos com fobia social
+[14] 10,244,613  What was this cat trying to do 🤔🐾
+[15] 20,670,771  Bichinhos que nos entendem - gatitos e brinquedos
+```
+
+This proves the official search path works and returns real CC inventory. The report uses YouTube API `videoLicense=creativeCommon` and candidates are rechecked through `videos.status.license=creativeCommon`.
+
+### Recommended first import test
+
+Prefer single-scene-looking Shorts first, based on titles:
+
+- candidate 1 — `Never about drinking water! 😼`
+- candidate 8 — `What was the reason for this? 👀`
+- candidate 14 — `What was this cat trying to do 🤔🐾`
+
+Avoid candidate 12 for current domestic-cat target. The repeated Portuguese `Bichinhos que nos entendem` titles may represent already-edited compilations; they can be inspected later, but first avoid a compilation-inside-compilation artifact.
+
+Commands:
 
 ```powershell
-vv-cat-youtube cc-import 2 --candidate N
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 1
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 8
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 14
 ```
 
-For an official API report it:
+Each import:
 
-1. validates report provenance and candidate rights flags;
-2. requires local `YOUTUBE_API_KEY`;
-3. calls current `videos.list(part=status,snippet,id=...)` again;
-4. requires current `status.license == creativeCommon`;
-5. downloads with yt-dlp only after that recheck;
-6. validates real ffprobe near-9:16 orientation;
-7. requires >= clip_seconds and audible source audio;
-8. prepends accepted YouTube CC source to production `sources.json`;
-9. writes attribution report.
+1. validates official report provenance;
+2. rechecks current API `status.license == creativeCommon`;
+3. downloads only after that;
+4. validates real ffprobe near-9:16 orientation;
+5. requires enough duration and audible source audio;
+6. prepends accepted source to production `sources.json`;
+7. writes attribution metadata.
 
-Accepted source keeps title/creator/URL, license, attribution, SHA/dimensions/audio, `rights_verified=true`, `rights_verification_method=youtube_data_api_status_license`, `api_status_license=creativeCommon`.
-
-Normal:
+Orientation/audio rejection is expected and should not be bypassed. If 2–3 YouTube candidates pass, run:
 
 ```powershell
-vv render-animal 2
+.\.venv\Scripts\vv.exe render-animal 2
 ```
 
-then uses imported YouTube CC first and stock fills remaining target slots.
-
-### Legacy/fallback modes
-
-- `vv-cat-youtube cc ... --url ...` remains a strict legacy URL mode requiring direct yt-dlp CC license metadata.
-- no-key v2 YouTube search-filter backend remains available through `cc-search --no-key`, but official API is preferred now.
+Then compare against the already-accepted all-Pexels generic vertical baseline. Pexels/Pixabay should only fill remaining slots up to target six.
 
 ## Ordinary YouTube private comparison
 
 Standard/unverified YouTube does not become production permission just because use is local. No automatic standard-license download in production flow.
 
-Already-local exact files can be isolated:
-
-```powershell
-vv-cat-youtube test-add 2 --url "https://youtube..." --file "D:\path\cat.mp4" --confirm-match
-vv-cat-youtube test-render 2
-```
-
-Storage only under `runtime/test_only/slot-02/`, never production sources or ready_for_review. Required locks: `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
+Already-local exact files can be isolated through `test-add` / `test-render`; storage only under `runtime/test_only/slot-02/`, never production sources or `ready_for_review`. Required locks: `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
 
 ## Tests / CI
 
-Before official API backend: v2 code had 58 tests.
-
-Official v3 added four tests for API discovery/dedupe, official rights evidence, report provenance, and API-key recheck requirement.
-
-GitHub CI `test` job on code head `042ae76fc711b4cf10ab042ac70afd1560e8db5f`: **62 passed in 0.41s**, `Verify pilot lock` success. Windows bootstrap was still running separately at last check; recheck before claiming whole workflow success.
-
-## Immediate next local step
-
-```powershell
-git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv-cat-youtube.exe cc-search
-```
-
-If candidates appear, send top list and choose N, then:
-
-```powershell
-.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate N
-.\.venv\Scripts\vv.exe render-animal 2
-```
-
-If API returns HTTP 400/403/quota error, send only console error text, never the key.
+Official v3 code added four tests for API discovery/dedupe, official rights evidence, report provenance, and API-key recheck requirement. Prior GitHub CI test job on code head showed **62 passed** and `Verify pilot lock` success. Recheck live CI before making newer final-head CI claims.
 
 Do not merge Draft PR #1 until explicit user approval after visual pilot review.
