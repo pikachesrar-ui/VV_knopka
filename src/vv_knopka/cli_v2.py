@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from . import cli as _cli
-from .animal_audio_sources_v3 import ensure_audio_animal_sources
+from .animal_audio_sources_v4 import ensure_audio_animal_sources
 from .pilot_conveyor_v2 import run_batch
 
 
