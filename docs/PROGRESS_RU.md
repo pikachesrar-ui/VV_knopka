@@ -105,20 +105,20 @@ Multi-trigger installer checkpoint:
 6838930aeba02441176d5fabd6bb9653697be48f
 ```
 
-Ubuntu test job for this checkpoint:
+Workflow run `33326252717` = **success**:
+
+- Ubuntu test green;
+- Windows bootstrap green;
+- default 3-trigger installer dry-run green;
+- custom single-trigger `-At "12:00"` dry-run green.
+
+Ubuntu result:
 
 ```text
 114 passed in 0.64s
 publication gate: PASS
 long_run: True
 ```
-
-Windows CI dry-run now validates both:
-
-- default 3-trigger installer plan;
-- custom single-trigger `-At "12:00"` plan.
-
-Workflow run = `33326252717`; recheck live status before claiming full Windows completion.
 
 ## Immediate next local step
 
