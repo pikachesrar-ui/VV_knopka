@@ -56,9 +56,16 @@ STOCK_FRIENDLY_AI_ANCHORS = (
 )
 
 
-def _previous_visual_anchors(settings: Settings, current_slot: int) -> list[str]:
+def recent_visual_anchors(settings: Settings, current_slot: int, *, limit: int | None = None) -> list[str]:
+    """Return newest distinct AI visual anchors first for the subject cooldown."""
+    if limit is None:
+        limit = int(settings.raw.get("long_run", {}).get("fact_subject_cooldown", 6))
+    limit = max(int(limit), 0)
+    if limit == 0:
+        return []
+
     anchors: list[str] = []
-    for slot in range(1, current_slot):
+    for slot in range(int(current_slot) - 1, 0, -1):
         path = settings.runtime_dir / "slots" / f"{slot:02d}" / "plan.json"
         if not path.exists():
             continue
@@ -69,6 +76,8 @@ def _previous_visual_anchors(settings: Settings, current_slot: int) -> list[str]
         anchor = str(payload.get("visual_anchor") or "").strip().lower()
         if anchor and anchor not in anchors:
             anchors.append(anchor)
+        if len(anchors) >= limit:
+            break
     return anchors
 
 
@@ -127,24 +136,30 @@ class OpenAIPlanner:
                     "The hook is metadata only; do not write it as a voiceover instruction."
                 )
         elif pipeline == "ai_short":
-            used = _previous_visual_anchors(self.settings, slot)
-            available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in used]
+            cooldown = int(self.settings.raw.get("long_run", {}).get("fact_subject_cooldown", 6))
+            recent = recent_visual_anchors(self.settings, slot, limit=cooldown)
+            available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in set(recent)]
             if not available:
                 available = list(STOCK_FRIENDLY_AI_ANCHORS)
+            recent_text = ", ".join(recent) if recent else "none"
             topic_instruction = (
-                "\nSTOCK-AVAILABILITY CONSTRAINT FOR THIS AUTOMATIC PILOT: choose the main subject from "
+                "\nSTOCK-AVAILABILITY AND SUBJECT-COOLDOWN CONSTRAINT: choose the main subject from "
                 f"this exact stock-friendly visual_anchor list: {', '.join(available)}. "
-                "Do not narrow it to a rare species, subspecies, breed, or scientific name. "
+                f"Recent AI subjects still on cooldown ({max(cooldown, 0)}-subject window): {recent_text}. "
+                "Do not choose a cooldown subject unless the available list had to reset because every supported subject was blocked. "
+                "Do not narrow the subject to a rare species, subspecies, breed, or scientific name. "
                 "The factual story itself must genuinely apply to the chosen broad animal, so do not use generic "
                 "footage to illustrate a claim that is only true of a rare species. "
                 "Prefer a visually demonstrable behavior that can be represented by several distinct licensed stock clips."
             )
 
-        prompt = f"""You are the editor of a review-first Shorts pilot.
+        pilot_total = int(self.settings.raw.get("pilot", {}).get("total_shorts", 15))
+        slot_label = f"Pilot slot: {slot}/{pilot_total}." if slot <= pilot_total else f"Long-run sequence slot: {slot}."
+        prompt = f"""You are the editor of a review-first Shorts pipeline.
 Niche: Animals / Nature Curiosities.
 Language: {language_name}.
 Pipeline: {pipeline}.
-Slot: {slot}/15.
+{slot_label}
 {task}{topic_instruction}
 For visual_anchor, return one concise ENGLISH noun or noun phrase naming the visible main subject that must be present in every stock clip (examples: "octopus", "cat", "bee").
 Every search term must include that exact visual_anchor. Avoid ambiguous standalone visual terms such as "skin texture", "reef", "ocean", or "forest" that could retrieve footage without the main subject.
