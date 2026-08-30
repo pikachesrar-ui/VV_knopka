@@ -49,4 +49,5 @@ jobs:
         shell: powershell
         run: |
           powershell -ExecutionPolicy Bypass -File .\scripts\run-longrun-task.ps1 -DryRun
+          powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -DryRun
           powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "12:00" -DryRun
