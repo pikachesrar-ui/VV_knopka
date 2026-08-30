@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -78,8 +79,9 @@ def test_test_only_import_is_isolated_and_locked(tmp_path, monkeypatch):
     assert Path(clip["file"]).exists()
 
 
-def test_test_only_render_requires_publication_lock(tmp_path):
+def test_test_only_render_requires_publication_lock(tmp_path, monkeypatch):
     settings = DummySettings(tmp_path)
+    monkeypatch.setattr(youtube_source, "_animal_slot", lambda settings, slot: SimpleNamespace(language="ru"))
     test_dir = settings.runtime_dir / "test_only" / "slot-02"
     test_dir.mkdir(parents=True)
     (test_dir / "sources.json").write_text(
