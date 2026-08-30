@@ -22,7 +22,7 @@ vv-cat-trends = "vv_knopka.trend_discovery:main"
 vv-cat-community = "vv_knopka.reddit_trend_discovery:main"
 vv-cat-theme = "vv_knopka.cat_theme:main"
 vv-cat-import = "vv_knopka.trend_import:main"
-vv-cat-youtube = "vv_knopka.youtube_cat_source_v2:main"
+vv-cat-youtube = "vv_knopka.youtube_cat_source_v3:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
