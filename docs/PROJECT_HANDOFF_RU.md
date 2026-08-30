@@ -2,119 +2,145 @@
 
 Актуальный контекст для нового чата. GitHub — source of truth для code/commit/CI. Рабочая ветка: `mvp/pilot-scaffold`. Draft PR #1 открыт; не merge без отдельного решения пользователя.
 
-## Frozen pilot
+## Pilot — завершён и принят
 
-15 Shorts: 8 × `ai_short`, 7 × `animal_compilation`; slot 1 RU AI, slot 2 RU cats, остальные 13 EN; one channel; OpenAI project cap `$10`; `auto_publish=false`; human review; production outputs only `runtime/ready_for_review`.
+Frozen pilot: 15 Shorts, 8 × `ai_short`, 7 × `animal_compilation`; slot 1 RU AI, slot 2 RU cats, остальные EN.
 
-Manifest:
+Пользователь завершил все 15 ready outputs и после просмотра сообщил, что всё нормально. Pilot не надо перегенерировать ради последующих metadata refinements.
 
-```text
-AI slots:     1,3,5,7,9,11,13,15
-Animal slots: 2,4,6,8,10,12,14
-RU slots:     1,2
-```
-
-## Manual quality / local state
-
-User visually accepted proof pair in both branches:
-
-- slot 1 RU AI facts = QUALITY PASS;
-- slot 2 RU cats = QUALITY PASS;
-- slot 3 EN AI facts = QUALITY PASS;
-- slot 4 EN cats = QUALITY PASS.
-
-Last explicitly shown local OpenAI ledger was `$0.1036 / $10.00`; do not guess newer value without new `vv status` output.
-
-## Frozen pilot generation — COMPLETE 15/15
-
-User has now confirmed final ready outputs for every manifest slot. The final batch produced:
+Последний явно показанный локальный статус после полного pilot:
 
 ```text
-runtime/ready_for_review/slot-14-en-animals.mp4
-runtime/ready_for_review/slot-15-en-ai.mp4
+OpenAI spent: $0.1786 / $10.00
+auto_publish: False
+publication gate: PASS
 ```
 
-Therefore slots 1–15 all have final `ready_for_review` MP4s on the user's machine.
+## Текущая фаза — long-run local validation
 
-Successful conveyor progression included:
+После успешного pilot пользователь дал команду переходить к постоянной генерации.
 
-- slot 5 EN AI — SUCCESS;
-- slot 6 EN cats — SUCCESS;
-- slot 7 EN AI — SUCCESS;
-- slot 8 EN cats — SUCCESS after Pixabay helper fix;
-- slot 9 EN AI — SUCCESS;
-- slot 10 EN cats — SUCCESS after remote-audio prefilter improvement;
-- slot 11 EN AI — SUCCESS;
-- slot 12 EN cats — SUCCESS;
-- slot 13 EN AI — SUCCESS;
-- slot 14 EN cats — SUCCESS;
-- slot 15 EN AI — SUCCESS.
+Long-run реализован отдельно от конечного pilot manifest, но сохраняет глобальную slot-нумерацию. Первый post-pilot slot = 16.
 
-This is strong end-to-end evidence that the review-first conveyor can sequence both pipelines, resume after safe failures/code fixes, and finish the fixed manifest without regenerating completed slots.
+Текущий deterministic schedule:
 
-Important distinction: **generation complete != publication approved**. Explicit manual QUALITY PASS is recorded only for slots 1–4. The remaining generated videos still need human visual review before publication.
+```text
+16 cats EN  -> cat episode #008
+17 facts EN
+18 cats EN  -> #009
+19 facts EN
+20 cats EN  -> #010
+21 facts EN
+22 cats EN  -> #011
+23 facts EN
+24 cats RU  -> #012
+...
+```
 
-## Cat sourcing architecture
+Pipeline cycle configurable через `[long_run].pipeline_cycle`, сейчас `animal_compilation, ai_short`. AI language сейчас EN. Cat long-run language cycle начинает новый цикл после pilot: `en,en,en,en,ru`.
 
-Keep all current gates:
-
-- licensed/commercial-use provenance;
-- source already near 9:16;
-- audible source audio;
-- vision relevance;
-- cross-episode history;
-- fail closed below 5 usable clips.
-
-Remote-audio prefilter in `animal_audio_sources_v4.py` runs before Luna/candidate-cap accounting so confirmed-silent stock no longer wastes finite vision capacity. Pexels/Pixabay search uses history exclusion, deeper pagination/query diversity, and Pixabay `popular` + `latest` ordering.
-
-Cross-episode final reuse gate permits at most one incidental repeated `provider + provider_id`; 2+ reused identities fail closed.
-
-YouTube reference `I_pdwiLlvuc` / Kawaiipets passed project metadata/license-declaration + geometry/audio/clean-footage gates and slot 2 preserves attribution. Do not describe this as proof that YouTube acquisition itself is platform-compliant or that full chain-of-title is established. YouTube Data API is discovery/license metadata, not an official media-download endpoint. Long-run production acquisition should prefer explicitly downloadable/licensed stock or independently authorized source files.
-
-## Review-first conveyor
+## Новые команды
 
 ```powershell
-.\.venv\Scripts\vv.exe pilot-next
-.\.venv\Scripts\vv.exe pilot-batch --count N
+.\.venv\Scripts\vv.exe longrun-next --dry-run
+.\.venv\Scripts\vv.exe longrun-next
+.\.venv\Scripts\vv.exe longrun-batch --count 3
 ```
 
-- strict manifest order;
-- non-empty expected MP4 = completion marker/resume boundary;
-- state: `runtime/conveyor/state.json`;
-- AI: plan-on-demand + managed/check MPT + render;
-- cats: licensed sourcing + geometry/audio/vision/history gates + local FFmpeg;
+`longrun-next/batch`:
+
+- используют тот же `$10` hard budget guard;
+- сохраняют `auto_publish=false` / human review;
+- AI slot: plan-on-demand -> MPT -> ready output;
+- cat slot: history-aware licensed sourcing -> gates -> FFmpeg -> ready output;
 - stop on first failure;
-- outputs only `runtime/ready_for_review`;
-- `$10` OpenAI hard guard;
-- `auto_publish=false`; no uploader/OAuth yet.
+- existing non-empty MP4 = resume marker;
+- attempt history: `runtime/long_run/state.json`;
+- child CLI остаётся `cli_v2`, поэтому актуальная cat-source v5 policy сохраняется.
 
-Each successful render creates `.upload.json` with proposed title/description, language/pipeline/video path, required attribution, `review_required=true`, `auto_publish=false`, `publication_allowed_by_conveyor=false`.
+## Fact subject cooldown
 
-## Metadata review first 10
+`openai_client.recent_visual_anchors()` читает `plan.json` предыдущих AI slots в обратном порядке.
 
-User uploaded sidecars for slots 1–10. Review found:
+Config:
 
-- cat series numbering is correct (`#001` slot 2 through `#005` slot 10);
-- AI titles are specific to the fact topic rather than a generic repeated template;
-- safety/review flags are preserved;
-- slot 2 attribution is present;
-- long-run improvements worth adding after pilot review: subject cooldown for AI facts and non-identical cat descriptions.
+```toml
+[long_run]
+fact_subject_cooldown = 6
+```
 
-Do not rebuild the frozen pilot solely for these metadata refinements.
+Автоматический planner исключает последние 6 distinct `visual_anchor` из доступного stock-friendly subject list. Это не вечный ban: старое животное снова становится доступно после выхода из cooldown window. Explicit `--topic` пользователя по-прежнему имеет приоритет.
 
-## Immediate continuation
+## Cat numbering / language / description
 
-The frozen 15-slot generation phase is done. Next work should **not** be another `pilot-batch`.
+- Pilot cat episodes остаются #001–#007.
+- Long-run начинается с #008.
+- Episode numbering больше не зависит от того, что slot находится в конечном `content.animal_slots`.
+- Long-run cat language вычисляется детерминированно по отдельному long-run cat ordinal.
+- Pilot descriptions остаются byte-stable.
+- Long-run cat descriptions выбираются детерминированно из небольшого безопасного набора вариантов, чтобы не создавать сотни одинаковых описаний.
 
-Recommended sequence:
+## Cat source history теперь unbounded
 
-1. Human visual review of the generated set, especially later unattended outputs (cats and AI facts).
-2. Run `vv status` for final local budget/state checkpoint.
-3. If quality is acceptable, mark conveyor validation complete.
-4. Implement long-run/unbounded generation mode instead of the finite 15-slot manifest, including durable episode numbering/history, fact-subject cooldown, cat-description variation, and shared source history/pool behavior.
-5. Configure Windows Task Scheduler only after long-run mode is ready.
-6. YouTube uploader/OAuth remains a separate explicit phase; keep review-first/manual publication until the user explicitly changes policy.
+`source_history.py` больше не ограничивает prior history списком pilot animal slots. Он обнаруживает реально существующие:
 
-## Git / release
+```text
+runtime/ready_for_review/slot-*-*-animals.mp4
+```
 
-Continue on `mvp/pilot-scaffold`, Draft PR #1. Do not merge until separate user decision after review. PR remains the review vehicle for the pilot work.
+и читает соответствующие `runtime/slots/XX/sources.json`. Поэтому источники из slot 16+ также блокируются от тяжёлого повторного reuse.
+
+Все существующие quality gates сохраняются: provenance/commercial use, near-9:16, audible audio, Luna relevance, minimum 5 unique clips, final max-one-incidental-repeat gate.
+
+## YouTube / acquisition wording
+
+YouTube Data API = discovery/reference/license metadata, не media-download endpoint. Uploader-declared CC не доказывает chain-of-title и не разрешает любой способ acquisition. Технический clean/geometry/audio PASS не называть доказательством platform compliance.
+
+Long-run automated production должен предпочитать Pexels/Pixabay, owned/creator-supplied или independently authorized downloadable files. yt-dlp capability != official YouTube/API permission.
+
+## CI
+
+Первый CI после переименования cooldown helper поймал только старый test-import; test обновлён.
+
+Последний завершённый code test-job после long-run implementation:
+
+```text
+108 passed in 0.55s
+OpenAI spent in CI: $0.0000 / $10.00
+auto_publish: False
+publication gate: PASS
+long_run: True
+```
+
+CI workflow также обновлён, чтобы запускать `vv longrun-next --dry-run` на Ubuntu и Windows. После docs commits HEAD двигается; всегда recheck live перед утверждением полного workflow status.
+
+## Immediate local continuation
+
+После того как пользователь подтянет branch:
+
+```powershell
+cd D:\KiraS\VV_knopka
+git pull
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\vv.exe status
+.\.venv\Scripts\vv.exe longrun-next --dry-run
+```
+
+Ожидаемый dry-run:
+
+```text
+slot 16: animal_compilation / en -> ...slot-16-en-animals.mp4
+```
+
+Если dry-run правильный, следующий тест — **ровно один** реальный:
+
+```powershell
+.\.venv\Scripts\vv.exe longrun-next
+```
+
+Проверить slot 16 визуально и sidecar. Только после успешного реального long-run slot переходить к Windows Task Scheduler. YouTube uploader/OAuth остаётся отдельной фазой; публикация пока ручная.
+
+## Git
+
+PR #1 остаётся draft/open/unmerged. Название PR обновлено под pilot + long-run phase. Не merge без отдельного решения пользователя.
