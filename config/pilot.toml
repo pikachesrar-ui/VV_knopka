@@ -26,6 +26,18 @@ fact_subject_cooldown = 6
 # Reusing it starts the cooldown again. The frozen pilot keeps its all-history rule.
 cat_source_cooldown_episodes = 5
 
+[youtube]
+# Explicitly enabled after the completed human-reviewed pilot. The immutable pilot
+# section above remains unchanged as historical configuration.
+enabled = true
+auto_publish = true
+privacy_status = "public"
+category_id = "15"
+made_for_kids = false
+notify_subscribers = false
+# Local OAuth material lives under ignored runtime/. Do not commit OAuth JSON/token files.
+client_secret_file = "runtime/youtube/client_secret.json"
+
 [openai]
 writer_model = "gpt-5.6-terra"
 writer_reasoning_effort = "low"
