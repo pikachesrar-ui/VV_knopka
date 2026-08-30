@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +12,15 @@ SCOPES = (
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
 )
+
+
+class YouTubeUploadLimitReached(RuntimeError):
+    """YouTube channel daily upload limit; safe to defer and retry later."""
+
+    def __init__(self, message: str, *, slot: int = 0, retry_not_before: str | None = None):
+        super().__init__(message)
+        self.slot = int(slot or 0)
+        self.retry_not_before = retry_not_before
 
 
 def youtube_dir(settings: Settings) -> Path:
@@ -32,6 +41,10 @@ def token_path(settings: Settings) -> Path:
 
 def channel_binding_path(settings: Settings) -> Path:
     return youtube_dir(settings) / "channel.json"
+
+
+def upload_limit_state_path(settings: Settings) -> Path:
+    return youtube_dir(settings) / "upload-limit.json"
 
 
 def _google_imports():
@@ -65,7 +78,7 @@ def _load_credentials(settings: Settings, *, interactive: bool) -> Any:
     if credentials and credentials.valid:
         return credentials
     if not interactive:
-        raise RuntimeError("YouTube OAuth token is missing/invalid. Run `vv youtube-auth` interactively first.")
+        raise RuntimeError("YouTube OAuth token is missing/invalid. Run `vv-youtube auth` interactively first.")
 
     secret = client_secret_path(settings)
     if not secret.exists():
@@ -114,7 +127,7 @@ def authorize_and_bind(settings: Settings) -> dict[str, str]:
 def _require_bound_service(settings: Settings):
     binding_path = channel_binding_path(settings)
     if not binding_path.exists():
-        raise RuntimeError("YouTube channel is not bound. Run `vv youtube-auth` and verify the displayed channel first.")
+        raise RuntimeError("YouTube channel is not bound. Run `vv-youtube auth` and verify the displayed channel first.")
     binding = json.loads(binding_path.read_text(encoding="utf-8"))
     service = _service(settings, interactive=False)
     current = _current_channel(service)
@@ -136,6 +149,68 @@ def _load_metadata(metadata_path: Path) -> dict[str, Any]:
         raise RuntimeError(f"Video file from metadata does not exist or is empty: {video}")
     raw["_video_path"] = video
     return raw
+
+
+def _youtube_error_reasons(exc: BaseException) -> set[str]:
+    content = getattr(exc, "content", None)
+    if isinstance(content, bytes):
+        content = content.decode("utf-8", errors="replace")
+    if isinstance(content, str):
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            errors = (payload.get("error") or {}).get("errors") or []
+            reasons = {
+                str(item.get("reason") or "")
+                for item in errors
+                if isinstance(item, dict) and item.get("reason")
+            }
+            if reasons:
+                return reasons
+    text = str(exc)
+    return {"uploadLimitExceeded"} if "uploadLimitExceeded" in text else set()
+
+
+def _write_upload_limit_state(settings: Settings, *, slot: int) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    retry = now + timedelta(hours=24)
+    state = {
+        "reason": "uploadLimitExceeded",
+        "slot": int(slot or 0),
+        "observed_at": now.isoformat(),
+        "retry_not_before": retry.isoformat(),
+    }
+    upload_limit_state_path(settings).write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    return state
+
+
+def active_upload_limit(settings: Settings) -> dict[str, Any] | None:
+    path = upload_limit_state_path(settings)
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+        retry = datetime.fromisoformat(str(state.get("retry_not_before") or ""))
+        if retry.tzinfo is None:
+            retry = retry.replace(tzinfo=timezone.utc)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    if datetime.now(timezone.utc) >= retry:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        return None
+    return state
+
+
+def _clear_upload_limit_state(settings: Settings) -> None:
+    try:
+        upload_limit_state_path(settings).unlink()
+    except FileNotFoundError:
+        pass
 
 
 def upload_one(settings: Settings, metadata_path: Path, *, dry_run: bool = False) -> dict[str, Any]:
@@ -182,9 +257,20 @@ def upload_one(settings: Settings, metadata_path: Path, *, dry_run: bool = False
         notifySubscribers=bool(youtube_cfg.get("notify_subscribers", False)),
     )
     response = None
-    while response is None:
-        _, response = request.next_chunk()
+    try:
+        while response is None:
+            _, response = request.next_chunk()
+    except Exception as exc:
+        if "uploadLimitExceeded" in _youtube_error_reasons(exc):
+            state = _write_upload_limit_state(settings, slot=preview["slot"])
+            raise YouTubeUploadLimitReached(
+                "YouTube daily channel upload limit reached; defer uploads and retry after the 24-hour cooldown.",
+                slot=preview["slot"],
+                retry_not_before=str(state["retry_not_before"]),
+            ) from exc
+        raise
 
+    _clear_upload_limit_state(settings)
     video_id = str(response.get("id") or "")
     actual_privacy = str((response.get("status") or {}).get("privacyStatus") or requested_privacy)
     result = {
@@ -217,6 +303,14 @@ def ready_metadata(settings: Settings) -> list[Path]:
     return sorted(paths, key=slot_number)
 
 
+def pending_ready_metadata(settings: Settings) -> list[Path]:
+    return [path for path in ready_metadata(settings) if not _receipt_path(path).exists()]
+
+
+def pending_ready_count(settings: Settings) -> int:
+    return len(pending_ready_metadata(settings))
+
+
 def upload_ready(
     settings: Settings,
     *,
@@ -224,9 +318,36 @@ def upload_ready(
     newest: bool = False,
     dry_run: bool = False,
 ) -> list[dict[str, Any]]:
-    pending = [path for path in ready_metadata(settings) if not _receipt_path(path).exists()]
+    pending = pending_ready_metadata(settings)
     if newest:
         pending.reverse()
     if limit is not None:
         pending = pending[: max(int(limit), 0)]
-    return [upload_one(settings, path, dry_run=dry_run) for path in pending]
+    if not pending:
+        return []
+
+    if not dry_run:
+        cooldown = active_upload_limit(settings)
+        if cooldown is not None:
+            return [{
+                "deferred": True,
+                "reason": "upload_limit",
+                "slot": int(cooldown.get("slot") or 0),
+                "retry_not_before": str(cooldown.get("retry_not_before") or ""),
+                "message": "YouTube daily upload limit cooldown is still active.",
+            }]
+
+    results: list[dict[str, Any]] = []
+    for path in pending:
+        try:
+            results.append(upload_one(settings, path, dry_run=dry_run))
+        except YouTubeUploadLimitReached as exc:
+            results.append({
+                "deferred": True,
+                "reason": "upload_limit",
+                "slot": exc.slot,
+                "retry_not_before": exc.retry_not_before,
+                "message": str(exc),
+            })
+            break
+    return results
