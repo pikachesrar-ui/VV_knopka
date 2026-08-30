@@ -6,124 +6,84 @@
 
 - Python `3.11.0`.
 - `auto_publish=false`; publication gate = `PASS`.
-- Последний показанный OpenAI ledger: **$0.0340 / $10.00**.
+- Последний показанный OpenAI ledger: **$0.0509 / $10.00**.
+- Последний локальный pytest: **62 passed in 0.48s**.
 - Slot 1 RU AI Short = manual QUALITY PASS.
 - Cat renderer = local FFmpeg; real meow + Impact; no voiceover/BGM.
 - Generic slot 2 `#001 — Котики` пользователь оценил как нормальный.
 - Vertical gate локально подтверждён: 6/6 selected Pexels sources = **720x1280 / aspect 0.5625**.
 
-## YouTube Creative Commons — текущий путь
+## YouTube Creative Commons — OFFICIAL API WORKS LOCALLY
 
-Pexels работает, но footage может выглядеть слишком stock-like. Текущая цель — найти более живых/смешных котов через YouTube Creative Commons и оставить Pexels/Pixabay fallback.
+Пользователь успешно включил YouTube Data API v3, создал API key и хранит его локально в `.env` как `YOUTUBE_API_KEY`. Ключ никогда не просить вставлять в чат и не коммитить.
 
-Старые no-key попытки через optional yt-dlp `license` дали 0 кандидатов даже на 6000 дней; этот путь больше не является основным.
-
-### Google Cloud / YouTube Data API — ТЕПЕРЬ ДОСТУПЕН
-
-Пользователь смог:
-
-- войти в Google Cloud Console;
-- выбрать проект `VV Knopka`;
-- включить YouTube Data API v3;
-- создать API key без необходимости OAuth/channel login;
-- сохранить ключ локально в `.env` как `YOUTUBE_API_KEY`.
-
-Ключ никогда не коммитить и не просить вставлять в чат.
-
-## `vv-cat-youtube` v3 — официальный API preferred
-
-`pyproject.toml` теперь маршрутизирует:
+Локальный запуск:
 
 ```text
-vv-cat-youtube = vv_knopka.youtube_cat_source_v3:main
-```
-
-Если `YOUTUBE_API_KEY` присутствует, `cc-search` автоматически использует официальный YouTube Data API:
-
-```text
-search.list with videoLicense=creativeCommon
--> videos.list details
--> status.license == creativeCommon
--> ranked CC candidates
--> runtime/trends/youtube-cat-cc-official.json
-```
-
-Команда:
-
-```powershell
 vv-cat-youtube cc-search
-```
-
-Defaults: 6000 days, scan-per-query 30 (API max capped at 50), limit 15, default query `cat|kitten`.
-
-Это публичные metadata-запросы; OAuth/channel access не нужен. Если ключ отсутствует или указать `--no-key`, остаётся no-key YouTube CC-filter fallback.
-
-### Safe official import
-
-После выбора кандидата:
-
-```powershell
-vv-cat-youtube cc-import 2 --candidate N
-```
-
-Для official API report импорт перед download ещё раз вызывает `videos.list` и требует текущий:
-
-```text
-status.license == creativeCommon
-```
-
-Только после этого:
-
-```text
-yt-dlp download
--> near-9:16 ffprobe gate
--> duration >= clip_seconds
--> audible audio gate
--> production sources.json
--> attribution.json
-```
-
-Rights metadata сохраняет `rights_verified=true`, `rights_verification_method=youtube_data_api_status_license`, attribution и `api_status_license=creativeCommon`.
-
-## Test-only ordinary YouTube остаётся изолированным
-
-Стандартные/unverified YouTube clips не становятся production-safe. Уже локальный exact file можно использовать только через:
-
-```powershell
-vv-cat-youtube test-add 2 --url "https://youtube..." --file "D:\path\cat.mp4" --confirm-match
-vv-cat-youtube test-render 2
-```
-
-Storage only `runtime/test_only/slot-02/`; обязательны `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
-
-## Tests / CI
-
-Official API v3 добавил regression coverage для:
-
-- API discovery/dedupe;
-- official `creativeCommon` evidence in report;
-- report provenance gate;
-- API key required for recheck before import.
-
-GitHub CI `test` job on code head `042ae76...`: **62 passed in 0.41s**, `Verify pilot lock` = success. Windows bootstrap выполнялся отдельно на последней проверке.
-
-## Следующая точка на ПК
-
-```powershell
-git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\vv.exe status
-.\.venv\Scripts\vv-cat-youtube.exe cc-search
-```
-
-Ожидаемый console prefix при корректно подхваченном ключе:
-
-```text
 YouTube CC search: official YouTube Data API (videoLicense=creativeCommon)
 Public metadata only; no OAuth, no channel login, no media download
+Creative Commons cat candidates: 15
 ```
 
-Если API вернёт кандидатов — прислать top list и выбрать N. Если ошибка 403/400 — прислать текст ошибки без ключа.
+Report:
 
-Draft PR #1 не merge без отдельного решения после visual review.
+```text
+runtime/trends/youtube-cat-cc-official.json
+```
+
+Top candidates from the successful run:
+
+```text
+01  9,490,575  Never about drinking water! 😼
+02 27,067,392  Bichinhos que nos entendem -gatos e pássaros
+03 58,256,969  Bichinhos que nos entendem - gatos e caixas
+04 34,953,145  Bichinhos que nos entendem - mamãe gata
+05  9,947,315  Wind swept rescue mission! 🤯
+06 10,979,204  Bichinhos que nos entendem -gatos e água
+07 33,876,469  Bichinhos que nos entendem -gatos e suas patinhas
+08 13,067,369  What was the reason for this? 👀
+09  9,894,205  Bichinhos que nos entendem-gatos e aspiradores
+10 27,289,448  Bichinhos que nos entendem -dando tilt nos gatos
+11 36,424,618  Bichinhos que nos entendem - gatos laranjas
+12  7,944,733  Ranking Best Big Cats Moments
+13 20,034,233  Bichinhos que nos entendem - gatos com fobia social
+14 10,244,613  What was this cat trying to do 🤔🐾
+15 20,670,771  Bichinhos que nos entendem - gatitos e brinquedos
+```
+
+All 15 were returned through official `videoLicense=creativeCommon` discovery and `videos.status.license=creativeCommon` verification.
+
+## Current recommended quality test
+
+First test should prefer candidates that appear from their titles to be single-scene Shorts rather than already-edited compilations:
+
+- candidate **1** — `Never about drinking water! 😼`
+- candidate **8** — `What was the reason for this? 👀`
+- candidate **14** — `What was this cat trying to do 🤔🐾`
+
+The repeated `Bichinhos que nos entendem` series may still be useful later, but first-pass concern is that these may already be compilations; avoid a compilation-inside-compilation until manually inspected. Candidate 12 is big cats and is not suitable for the domestic-cat compilation target.
+
+Run imports one by one:
+
+```powershell
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 1
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 8
+.\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate 14
+```
+
+Each import rechecks current API `status.license == creativeCommon`, downloads only after that, then requires near-9:16, minimum duration and audible source audio. Failures on orientation/audio are expected and should be reported rather than bypassed.
+
+If at least 2–3 are accepted, run:
+
+```powershell
+.\.venv\Scripts\vv.exe render-animal 2
+```
+
+The YouTube CC imports should be prioritized in production `sources.json`; Pexels/Pixabay fill remaining target slots to six.
+
+## Test-only ordinary YouTube remains isolated
+
+Standard/unverified YouTube clips are not production-safe. Already-local exact files may only be used under `runtime/test_only/slot-02/` with `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
+
+Draft PR #1 remains review-only; do not merge without explicit user decision after visual review.
