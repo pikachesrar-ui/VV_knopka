@@ -6,38 +6,39 @@
 
 - Python `3.11.0`.
 - Frozen pilot полностью отрендерен: **15/15** и визуально принят пользователем.
-- Long-run local validation дошёл до первого реального SUCCESS.
-
-Успешный post-pilot output:
+- Первый real long-run slot успешно готов:
 
 ```text
 D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.mp4
 D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.upload.json
 ```
 
-Последняя команда завершилась:
+- Scheduler runner dry-run после slot16:
 
 ```text
-Long-run conveyor outputs:
-D:\KiraS\VV_knopka\runtime\ready_for_review\slot-16-en-animals.mp4
+OpenAI spent: $0.1885 / $10.00
+auto_publish: False
+publication gate: PASS
+long_run: True
+slot 17: ai_short / en -> ...slot-17-en-ai.mp4
+SUCCESS: scheduled longrun-next completed.
 ```
 
-Slot 16 = EN cats / cat episode #008. Следующий missing target должен быть **slot 17 ai_short / en**.
+Следующий missing target = **slot 17 AI EN**.
 
-## Что реально подтвердил slot 16
+## Long-run cat sourcing — validated in real run
 
-До success были два fail-closed `1/5` sourcing attempts. Финальный рабочий механизм:
+Рабочая policy:
 
-- long-run блокирует источники последних 5 rendered cat episodes;
-- never-used remote stock остаётся первым приоритетом;
-- старые Pexels/Pixabay outside cooldown могут вернуться как fallback;
-- existing accepted fresh clip из failed slot audit сохраняется;
-- если remote search не находит минимум, local Pexels/Pixabay history outside cooldown может seed fallback;
-- local history повторно проходит current 9:16 + audible-audio checks;
-- recent protected sources не seedятся;
-- quality/license/vision/minimum-count gates не ослаблены.
+- source IDs последних 5 rendered cat episodes protected;
+- never-used remote stock first;
+- cooled older Pexels/Pixabay allowed only as fallback;
+- failed-attempt accepted local stock recovered;
+- if remote stock minimum fails, local Pexels/Pixabay history outside cooldown may seed fallback;
+- seeded local history is revalidated by current 9:16 + audible-audio gates;
+- quality/license/vision/minimum-count gates unchanged.
 
-Этот fallback теперь подтверждён реальным готовым MP4.
+Slot16 success реально подтвердил этот fallback.
 
 ## Long-run schedule
 
@@ -56,82 +57,105 @@ Slot 16 = EN cats / cat episode #008. Следующий missing target долж
 
 AI subject cooldown = последние 6 distinct visual anchors. Cat descriptions имеют deterministic variation. Attempt state = `runtime/long_run/state.json`. Existing ready MP4 = resume marker.
 
-## Windows Task Scheduler — IMPLEMENTED
+## Windows Task Scheduler — 3 nightly triggers approved
 
-Добавлены:
+Пользователь одобрил недельный test с **до 3 generated videos per night**.
+
+Approved Moscow-time triggers:
 
 ```text
-scripts/run-longrun-task.ps1
-scripts/install-longrun-task.ps1
+01:30
+03:30
+05:30
 ```
 
-Runner:
+Installer updated: одна Windows Scheduled Task может иметь несколько daily triggers.
 
-- один `longrun-next` за запуск;
-- `vv status` перед generation;
-- лог `runtime/scheduler/longrun-task.log`;
-- exclusive lock против overlapping runs;
-- no `git pull` / no auto-update;
-- no publishing;
-- generation failure = nonzero, следующий run resume того же slot;
-- `-DryRun` не генерирует видео.
+Default:
 
-Installer:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1
+```
 
-- один daily Windows Scheduled Task;
-- время задаётся явно `-At "HH:mm"`;
-- текущий interactive Windows user, пароль не запрашивается и не хранится;
-- StartWhenAvailable;
-- IgnoreNew при overlap;
-- execution limit 4h;
-- battery run allowed;
-- `-DryRun` ничего не регистрирует.
+регистрирует 01:30,03:30,05:30.
+
+Custom `-At "HH:mm"` всё ещё работает; также поддерживается comma/semicolon-separated список.
+
+Runtime behavior:
+
+- один `longrun-next` на trigger;
+- `vv status` before generation;
+- `runtime/scheduler/longrun-task.log`;
+- exclusive lock + Task Scheduler `IgnoreNew` prevent overlap;
+- if prior render is still running, later trigger is skipped rather than parallelized;
+- failure exits nonzero; next trigger resumes same missing slot;
+- no git pull / no code update / no publishing;
+- `auto_publish=false` unchanged.
+
+Поэтому это **до 3/day**. За 7 дней максимум = **21 generated videos**.
+
+OpenAI cost planning estimate based on observed usage = roughly **$0.25–0.50/week** for 21 videos, with hard cap still `$10`.
 
 ## Tests / CI
 
-Scheduler code checkpoint:
+Multi-trigger installer checkpoint:
 
 ```text
-commit: 1844ddf3c5f39734989b99cf5c3a05df04ae33d6
-workflow run: 33325562523
-114 passed
+92145209f9bc68eba3fcbe5e7a2e27725cd2f036
+6838930aeba02441176d5fabd6bb9653697be48f
+```
+
+Ubuntu test job for this checkpoint:
+
+```text
+114 passed in 0.64s
 publication gate: PASS
 long_run: True
 ```
 
-Workflow = `success` полностью:
+Windows CI dry-run now validates both:
 
-- Ubuntu tests green;
-- Windows bootstrap green;
-- scheduler runner dry-run green;
-- scheduler installer dry-run green.
+- default 3-trigger installer plan;
+- custom single-trigger `-At "12:00"` plan.
 
-Docs commits после scheduler code checkpoint двигают branch HEAD.
+Workflow run = `33326252717`; recheck live status before claiming full Windows completion.
 
 ## Immediate next local step
-
-Подтянуть scheduler scripts и проверить их без реальной генерации:
 
 ```powershell
 cd D:\KiraS\VV_knopka
 git pull
-powershell -ExecutionPolicy Bypass -File .\scripts\run-longrun-task.ps1 -DryRun
+powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -DryRun
 ```
 
-Ожидается:
+Expected key lines:
 
 ```text
-OpenAI spent: ... / $10.00
-auto_publish: False
-publication gate: PASS
-long_run: True
-slot 17: ai_short / en -> ...slot-17-en-ai.mp4
+Schedule  : daily at 01:30, 03:30, 05:30
+Triggers  : 3 per day
+DRY RUN: scheduled task was not registered.
 ```
 
-После этого нужно получить от пользователя желаемое **локальное время ежедневного запуска** и установить task:
+Then real install:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "HH:mm"
+powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1
 ```
 
-Publishing остаётся manual/review-first; uploader/OAuth пока не реализованы. Draft PR #1 остаётся open/draft/unmerged.
+Expected after registration:
+
+```text
+Registered: VV Knopka Long Run
+State     : Ready
+Triggers  : 3
+Next run  : ...
+```
+
+After first night inspect:
+
+```powershell
+Get-Content .\runtime\scheduler\longrun-task.log -Tail 100
+Get-ChildItem .\runtime\ready_for_review\slot-*.mp4 | Sort-Object Name | Select-Object -Last 10
+```
+
+Publishing stays manual/review-first; uploader/OAuth not implemented. Draft PR #1 remains open/draft/unmerged.
