@@ -97,7 +97,21 @@ Commands:
 
 Existing non-empty long-run MP4 files are resume markers just like the pilot. Attempt state is written to `runtime/long_run/state.json`.
 
-## 8. Architecture constraints
+## 8. Windows scheduled generation
+
+Scheduler support is implemented but must be installed explicitly on the user's machine.
+
+- `scripts/run-longrun-task.ps1` runs exactly one review-only `longrun-next` per invocation.
+- It runs `vv status` first, logs to `runtime/scheduler/longrun-task.log`, and uses an exclusive lock to prevent overlapping renders.
+- It never runs `git pull`, never auto-updates code, and never publishes.
+- A failed generation exits nonzero; the next scheduled run resumes the same missing slot through existing long-run resume semantics.
+- `scripts/install-longrun-task.ps1 -At HH:mm` registers one daily Windows Scheduled Task for the current interactive Windows user without storing/requesting a password.
+- Scheduler task is configured `StartWhenAvailable`, `IgnoreNew`, battery-safe, with a four-hour execution limit.
+- Both scripts support dry-run validation; CI executes the dry-run path on Windows.
+
+Do not install a schedule until the user chooses the desired local clock time.
+
+## 9. Architecture constraints
 
 - `VV_knopka` is orchestration/business logic.
 - Do not vendor/fork all MoneyPrinterTurbo into Git history.
@@ -107,7 +121,7 @@ Existing non-empty long-run MP4 files are resume markers just like the pilot. At
 - Keep secrets out of Git. `.env` must never be committed.
 - Real meow binary stays local/ignored or via `CAT_MEOW_FILE`.
 
-## 9. Git workflow
+## 10. Git workflow
 
 Development branch: `mvp/pilot-scaffold`.
 Draft review vehicle: PR #1 into `main`.
@@ -117,36 +131,38 @@ Draft review vehicle: PR #1 into `main`.
 - GitHub wins over docs on mechanical facts such as SHA/CI/file list.
 - PR #1 remains draft/open/unmerged until an explicit user decision.
 
-## 10. Current milestone
+## 11. Current milestone
 
-The pilot/conveyor format has been visually accepted and the project is in **long-run local validation**.
+The pilot/conveyor format has been visually accepted and **the first real post-pilot long-run slot has succeeded locally**.
 
-The user's first real long-run attempts correctly selected slot 16 EN cats but failed safely at sourcing with only `1/5` usable fresh clips. A rolling cooldown alone was insufficient because merely making old source IDs eligible does not guarantee Pexels/Pixabay search will rediscover those exact older IDs.
+Confirmed on the user's machine:
 
-Current fix on the branch:
+```text
+slot-16-en-animals.mp4
+slot-16-en-animals.upload.json
+Long-run conveyor outputs: slot-16-en-animals.mp4
+```
 
-- pilot keeps all-history protection;
-- long-run protects only the previous 5 rendered cat episodes;
-- never-used stock is still searched/ranked first;
-- older cooled-down remote stock is fallback only;
-- after fresh-source exhaustion, existing local Pexels/Pixabay files from cooled-down rendered episodes can seed the fallback pool;
-- seeded history is revalidated by the current geometry/audio gates;
-- failed-attempt accepted files are recovered and preserved;
-- source audit records cooled-down local fallback separately;
-- no aspect/audio/license/vision/minimum-count gate was weakened.
+The successful retry validated the cooled local-history fallback: the system preserved the accepted fresh slot-16 source and could fill the remaining minimum from sufficiently old Pexels/Pixabay history while retaining the current gates.
 
-Latest code-head test job for the local-history fallback: **114 passed** with safety lock PASS and long-run dry-run still resolving slot 16. Recheck live workflow before claiming all jobs green.
+Next deterministic target is **slot 17 / ai_short / EN**.
 
-Immediate local continuation after pull:
+Windows scheduler implementation is now on the branch. Code/CI checkpoint after scheduler scripts:
 
-1. install editable + pytest;
-2. expect about 114 tests and `vv longrun-next --dry-run` -> slot 16;
-3. retry exactly one `vv longrun-next` without deleting `runtime/slots/16`;
-4. inspect slot 16 output/audits before enabling Windows Task Scheduler.
+- Python suite remains **114 passed**;
+- safety lock and long-run dry-run PASS;
+- Windows CI validates both scheduler scripts in dry-run mode;
+- workflow run `33325562523` completed successfully for commit `1844ddf3c5f39734989b99cf5c3a05df04ae33d6`.
 
-Task Scheduler comes after one real long-run slot succeeds. Publishing remains manual/review-first.
+Immediate local continuation:
 
-## 11. Language / title policy
+1. pull scheduler scripts;
+2. run `scripts/run-longrun-task.ps1 -DryRun` and verify it resolves slot 17 without rendering;
+3. choose a daily local clock time;
+4. install the task with `scripts/install-longrun-task.ps1 -At HH:mm`;
+5. publishing remains manual/review-first.
+
+## 12. Language / title policy
 
 - Never publish translated duplicates of the same cat episode.
 - Long-run cat cadence: `en, en, en, en, ru`.
@@ -155,6 +171,6 @@ Task Scheduler comes after one real long-run slot succeeds. Publishing remains m
 - Upload-facing title family remains `Котики, которые сделали мой день 😹 #NNN #shorts` / `Cats That Made My Day 😹 #NNN #shorts`.
 - AI fact titles come from each specific plan; do not use one repeated generic template.
 
-## 12. Context persistence
+## 13. Context persistence
 
 At the end of every substantial work session, update handoff/progress so a fresh chat can resume from GitHub without relying on conversational memory.
