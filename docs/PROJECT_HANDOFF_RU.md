@@ -1,132 +1,119 @@
 # VV_knopka — PROJECT HANDOFF (RU)
 
-Актуальный контекст для нового чата. GitHub — source of truth для code/commit/CI. Рабочая ветка: `mvp/pilot-scaffold`. Draft PR #1 открыт и не merge без отдельного решения пользователя после visual review.
+Актуальный контекст для нового чата. GitHub — source of truth для code/commit/CI. Рабочая ветка: `mvp/pilot-scaffold`. Draft PR #1 открыт; не merge без отдельного решения пользователя после visual review.
 
 ## Frozen pilot
 
 15 Shorts: 8 × `ai_short`, 7 × `animal_compilation`; slot 1 RU AI, slot 2 RU cats, остальные 13 EN; one channel; OpenAI project cap `$10`; `auto_publish=false`; human review; production outputs only `runtime/ready_for_review`.
 
-## Подтверждено локально
+## Локально подтверждено
 
-- Windows project path `D:\KiraS\VV_knopka`, `.venv` Python 3.11.
+- Windows path `D:\KiraS\VV_knopka`, `.venv` Python 3.11.
 - Latest shown OpenAI ledger `$0.0340 / $10.00`; publication gate PASS.
 - Slot 1 octopus = manual QUALITY PASS.
-- Cat renderer local FFmpeg; Impact cards + real meow; no voiceover/BGM.
-- Narrow themes removed from production; cats are generic `#NNN — Котики` / `#NNN — Cats` compilations.
-- User manually accepted latest generic slot 2 as normal.
-- Strict near-9:16 source gate is manually validated: all 6 selected Pexels clips were exactly 720×1280 / aspect 0.5625.
+- Cat renderer local FFmpeg; Impact + real meow; no voiceover/BGM.
+- Production cats = broad generic `#NNN — Котики` / `#NNN — Cats`, narrow trend themes abandoned.
+- Latest generic slot 2 manually accepted as normal.
+- Strict near-9:16 gate manually validated: all six selected Pexels clips were exactly 720×1280 / aspect 0.5625.
 
-## Why current work is YouTube CC
+## Current milestone: better cat footage through YouTube CC
 
-Pexels footage is technically acceptable but can feel stock-like. User wants funnier/more natural cat footage. Current experiment = verified YouTube Creative Commons Attribution as production-capable UGC-like source, while keeping Pexels/Pixabay fallback.
+Pexels is technically acceptable but can feel stock-like. Goal: find funnier/more natural cat footage with verified YouTube Creative Commons Attribution and keep Pexels/Pixabay fallback.
 
-Google Cloud/API key is explicitly not suitable for the user; do not require address/card/billing for this project.
+Old no-key yt-dlp license discovery was exhausted: two scans, including 6000-day window, returned 0 verified CC because `license` is optional metadata.
 
-## Old YouTube CC search failure
+## Google Cloud / YouTube Data API — AVAILABLE
 
-Old `vv-cat-youtube cc-search` kept only candidates whose yt-dlp `license` field explicitly said Creative Commons. User ran:
-
-```text
-vv-cat-youtube cc-search
-Verified CC cat candidates: 0
-
-vv-cat-youtube cc-search --days 6000 --limit 15 --scan-per-query 20
-Verified CC cat candidates: 0
-```
-
-Conclusion: this is not a recency-window problem. `license` is optional metadata in yt-dlp, so absence of that field makes metadata-only CC discovery unusable.
-
-## YouTube CC search v2 — IMPLEMENTED
-
-New module:
+Earlier Google Cloud signup looked unsuitable, but this changed on 2026-08-30: user successfully entered Google Cloud Console, selected project `VV Knopka`, enabled YouTube Data API v3, created an API key, and stored it locally in `.env` as:
 
 ```text
-src/vv_knopka/youtube_cat_source_v2.py
+YOUTUBE_API_KEY=...
 ```
 
-`pyproject.toml` now maps:
+Never ask user to paste the key. Never commit `.env` or secrets. Public metadata search does not require OAuth/channel access.
+
+## Official `vv-cat-youtube` v3
+
+Entry point now maps to:
 
 ```text
-vv-cat-youtube = vv_knopka.youtube_cat_source_v2:main
+src/vv_knopka/youtube_cat_source_v3.py
 ```
 
-The old `youtube_cat_source.py` remains as lower-level helper/legacy strict mode/test-only implementation.
-
-### Search mechanism
-
-Current yt-dlp includes `YoutubeSearchURLIE`, explicitly supporting YouTube search URLs with `sp=` filters. YouTube Help still says Creative Commons content can be found using the Creative Commons advanced search filter.
-
-v2 search therefore uses the **platform CC filter itself**, not the optional direct `license` field as the sole discovery signal:
+and `pyproject.toml` contains:
 
 ```text
-YouTube Creative Commons search filter
--> filtered video IDs
--> full yt-dlp hydration per video
--> explicit Standard/non-CC license => reject
--> explicit CC license => accept with metadata+filter evidence
--> empty license field => accept only because it came from CC-filtered search
--> saved report
+vv-cat-youtube = vv_knopka.youtube_cat_source_v3:main
 ```
 
-The filter provenance is stored in every candidate and the report.
+### `cc-search` — official API preferred
 
-Command:
+If `YOUTUBE_API_KEY` exists:
 
 ```powershell
 vv-cat-youtube cc-search
 ```
 
-Default queries:
-
-- funny cat shorts
-- cats being cats
-- funny kittens shorts
-- cat fails shorts
-
-Defaults: days=6000, scan-per-query=20, limit=15.
-
-Report:
+uses:
 
 ```text
-runtime/trends/youtube-cat-cc-filtered.json
+YouTube Data API search.list
+videoLicense=creativeCommon
+query default = cat|kitten
+wide lookback (default 6000 days)
+-> videos.list snippet/statistics/status/contentDetails
+-> status.license must equal creativeCommon
+-> rank by views/day then views
+-> runtime/trends/youtube-cat-cc-official.json
 ```
 
-Diagnostics per query include `filtered_results`, `hydrated`, `accepted`, `search_url`. If result is again zero, inspect this report instead of blindly increasing scan depth.
+Defaults: `scan-per-query=30`, `limit=15`; API max per search is capped at 50 in code. Repeated `--query` can replace the default query. `--no-key` forces the old no-key CC-filter fallback.
 
-### Safe report-based import
+Expected prefix:
 
-Preferred production import:
+```text
+YouTube CC search: official YouTube Data API (videoLicense=creativeCommon)
+Public metadata only; no OAuth, no channel login, no media download
+```
+
+### `cc-import` — official recheck before download
+
+Preferred import:
 
 ```powershell
 vv-cat-youtube cc-import 2 --candidate N
 ```
 
-It only accepts a candidate from a report whose source/filter provenance matches the expected YouTube CC-filter search. Before downloading it re-fetches metadata and checks video ID. If current metadata explicitly reports Standard/non-CC, import refuses even if the older report had filter evidence.
+For an official API report it:
 
-Then:
+1. validates report provenance and candidate rights flags;
+2. requires local `YOUTUBE_API_KEY`;
+3. calls current `videos.list(part=status,snippet,id=...)` again;
+4. requires current `status.license == creativeCommon`;
+5. downloads with yt-dlp only after that recheck;
+6. validates real ffprobe near-9:16 orientation;
+7. requires >= clip_seconds and audible source audio;
+8. prepends accepted YouTube CC source to production `sources.json`;
+9. writes attribution report.
 
-```text
-yt-dlp download
--> real ffprobe near-9:16 gate
--> duration >= clip_seconds
--> audible source gate
--> production runtime/slots/02/sources.json
--> attribution.json
-```
+Accepted source keeps title/creator/URL, license, attribution, SHA/dimensions/audio, `rights_verified=true`, `rights_verification_method=youtube_data_api_status_license`, `api_status_license=creativeCommon`.
 
-CC production clip stores creator/title/source URL/license, attribution text, `rights_verified=true`, `rights_status=creative_commons_attribution_required`, and verification method.
-
-Legacy strict URL mode remains:
+Normal:
 
 ```powershell
-vv-cat-youtube cc 2 --url "..."
+vv render-animal 2
 ```
 
-but it requires direct yt-dlp CC license metadata, so `cc-import` from v2 report is preferred.
+then uses imported YouTube CC first and stock fills remaining target slots.
 
-## Ordinary YouTube private test-only path
+### Legacy/fallback modes
 
-User also wants to compare normal funny YouTube clips privately. Standard/unverified media does not become production-safe merely because test is local. No automatic standard-license download is added.
+- `vv-cat-youtube cc ... --url ...` remains a strict legacy URL mode requiring direct yt-dlp CC license metadata.
+- no-key v2 YouTube search-filter backend remains available through `cc-search --no-key`, but official API is preferred now.
+
+## Ordinary YouTube private comparison
+
+Standard/unverified YouTube does not become production permission just because use is local. No automatic standard-license download in production flow.
 
 Already-local exact files can be isolated:
 
@@ -135,18 +122,15 @@ vv-cat-youtube test-add 2 --url "https://youtube..." --file "D:\path\cat.mp4" --
 vv-cat-youtube test-render 2
 ```
 
-They live only under `runtime/test_only/slot-02/`, never production `sources.json`/`ready_for_review`. Required locks: `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`. Test cards say `ТЕСТ — Котики`.
+Storage only under `runtime/test_only/slot-02/`, never production sources or ready_for_review. Required locks: `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, `rights_verified=false`.
 
-## Tests / current CI
+## Tests / CI
 
-Previous YouTube source layer had 54 tests. v2 added 4 regression tests covering:
+Before official API backend: v2 code had 58 tests.
 
-- CC `sp=` filter in generated search URL;
-- empty direct `license` accepted only with CC-filter provenance;
-- explicit Standard license rejected;
-- CC report provenance required and import recheck fails on current explicit non-CC.
+Official v3 added four tests for API discovery/dedupe, official rights evidence, report provenance, and API-key recheck requirement.
 
-GitHub CI `test` job for v2 code head `2e56412a...`: **58 passed in 0.49s**, `Verify pilot lock` success. Windows bootstrap was still running at last check; do not claim entire workflow complete unless rechecked.
+GitHub CI `test` job on code head `042ae76fc711b4cf10ab042ac70afd1560e8db5f`: **62 passed in 0.41s**, `Verify pilot lock` success. Windows bootstrap was still running separately at last check; recheck before claiming whole workflow success.
 
 ## Immediate next local step
 
@@ -158,21 +142,13 @@ git pull
 .\.venv\Scripts\vv-cat-youtube.exe cc-search
 ```
 
-Expected tests: ~58 passed.
-
-If candidates appear, inspect top list and then:
+If candidates appear, send top list and choose N, then:
 
 ```powershell
 .\.venv\Scripts\vv-cat-youtube.exe cc-import 2 --candidate N
 .\.venv\Scripts\vv.exe render-animal 2
 ```
 
-If search still gives 0, ask user for:
-
-```powershell
-Get-Content .\runtime\trends\youtube-cat-cc-filtered.json -Raw
-```
-
-The diagnostics will show whether YouTube returned zero filtered IDs or whether hydration/rejection removed them.
+If API returns HTTP 400/403/quota error, send only console error text, never the key.
 
 Do not merge Draft PR #1 until explicit user approval after visual pilot review.
