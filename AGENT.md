@@ -57,12 +57,17 @@ Until the user explicitly changes it:
 
 ## 5. YouTube / UGC source rules
 
-- YouTube Creative Commons Attribution is an allowed production candidate only after rights evidence is verified and attribution is preserved.
-- User now has `YouTube Data API v3` enabled and a local `YOUTUBE_API_KEY` in ignored `.env`; never ask for the key or commit it.
-- `vv-cat-youtube cc-search` must **prefer the official YouTube Data API** when the key is present: `search.list(videoLicense=creativeCommon)` plus `videos.list` and `status.license == creativeCommon`.
+- YouTube Creative Commons Attribution is an allowed production candidate only after rights evidence is verified, attribution is preserved, **and the downloaded media passes the clean-footage gate**.
+- User has `YouTube Data API v3` enabled and a local `YOUTUBE_API_KEY` in ignored `.env`; never ask for the key or commit it.
+- `vv-cat-youtube cc-search` must prefer the official YouTube Data API when the key is present: `search.list(videoLicense=creativeCommon)` plus `videos.list` and `status.license == creativeCommon`.
 - The no-key YouTube CC-filter/yt-dlp path remains fallback/research only (`--no-key`) because yt-dlp license metadata is optional.
 - Preferred production import is `vv-cat-youtube cc-import <slot> --candidate N` from a saved official CC report. It must recheck current `status.license == creativeCommon` through the API immediately before download.
-- The imported source still must pass near-9:16, duration and audible-audio gates before entering production `sources.json`.
+- Imported YouTube media must then pass near-9:16, duration, audible-audio **and clean-footage** gates.
+- Clean-footage gate is a Luna vision review over a 2x2 contact sheet sampled across the downloaded clip. Reject prominent creator/channel names, `@handles`, avatars/banners, social-platform watermarks/UI, large added meme/headline captions, split-screen/collage/ranking layouts, and obvious already-compiled/repost packaging. Allow incidental environmental text such as signs/labels/plates.
+- Do **not** crop/blur another account's branding to force a pass; reject the source instead.
+- Any production YouTube clip must carry `clean_footage_approved=true`. `render-animal` removes old/unreviewed YouTube imports from the active source manifest before selecting sources.
+- `vv-cat-youtube cc-clean <slot>` is the migration/audit command for already-imported YouTube production clips; it keeps passes and removes rejects from production `sources.json` while leaving local files intact for audit.
+- The clean-footage gate is a presentation/provenance-risk filter, not a substitute for the Creative Commons license check or human review.
 - Standard/unverified YouTube media is **not** production media merely because the current use is a local experiment.
 - A separate test-only path may accept an already-local file for private quality comparison, but it must stay under `runtime/test_only`, carry `do_not_publish=true`, `publication_allowed=false`, `commercial_use_allowed=false`, and never enter production `sources.json` or `runtime/ready_for_review`.
 - Do not add automatic downloading of standard/unverified YouTube/TikTok media as the normal workflow.
@@ -100,17 +105,18 @@ Draft review vehicle: **PR #1** into `main`.
 
 Slot 1 Russian AI Short (octopus) has manual **QUALITY PASS**.
 
-Slot 2 cat base format now also has an important manual checkpoint:
+Slot 2 cat base format checkpoints:
 
 1. Impact cards / real meow / no voice / no BGM are accepted.
 2. Narrow themes were rejected in favor of generic `#001 — Котики`.
-3. Near-9:16 gate is locally confirmed: the latest user render selected six sources and **all six were exactly 720×1280 (9:16)**.
-4. User's verdict on this generic vertical render: **«да, норм»**.
-5. Current focus is testing whether officially verified YouTube Creative Commons can supply funnier/more UGC-like cats than Pexels.
-6. Google Cloud/YouTube Data API key is now available locally, so official API CC discovery is preferred over no-key discovery.
-7. Keep Pexels/Pixabay as licensed fallback.
-8. Ordinary unverified YouTube files, if used for private quality comparison, stay in the isolated test-only flow and are never production candidates.
-9. Only after cat sourcing is accepted, return to slot 3 / remaining pilot.
+3. Near-9:16 gate is locally confirmed: one accepted all-stock render selected six sources and all six were exactly 720×1280 (9:16).
+4. User's verdict on the generic vertical render: **«да, норм»**.
+5. Official YouTube Data API CC discovery works locally and returned 15 candidates.
+6. User imported candidates 1, 8 and 14; all three were API-confirmed CC, 2160×3840 and audible. A mixed YouTube/Pexels render succeeded.
+7. Visual review exposed a new blocker: at least one imported Pawcsu Short visibly contains `Pawcsu/@Pawcsu`, avatar/verification badge and a large pre-added caption. User does not want this packaged/repost-like look.
+8. `youtube_cat_source_v4` + `youtube_clean_footage` now add the strict clean-footage vision gate. Current next local action is `cc-clean 2` on the three legacy imports, then inspect results before importing more CC candidates.
+9. Keep Pexels/Pixabay as licensed fallback.
+10. Only after cat sourcing is accepted, return to slot 3 / remaining pilot.
 
 ## 10. Language policy for cats
 
