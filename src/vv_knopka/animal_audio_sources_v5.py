@@ -7,7 +7,7 @@ from typing import Any
 from .animal_audio_sources_v4 import ensure_audio_animal_sources as _ensure_audio_animal_sources
 from .budget import BudgetLedger
 from .settings import Settings
-from .source_history import prior_rendered_cat_identities
+from .source_history import blocked_cat_source_identities
 
 
 def _identity(item: dict[str, Any]) -> tuple[str, str] | None:
@@ -24,7 +24,12 @@ def recover_failed_audit_sources(
     source_manifest: Path,
     prior: set[tuple[str, str]],
 ) -> int:
-    """Reuse fresh stock already validated/downloaded by an earlier failed minimum-count attempt."""
+    """Reuse stock already validated/downloaded by an earlier failed minimum-count attempt.
+
+    `prior` is the active protected source window. Long-run sources that have aged
+    out of the configured cooldown may therefore be recovered again, while recent
+    repeats stay blocked.
+    """
     audit_path = slot_dir / "animal_audio_sources.json"
     if not audit_path.exists():
         return 0
@@ -84,7 +89,7 @@ def _record_recovery(slot_dir: Path, recovered: int) -> None:
     audit["resume_from_failed_attempt"] = {
         "enabled": True,
         "recovered_fresh_sources": int(recovered),
-        "policy": "reuse already validated fresh local stock from the previous failed minimum-count attempt",
+        "policy": "reuse already validated local stock when it is outside the active protected source window",
     }
     audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -98,7 +103,7 @@ def ensure_audio_animal_sources(
     source_manifest: Path,
     ledger: BudgetLedger,
 ) -> Path:
-    prior = prior_rendered_cat_identities(settings, before_slot=slot)
+    prior = blocked_cat_source_identities(settings, before_slot=slot)
     recovered = recover_failed_audit_sources(
         slot_dir=slot_dir,
         source_manifest=source_manifest,
