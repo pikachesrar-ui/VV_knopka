@@ -22,7 +22,16 @@ class Settings:
 
     @property
     def auto_publish(self) -> bool:
+        """Frozen pilot flag retained for backwards-compatible pilot safety checks."""
         return bool(self.raw["pilot"].get("auto_publish", False))
+
+    @property
+    def youtube_enabled(self) -> bool:
+        return bool(self.raw.get("youtube", {}).get("enabled", False))
+
+    @property
+    def youtube_auto_publish(self) -> bool:
+        return self.youtube_enabled and bool(self.raw.get("youtube", {}).get("auto_publish", False))
 
     @property
     def mpt_base_url(self) -> str:
