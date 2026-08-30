@@ -29,6 +29,43 @@ def test_require_verified_cc_rejects_standard_license():
     ).startswith("Creative Commons")
 
 
+def test_cc_search_keeps_only_verified_cc_and_dedupes(monkeypatch):
+    def fake_discover(*, query, days, limit):
+        assert days == 3650
+        assert limit == 5
+        return [
+            {
+                "video_id": "cc1",
+                "url": "https://youtube.test/cc1",
+                "title": "CC cat",
+                "license": "Creative Commons Attribution license (reuse allowed)",
+                "view_count": 1000,
+                "views_per_day": 5.0,
+            },
+            {
+                "video_id": "std1",
+                "url": "https://youtube.test/std1",
+                "title": "Standard cat",
+                "license": "Standard YouTube License",
+                "view_count": 999999,
+                "views_per_day": 999.0,
+            },
+        ]
+
+    monkeypatch.setattr(youtube_source, "discover_ytdlp_cats", fake_discover)
+    found, warnings = youtube_source.search_cc_candidates(
+        days=3650,
+        scan_per_query=5,
+        limit=10,
+        queries=["funny cats", "cat shorts"],
+    )
+
+    assert not warnings
+    assert len(found) == 1
+    assert found[0]["video_id"] == "cc1"
+    assert found[0]["cc_rank"] == 1
+
+
 def test_test_only_import_is_isolated_and_locked(tmp_path, monkeypatch):
     settings = DummySettings(tmp_path)
     local_file = tmp_path / "cat.mp4"
