@@ -138,15 +138,20 @@ Multi-trigger scheduler code commits:
 6838930aeba02441176d5fabd6bb9653697be48f  CI coverage
 ```
 
-Ubuntu job for this checkpoint passed:
+Workflow run `33326252717` completed **success**:
+
+- Ubuntu test green;
+- Windows bootstrap green;
+- default 3-trigger installer dry-run green;
+- custom single-trigger `-At "12:00"` dry-run green.
+
+Ubuntu result:
 
 ```text
 114 passed in 0.64s
 publication gate: PASS
 long_run: True
 ```
-
-Windows job includes dry-run validation for both the default 3-trigger plan and the legacy/custom single-trigger plan. Recheck workflow run `33326252717` live before claiming Windows completion.
 
 ## YouTube / acquisition wording
 
