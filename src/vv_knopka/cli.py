@@ -22,6 +22,7 @@ from .pexels_curator import prepare_pexels_materials
 from .pilot_conveyor import run_batch
 from .publication_metadata import write_upload_metadata
 from .settings import load_settings
+from .source_history import audit_cat_source_reuse
 
 
 def _slot(settings, number: int):
@@ -224,6 +225,11 @@ def main() -> None:
         source_data = json.loads(source_manifest.read_text(encoding="utf-8"))
         print(f"Audible vertical licensed cat sources: {len(source_data.get('clips', []))}")
         print(f"Audio/source audit: {slot_dir / 'animal_audio_sources.json'}")
+        try:
+            reuse_audit = audit_cat_source_reuse(settings, slot=slot.slot, source_manifest=source_manifest)
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"Cross-episode source reuse audit: {reuse_audit}")
 
         animal_cfg = settings.raw.get("animal", {})
         highlight_manifest = select_highlights(
