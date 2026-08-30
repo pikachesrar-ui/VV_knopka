@@ -22,6 +22,7 @@ dev = ["pytest>=8,<9"]
 
 [project.scripts]
 vv = "vv_knopka.cli_v2:main"
+vv-youtube = "vv_knopka.youtube_cli:main"
 vv-cat-trends = "vv_knopka.trend_discovery:main"
 vv-cat-community = "vv_knopka.reddit_trend_discovery:main"
 vv-cat-theme = "vv_knopka.cat_theme:main"
