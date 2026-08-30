@@ -42,33 +42,40 @@ if ($DryRun) {
 
 Import-Module ScheduledTasks -ErrorAction Stop
 
-$Action = New-ScheduledTaskAction \
-    -Execute $PowerShellExe \
-    -Argument $Arguments \
-    -WorkingDirectory $ProjectRoot
-
+$ActionParams = @{
+    Execute = $PowerShellExe
+    Argument = $Arguments
+    WorkingDirectory = $ProjectRoot
+}
+$Action = New-ScheduledTaskAction @ActionParams
 $Trigger = New-ScheduledTaskTrigger -Daily -At $ParsedTime
 
-$Settings = New-ScheduledTaskSettingsSet \
-    -StartWhenAvailable \
-    -MultipleInstances IgnoreNew \
-    -ExecutionTimeLimit (New-TimeSpan -Hours 4) \
-    -AllowStartIfOnBatteries \
-    -DontStopIfGoingOnBatteries
+$SettingsParams = @{
+    StartWhenAvailable = $true
+    MultipleInstances = "IgnoreNew"
+    ExecutionTimeLimit = (New-TimeSpan -Hours 4)
+    AllowStartIfOnBatteries = $true
+    DontStopIfGoingOnBatteries = $true
+}
+$Settings = New-ScheduledTaskSettingsSet @SettingsParams
 
 # Interactive logon avoids storing or requesting a Windows password. The task
 # runs while this user is logged on (the desktop may be locked).
-$Principal = New-ScheduledTaskPrincipal \
-    -UserId $CurrentUser \
-    -LogonType Interactive \
-    -RunLevel Limited
+$PrincipalParams = @{
+    UserId = $CurrentUser
+    LogonType = "Interactive"
+    RunLevel = "Limited"
+}
+$Principal = New-ScheduledTaskPrincipal @PrincipalParams
 
-$Task = New-ScheduledTask \
-    -Action $Action \
-    -Trigger $Trigger \
-    -Settings $Settings \
-    -Principal $Principal \
-    -Description "Generate one VV_knopka long-run video into ready_for_review. Publishing remains disabled."
+$TaskParams = @{
+    Action = $Action
+    Trigger = $Trigger
+    Settings = $Settings
+    Principal = $Principal
+    Description = "Generate one VV_knopka long-run video into ready_for_review. Publishing remains disabled."
+}
+$Task = New-ScheduledTask @TaskParams
 
 Register-ScheduledTask -TaskName $TaskName -InputObject $Task -Force | Out-Null
 
