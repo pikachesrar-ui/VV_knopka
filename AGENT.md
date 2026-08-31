@@ -27,12 +27,14 @@ TikTok is explicitly out of the current block.
 - user explicitly approved metadata-only discovery upgrades (tags/hashtags) for already-rendered pilot videos.
 
 ## Real YouTube checkpoint — 2026-09-01
-Confirmed locally before the final pending-sidecar upgrade:
+Confirmed locally:
 - ready Shorts: 16;
 - slots 1–11 published and VERIFIED_PUBLIC;
-- slots 1–11 now have discovery hidden tags + hashtags after real `backfill-metadata --apply`;
+- slots 1–11 have discovery hidden tags + hashtags after real `backfill-metadata --apply`;
 - final verification dry-run for slots 1–11 returned UNCHANGED for every slot;
-- active pending queue was slots 12–16;
+- slots 12–15 were still unpublished when upgraded locally and now have metadata-v2 sidecars with hidden tags + hashtags;
+- real `backfill-metadata --slots 12-15 --apply` immediately after the local upgrade found no receipts, confirming none of 12–15 had been uploaded yet;
+- active pending queue was therefore slots 12–16 at that checkpoint;
 - next generation target after pending=0 is slot 17 AI EN;
 - OpenAI ledger last shown: `$0.1885/$10`;
 - scheduler `VV Knopka Long Run` installed, Ready, triggers 01:30/03:30/05:30 MSK.
@@ -57,14 +59,29 @@ For AI slots the conveyor can auto-start MoneyPrinterTurbo, wait for readiness, 
 
 The OpenAI project-side hard cap is `$10`. New generation stops fail-closed when the ledger reaches the cap. Existing ready backlog can still be uploaded because backlog handling runs before new generation.
 
-## Pending pilot metadata upgrade — slots 12–15
+## Pending pilot metadata upgrade — slots 12–15 REAL COMPLETE
 Slots 12–15 were rendered before long-run metadata v2. User explicitly asked to upgrade them before leaving the conveyor unattended.
 
-Implemented command:
+Implemented and real-run command:
 ```powershell
 vv-youtube upgrade-pending-metadata --slots 12-15
 vv-youtube upgrade-pending-metadata --slots 12-15 --apply
 ```
+
+Real dry-run proposed:
+- slot 12 cats tags/hashtags;
+- slot 13 dog discovery tags/hashtags;
+- slot 14 cats tags/hashtags;
+- slot 15 elephant discovery tags/hashtags.
+
+Real apply result:
+```text
+4 pending sidecars
+changed=4
+applied=4
+```
+
+Immediately after apply, `backfill-metadata --slots 12-15 --apply` returned `No uploaded receipt videos matched the requested slots`, so these four remained pending and will be uploaded for the first time with the upgraded metadata.
 
 Behavior:
 - default is dry-run;
@@ -77,8 +94,6 @@ Behavior:
 - creates one-time original backups under `runtime/youtube/pending-metadata-backups/`;
 - skips already-published slots automatically;
 - writes audit `runtime/youtube/pending-metadata-upgrade-latest.json`.
-
-If one of 12–15 has already been published before the command is run, use the already-working `backfill-metadata` path for that published slot instead.
 
 ## Published metadata backfill — REAL VALIDATED
 User authorized and ran:
@@ -180,13 +195,11 @@ FAIL means no render/no publish. Costs remain inside the project-side `$10` ledg
 - Draft PR #1 stays open/draft/unmerged.
 
 ## Immediate continuation
-1. wait/check CI for `upgrade-pending-metadata`;
-2. user `git pull`;
-3. dry-run slots 12–15;
-4. apply slots 12–15 if diff is correct;
-5. rerun dry-run expecting UNCHANGED for every still-pending target;
-6. after that leave scheduler alone for a few days;
-7. it drains backlog, then generates/uploads long-run slots automatically until a safety gate or the `$10` generation budget stops it;
-8. later optimize cat audio-first discovery cost if desired.
+1. metadata cleanup is complete for published 1–11 and pending 12–15;
+2. leave scheduler alone for a few days under normal healthy operation;
+3. it should drain slots 12–16 oldest-first;
+4. once pending reaches zero it should generate slot 17 AI EN automatically, using MPT lifecycle/fact-check/music/metadata v2;
+5. continue alternating long-run slots until a safety/failure gate or the `$10` generation budget stops new generation;
+6. later optimize cat audio-first discovery cost if desired.
 
 After substantive work update this file plus `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md`.
