@@ -161,13 +161,21 @@ def authorize_metadata_edit(settings: Settings) -> dict[str, str]:
 
 
 def _metadata_edit_service(settings: Settings):
-    credentials = _load_credentials(settings, interactive=False)
+    Request, Credentials, _, build, _ = _google_imports()
+    token = token_path(settings)
+    if not token.exists():
+        raise RuntimeError("YouTube OAuth token is missing. Run `vv-youtube auth-metadata` first.")
+
+    credentials = Credentials.from_authorized_user_file(str(token), scopes=list(METADATA_SCOPES))
+    if credentials.expired and credentials.refresh_token:
+        credentials.refresh(Request())
+        _save_token(token, credentials)
+
     has_scopes = getattr(credentials, "has_scopes", None)
-    if not callable(has_scopes) or not bool(has_scopes([EDIT_SCOPE])):
+    if not credentials.valid or not callable(has_scopes) or not bool(has_scopes([EDIT_SCOPE])):
         raise RuntimeError(
             "Current YouTube OAuth token cannot edit video metadata. Run `vv-youtube auth-metadata` once, then retry."
         )
-    _, _, _, build, _ = _google_imports()
     service = build("youtube", "v3", credentials=credentials, cache_discovery=False)
     _require_same_bound_channel(settings, service)
     return service
