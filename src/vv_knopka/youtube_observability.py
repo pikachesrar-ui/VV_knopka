@@ -42,6 +42,24 @@ def _load_receipts(settings: Settings) -> list[tuple[Path, dict[str, Any]]]:
     return result
 
 
+def _receipt_identity(path: Path, payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Recover pipeline/language for old receipts that predate those receipt fields."""
+    pipeline = str(payload.get("pipeline") or "").strip() or None
+    language = str(payload.get("language") or "").strip() or None
+    name = path.name.casefold()
+    if pipeline is None:
+        if "-animals." in name or "-animals-" in name:
+            pipeline = "animal_compilation"
+        elif "-ai." in name or "-ai-" in name:
+            pipeline = "ai_short"
+    if language is None:
+        if "-ru-" in name:
+            language = "ru"
+        elif "-en-" in name:
+            language = "en"
+    return pipeline, language
+
+
 def _publication_state(item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     status = dict(item.get("status") or {})
     processing = dict(item.get("processingDetails") or {})
@@ -137,14 +155,28 @@ def failed_publications(settings: Settings) -> list[dict[str, Any]]:
     return result
 
 
+def _statistics_dir(settings: Settings) -> Path:
+    path = settings.runtime_dir / "youtube"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _save_statistics_snapshot(settings: Settings, snapshot: dict[str, Any]) -> None:
+    root = _statistics_dir(settings)
+    (root / "statistics.json").write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    with (root / "statistics-history.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
 def collect_statistics(settings: Settings) -> dict[str, Any]:
     receipts = _load_receipts(settings)
     collected_at = datetime.now(timezone.utc).isoformat()
     if not receipts:
         snapshot = {"collected_at": collected_at, "videos": []}
-        path = settings.runtime_dir / "youtube" / "statistics.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+        _save_statistics_snapshot(settings, snapshot)
         return snapshot
 
     service, channel = _require_bound_service(settings)
@@ -163,17 +195,18 @@ def collect_statistics(settings: Settings) -> dict[str, Any]:
 
     videos: list[dict[str, Any]] = []
     for video_id in ids:
-        _, payload = by_id[video_id]
+        receipt_path, payload = by_id[video_id]
         item = found.get(video_id, {})
         stats = dict(item.get("statistics") or {})
         status = dict(item.get("status") or {})
         snippet = dict(item.get("snippet") or {})
+        pipeline, language = _receipt_identity(receipt_path, payload)
         entry = {
             "slot": int(payload.get("slot") or 0),
             "video_id": video_id,
             "youtube_url": payload.get("youtube_url"),
-            "pipeline": payload.get("pipeline"),
-            "language": payload.get("language"),
+            "pipeline": pipeline,
+            "language": language,
             "title": snippet.get("title") or payload.get("title"),
             "published_at": snippet.get("publishedAt") or payload.get("uploaded_at"),
             "privacy_status": status.get("privacyStatus") or payload.get("actual_privacy"),
@@ -190,7 +223,86 @@ def collect_statistics(settings: Settings) -> dict[str, Any]:
         "channel_title": channel["channel_title"],
         "videos": videos,
     }
-    path = settings.runtime_dir / "youtube" / "statistics.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    _save_statistics_snapshot(settings, snapshot)
     return snapshot
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def build_performance_report(settings: Settings) -> dict[str, Any]:
+    """Build an age-aware report from the latest local YouTube statistics snapshot."""
+    stats_path = _statistics_dir(settings) / "statistics.json"
+    if not stats_path.exists():
+        return {"generated_at": datetime.now(timezone.utc).isoformat(), "videos": [], "pipelines": {}}
+    try:
+        snapshot = json.loads(stats_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"generated_at": datetime.now(timezone.utc).isoformat(), "videos": [], "pipelines": {}}
+
+    collected_at = _parse_datetime(snapshot.get("collected_at")) or datetime.now(timezone.utc)
+    enriched: list[dict[str, Any]] = []
+    for raw in snapshot.get("videos") or []:
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        views = max(int(item.get("views") or 0), 0)
+        likes = max(int(item.get("likes") or 0), 0)
+        comments = max(int(item.get("comments") or 0), 0)
+        published_at = _parse_datetime(item.get("published_at"))
+        age_hours = max((collected_at - published_at).total_seconds() / 3600.0, 0.0) if published_at else 0.0
+        # Avoid exploding very-fresh rates while still making age normalization useful.
+        denominator_hours = max(age_hours, 1.0)
+        item["age_hours"] = round(age_hours, 2)
+        item["views_per_hour"] = round(views / denominator_hours, 2)
+        item["likes_per_1000_views"] = round(likes * 1000.0 / views, 2) if views else 0.0
+        item["comments_per_1000_views"] = round(comments * 1000.0 / views, 2) if views else 0.0
+        enriched.append(item)
+
+    pipelines: dict[str, dict[str, Any]] = {}
+    names = sorted({str(item.get("pipeline") or "unknown") for item in enriched})
+    for name in names:
+        group = [item for item in enriched if str(item.get("pipeline") or "unknown") == name]
+        pipelines[name] = {
+            "videos": len(group),
+            "total_views": sum(int(item.get("views") or 0) for item in group),
+            "average_views": round(_mean([float(item.get("views") or 0) for item in group]), 2),
+            "average_views_per_hour": round(_mean([float(item.get("views_per_hour") or 0) for item in group]), 2),
+            "average_likes_per_1000_views": round(_mean([float(item.get("likes_per_1000_views") or 0) for item in group]), 2),
+            "average_comments_per_1000_views": round(_mean([float(item.get("comments_per_1000_views") or 0) for item in group]), 2),
+        }
+
+    ranked = sorted(
+        enriched,
+        key=lambda item: (float(item.get("views_per_hour") or 0), int(item.get("views") or 0)),
+        reverse=True,
+    )
+    report = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "statistics_collected_at": snapshot.get("collected_at"),
+        "channel_id": snapshot.get("channel_id"),
+        "channel_title": snapshot.get("channel_title"),
+        "videos": ranked,
+        "pipelines": pipelines,
+    }
+    (_statistics_dir(settings) / "performance-report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return report
