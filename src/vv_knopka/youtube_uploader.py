@@ -151,6 +151,28 @@ def _load_metadata(metadata_path: Path) -> dict[str, Any]:
     return raw
 
 
+def _normalize_tags(raw: Any) -> list[str]:
+    if not isinstance(raw, (list, tuple)):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    total_chars = 0
+    for item in raw:
+        value = " ".join(str(item or "").split()).strip().lstrip("#")
+        key = value.casefold()
+        if not value or key in seen:
+            continue
+        projected = total_chars + len(value) + (1 if result else 0)
+        if projected > 450:
+            break
+        seen.add(key)
+        result.append(value[:100])
+        total_chars = projected
+        if len(result) >= 12:
+            break
+    return result
+
+
 def _youtube_error_reasons(exc: BaseException) -> set[str]:
     content = getattr(exc, "content", None)
     if isinstance(content, bytes):
@@ -226,11 +248,17 @@ def upload_one(settings: Settings, metadata_path: Path, *, dry_run: bool = False
     if requested_privacy not in {"public", "unlisted", "private"}:
         raise RuntimeError(f"Unsupported youtube.privacy_status={requested_privacy!r}")
 
+    tags = _normalize_tags(metadata.get("youtube_tags"))
+    contains_synthetic_media = bool(metadata.get("contains_synthetic_media", False))
     preview = {
         "slot": int(metadata.get("slot") or 0),
+        "pipeline": str(metadata.get("pipeline") or ""),
+        "language": str(metadata.get("language") or "en"),
         "video_file": str(metadata["_video_path"]),
         "title": str(metadata.get("youtube_title") or "").strip(),
         "description": str(metadata.get("youtube_description") or "").strip(),
+        "tags": tags,
+        "contains_synthetic_media": contains_synthetic_media,
         "requested_privacy": requested_privacy,
     }
     if dry_run:
@@ -238,18 +266,23 @@ def upload_one(settings: Settings, metadata_path: Path, *, dry_run: bool = False
 
     service, channel = _require_bound_service(settings)
     _, _, _, _, MediaFileUpload = _google_imports()
-    body = {
-        "snippet": {
-            "title": preview["title"],
-            "description": preview["description"],
-            "categoryId": str(youtube_cfg.get("category_id") or "15"),
-            "defaultLanguage": str(metadata.get("language") or "en"),
-        },
-        "status": {
-            "privacyStatus": requested_privacy,
-            "selfDeclaredMadeForKids": bool(youtube_cfg.get("made_for_kids", False)),
-        },
+    snippet = {
+        "title": preview["title"],
+        "description": preview["description"],
+        "categoryId": str(youtube_cfg.get("category_id") or "15"),
+        "defaultLanguage": preview["language"],
     }
+    if tags:
+        snippet["tags"] = tags
+
+    status = {
+        "privacyStatus": requested_privacy,
+        "selfDeclaredMadeForKids": bool(youtube_cfg.get("made_for_kids", False)),
+    }
+    if contains_synthetic_media:
+        status["containsSyntheticMedia"] = True
+
+    body = {"snippet": snippet, "status": status}
     request = service.videos().insert(
         part="snippet,status",
         body=body,
@@ -275,16 +308,21 @@ def upload_one(settings: Settings, metadata_path: Path, *, dry_run: bool = False
     actual_privacy = str((response.get("status") or {}).get("privacyStatus") or requested_privacy)
     result = {
         "slot": preview["slot"],
+        "pipeline": preview["pipeline"],
+        "language": preview["language"],
         "video_id": video_id,
         "youtube_url": f"https://www.youtube.com/watch?v={video_id}" if video_id else None,
         "channel_id": channel["channel_id"],
         "channel_title": channel["channel_title"],
         "requested_privacy": requested_privacy,
         "actual_privacy": actual_privacy,
+        "publication_state": "UPLOADED",
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "metadata_file": str(metadata_path),
         "video_file": preview["video_file"],
         "title": preview["title"],
+        "youtube_tags": tags,
+        "contains_synthetic_media": contains_synthetic_media,
     }
     receipt.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result
