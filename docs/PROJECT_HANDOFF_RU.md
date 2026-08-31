@@ -155,6 +155,30 @@ contains_synthetic_media: true
 
 Первый stats sample маленький — не оптимизировать content policy по нему.
 
+## Backfill tags/hashtags для уже опубликованных slots 1–11
+Пользователь явно попросил добавить discovery metadata в уже опубликованные pilot-видео без reupload.
+
+Реализовано:
+```powershell
+vv-youtube backfill-metadata --slots 1-11
+vv-youtube auth-metadata
+vv-youtube backfill-metadata --slots 1-11 --apply
+```
+
+Поведение:
+- `backfill-metadata` без `--apply` только читает remote snippet и показывает diff;
+- target только локальные uploaded receipts;
+- remote title/category/language сохраняются;
+- existing hidden tags сохраняются и merge-ятся с новыми;
+- в existing description дописываются только отсутствующие hashtags;
+- privacy/status, URL, video bytes, views и receipt не изменяются;
+- apply требует `youtube.force-ssl`;
+- `auth-metadata` переавторизует тот же token с расширенным scope и проверяет, что Google вернул тот же bound channel;
+- при wrong-channel token восстанавливается из предыдущей копии и операция fail closed;
+- audit: `runtime/youtube/metadata-backfill-latest.json`.
+
+Важно: slots 1–11 пока нельзя считать реально обновлёнными — это произойдёт только после локального `--apply` и успешного вывода пользователя. Existing upload scheduler не зависит от edit scope и продолжает работать как раньше.
+
 ## AI fact-check / MPT
 - AI plan fail-closed через bounded evidence check;
 - FAIL = no render/no publish;
@@ -172,8 +196,13 @@ contains_synthetic_media: true
 - PR #1 не merge автоматически.
 
 ## Immediate continuation
-1. corrected slot 16 оставить в pending queue;
-2. scheduler drains slots 12–16 oldest-first;
-3. slot 17 не генерировать пока pending != 0;
-4. после полного drain проверить slot 17 AI EN end-to-end;
-5. позже уменьшить число Luna reviews на каждый реально audible fresh cat clip без ослабления quality gates.
+1. дождаться green CI для metadata backfill;
+2. user local `git pull`;
+3. `vv-youtube backfill-metadata --slots 1-11` dry-run;
+4. если diff нормальный — `vv-youtube auth-metadata`;
+5. `vv-youtube backfill-metadata --slots 1-11 --apply`;
+6. повторить dry-run: ожидается `UNCHANGED` по 1–11;
+7. scheduler продолжает draining slots 12–16;
+8. slot 17 не генерировать пока pending != 0;
+9. после полного drain проверить slot 17 AI EN end-to-end;
+10. позже уменьшить число Luna reviews на каждый реально audible fresh cat clip без ослабления quality gates.
