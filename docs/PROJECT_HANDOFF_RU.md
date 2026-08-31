@@ -11,9 +11,12 @@ TikTok пока не трогать.
 - frozen pilot slots 1–15 визуально принят; MP4 slots 1–15 не ререндерить;
 - slots 1–11 опубликованы и `VERIFIED_PUBLIC`;
 - пользователь реально применил metadata backfill к slots 1–11;
-- финальная проверка backfill: **все 1–11 UNCHANGED**, то есть tags/hashtags уже присутствуют;
+- финальная проверка backfill: **все 1–11 UNCHANGED**, tags/hashtags уже присутствуют;
+- slots 12–15 на момент upgrade ещё не были опубликованы;
+- user real-run `upgrade-pending-metadata --slots 12-15 --apply`: **4/4 pending sidecars UPDATED**;
+- сразу после этого `backfill-metadata --slots 12-15 --apply` вернул `No uploaded receipt videos matched`, подтверждая, что 12–15 всё ещё pending и уйдут на YouTube уже с новой metadata с первой загрузки;
 - replacement slot 16 успешно пересобран и прошёл source/music/metadata audits;
-- active pending queue до следующего scheduler-run: slots 12–16;
+- active pending queue на этом checkpoint: slots 12–16;
 - next generation after pending=0: slot 17 AI EN;
 - OpenAI ledger последний показанный `$0.1885/$10`;
 - scheduler `VV Knopka Long Run`: 01:30/03:30/05:30 MSK, backlog-first.
@@ -32,25 +35,35 @@ TikTok пока не трогать.
 
 Backfill не меняет video bytes, URL, views, privacy/status или title.
 
-### Ещё не опубликованные slots 12–15 — final one-time local upgrade
-Добавлена отдельная команда:
+### Ещё не опубликованные slots 12–15 — DONE
+Пользователь сначала проверил dry-run. Предложенный diff был нормальным:
+- slot 12 cats: cat discovery tags/hashtags;
+- slot 13 dog: Dogs/DogFacts/AnimalCuriosities/NatureFacts/shorts + generic animal tags;
+- slot 14 cats: cat discovery tags/hashtags;
+- slot 15 elephants: Elephants/AnimalFacts/NatureCuriosities/Wildlife/AnimalBehavior + generic animal tags.
+
+Затем пользователь выполнил:
 ```powershell
-vv-youtube upgrade-pending-metadata --slots 12-15
 vv-youtube upgrade-pending-metadata --slots 12-15 --apply
 ```
 
-Она:
+Реальный результат:
+```text
+APPLY summary: 4 pending sidecars | changed=4 | applied=4
+```
+
+Команда:
 - работает только с ready `.upload.json` без YouTube receipt;
 - добавляет/merge-ит hidden `youtube_tags`;
 - дописывает отсутствующие hashtags в `youtube_description`;
 - записывает `youtube_hashtags` и `metadata_version=2`;
-- сохраняет все unrelated sidecar fields;
+- сохраняет all unrelated sidecar fields;
 - вообще не трогает MP4;
 - делает backup исходного sidecar в `runtime/youtube/pending-metadata-backups/`;
 - пишет audit `runtime/youtube/pending-metadata-upgrade-latest.json`;
 - published slots автоматически пропускает.
 
-Если scheduler успеет опубликовать один из 12–15 раньше upgrade, этот slot нужно просто прогнать через уже проверенный `backfill-metadata` как published target.
+Сразу после apply пользователь также выполнил `backfill-metadata --slots 12-15 --apply`; receipts не нашлись. Значит ни один из 12–15 не успел опубликоваться до upgrade.
 
 ## Autonomous scheduler behavior
 Каждый trigger:
@@ -136,10 +149,9 @@ Replacement slot 16 used `curious_02.wav`, volume 0.11, ducking false.
 - TikTok out of current scope.
 
 ## Immediate continuation
-1. дождаться/check CI для pending-sidecar upgrade;
-2. `git pull`;
-3. dry-run `upgrade-pending-metadata --slots 12-15`;
-4. apply;
-5. повторить dry-run, ожидая UNCHANGED для всех still-pending slots;
-6. после этого оставить scheduler работать автономно несколько дней;
-7. не делать manual slot17 пока backlog не обнулится.
+1. metadata cleanup block закрыт: published 1–11 и pending 12–15 готовы;
+2. оставить scheduler автономно работать несколько дней;
+3. он drains 12–16 oldest-first;
+4. после pending=0 сам генерирует slot 17 AI EN;
+5. далее long-run продолжается автоматически до safety/failure gate или исчерпания `$10` generation budget;
+6. не делать manual slot17 пока backlog не обнулится.
