@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from vv_knopka.settings import Settings
-from vv_knopka.youtube_uploader import ready_metadata, upload_one, upload_ready
+from vv_knopka.youtube_uploader import _normalize_tags, ready_metadata, upload_one, upload_ready
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -30,6 +30,8 @@ def _ready(settings: Settings, slot: int, kind: str = "ai") -> Path:
                 "video_file": str(video),
                 "youtube_title": f"Slot {slot} #shorts",
                 "youtube_description": "description",
+                "youtube_tags": ["#cats", "funny cats", "#cats"],
+                "contains_synthetic_media": True,
             }
         ),
         encoding="utf-8",
@@ -54,6 +56,8 @@ def test_upload_ready_dry_run_can_pick_newest_without_google_auth(tmp_path):
     assert results[0]["dry_run"] is True
     assert results[0]["slot"] == 17
     assert results[0]["requested_privacy"] == "public"
+    assert results[0]["tags"] == ["cats", "funny cats"]
+    assert results[0]["contains_synthetic_media"] is True
 
 
 def test_existing_youtube_receipt_makes_upload_idempotent(tmp_path):
@@ -68,3 +72,7 @@ def test_existing_youtube_receipt_makes_upload_idempotent(tmp_path):
 
     pending = upload_ready(settings, dry_run=True)
     assert pending == []
+
+
+def test_normalize_tags_deduplicates_and_removes_hashtag_prefix():
+    assert _normalize_tags(["#Cats", "cats", " funny cats ", "", None]) == ["Cats", "funny cats"]
