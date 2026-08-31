@@ -110,14 +110,44 @@ Windows bootstrap: PASS
 160 tests passed
 ```
 
+## Published YouTube metadata backfill — IMPLEMENTED, REAL APPLY PENDING
+User requested adding tags/hashtags to already published slots 1–11.
+
+New commands:
+```powershell
+.\.venv\Scripts\vv-youtube.exe backfill-metadata --slots 1-11
+.\.venv\Scripts\vv-youtube.exe auth-metadata
+.\.venv\Scripts\vv-youtube.exe backfill-metadata --slots 1-11 --apply
+```
+
+Design:
+- first command is safe dry-run;
+- reads current remote YouTube snippets;
+- merges hidden tags; never deletes existing tags;
+- appends only missing hashtags to current description;
+- keeps remote title/category/language;
+- never changes privacy/status/video/URL/views;
+- only uploaded receipt videos are eligible;
+- apply requires one-time `youtube.force-ssl` OAuth grant;
+- `auth-metadata` verifies same bound channel before overwriting local token;
+- existing upload automation remains compatible with its old scope usage;
+- writes `runtime/youtube/metadata-backfill-latest.json` audit.
+
+Code/tests are committed on `mvp/pilot-scaffold`; fresh CI is pending/running at this checkpoint. Slots 1–11 are **not yet claimed as updated remotely** until the user runs the real apply command and confirms output.
+
 ## Next operational step
-No more manual slot-16 rebuild is needed.
-Scheduler should continue backlog-first uploads of slots 12–16.
-Do **not** generate slot 17 while pending > 0.
-After backlog reaches zero, validate slot 17 AI EN end-to-end.
+1. wait for metadata-backfill CI green;
+2. `git pull`;
+3. dry-run slots 1–11;
+4. if the proposed tags/hashtags look good, run `auth-metadata` once;
+5. apply slots 1–11;
+6. rerun dry-run and expect `UNCHANGED`;
+7. scheduler continues backlog-first uploads of slots 12–16;
+8. do **not** generate slot 17 while pending > 0;
+9. after backlog reaches zero, validate slot 17 AI EN end-to-end.
 
 ## Other completed blocks
-- YouTube metadata v2 / tags / hashtags / CTA;
+- YouTube metadata v2 / tags / hashtags / CTA for long-run;
 - upload-limit cooldown;
 - verify/stats/history/report;
 - fail-closed AI fact-check;
