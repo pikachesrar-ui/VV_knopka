@@ -30,6 +30,22 @@ def music_enabled(settings: Settings) -> bool:
     return bool(music_config(settings).get("enabled", False))
 
 
+def _pipeline_mix_profile(settings: Settings, pipeline: str) -> tuple[float, bool]:
+    """Return pipeline-specific BGM volume and ducking policy.
+
+    AI narration benefits from sidechain ducking. Cat compilations carry near-continuous
+    source audio, so using the same sidechain profile can suppress BGM almost all the time.
+    """
+    cfg = music_config(settings)
+    if pipeline == "animal_compilation":
+        volume = float(cfg.get("cat_volume", 0.10))
+        ducking = bool(cfg.get("cat_ducking", cfg.get("ducking", True)))
+    else:
+        volume = float(cfg.get("ai_volume", 0.10))
+        ducking = bool(cfg.get("ai_ducking", cfg.get("ducking", True)))
+    return volume, ducking
+
+
 def available_tracks(settings: Settings, *, pipeline: str | None = None) -> list[Path]:
     root = music_library_dir(settings)
     if not root.exists():
@@ -107,6 +123,7 @@ def write_music_audit(
 ) -> Path:
     cfg = music_config(settings)
     root = music_library_dir(settings)
+    applied_volume, applied_ducking = _pipeline_mix_profile(settings, pipeline)
     try:
         display_path = str(track.resolve().relative_to(root))
     except ValueError:
@@ -121,8 +138,9 @@ def write_music_audit(
         "generator": str(cfg.get("generator") or "ACE-Step"),
         "applied_to_video": bool(applied_to_video),
         "music_volume_ai": float(cfg.get("ai_volume", 0.10)),
-        "music_volume_cat": float(cfg.get("cat_volume", 0.07)),
-        "ducking": bool(cfg.get("ducking", True)),
+        "music_volume_cat": float(cfg.get("cat_volume", 0.10)),
+        "music_volume_applied": applied_volume,
+        "ducking": applied_ducking,
     }
     path = slot_dir / "music.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -146,9 +164,7 @@ def mix_background_music(
     if not track.exists() or track.stat().st_size <= 0:
         raise FileNotFoundError(track)
 
-    cfg = music_config(settings)
-    volume = float(cfg.get("cat_volume", 0.07) if pipeline == "animal_compilation" else cfg.get("ai_volume", 0.10))
-    ducking = bool(cfg.get("ducking", True))
+    volume, ducking = _pipeline_mix_profile(settings, pipeline)
     temporary = video.with_name(video.stem + ".music-tmp.mp4")
 
     if ducking:
