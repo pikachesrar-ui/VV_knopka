@@ -10,3 +10,23 @@ def test_known_model_prices(tmp_path):
     ledger = BudgetLedger(settings)
     assert ledger.price("gpt-5.6-luna", 1_000_000, 1_000_000) == 1.4
     assert ledger.price("gpt-5.6-terra", 1_000_000, 1_000_000) == 14.0
+
+
+def test_fixed_tool_cost_is_included_in_spend(tmp_path):
+    settings = load_settings(Path(__file__).parents[1] / "config" / "pilot.toml")
+    object.__setattr__(settings, "root", tmp_path)
+    ledger = BudgetLedger(settings)
+
+    record = ledger.record(
+        "gpt-5.6-luna",
+        1000,
+        100,
+        "fact-check-test",
+        fixed_cost_usd=0.01,
+    )
+
+    expected_token_cost = ledger.price("gpt-5.6-luna", 1000, 100)
+    assert record.fixed_cost_usd == 0.01
+    assert record.token_cost_usd == expected_token_cost
+    assert record.cost_usd == expected_token_cost + 0.01
+    assert ledger.spent_usd() == record.cost_usd
