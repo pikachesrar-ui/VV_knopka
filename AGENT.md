@@ -20,7 +20,7 @@ Build an automated short-form video pipeline under **Animals / Nature Curiositie
 - `ai_short`: original animal/nature fact/story Short through MoneyPrinterTurbo;
 - `animal_compilation`: cat compilation assembled locally with FFmpeg.
 
-Current phase: unattended long-run generation + user-authorized YouTube publishing + verification/statistics. TikTok is planned later and is explicitly out of the current block.
+Current phase: unattended long-run generation + user-authorized YouTube publishing + verification/statistics + curated local AI-music preparation. TikTok is planned later and is explicitly out of the current block.
 
 ## 3. Frozen pilot — immutable history
 
@@ -37,15 +37,34 @@ Current phase: unattended long-run generation + user-authorized YouTube publishi
 Confirmed by the user on the real Windows machine:
 
 - ready local Shorts: **16**;
-- successful YouTube receipts: **10**, slots 1–10;
-- all inspected receipts: `requested_privacy=public`, `actual_privacy=public`;
-- pending ready uploads: **6**, slots 11–16;
+- successful YouTube receipts: **11**, slots 1–11;
+- `vv-youtube verify`: slots **1–11 = VERIFIED_PUBLIC**;
+- all 1–11: `upload=processed`, `processing=succeeded`, `privacy=public`;
+- pending ready uploads: **5**, slots 12–16;
 - next generation target: **slot 17 AI EN**, but backlog-first policy blocks generation until pending reaches zero;
+- current local OpenAI ledger: **$0.1885 / $10.00**;
 - Scheduled Task `VV Knopka Long Run` is installed and `Ready`;
 - triggers: **01:30, 03:30, 05:30 MSK**;
 - Windows timezone confirmed `Russian Standard Time (UTC+03:00)`.
 
 PowerShell windows do not need to remain open. The PC must remain on and the Windows user logged in; sleep/hibernation should not interrupt scheduled runs.
+
+### Real scheduler production validation
+
+The scheduler has now been validated against the real channel:
+
+1. it automatically published **slot 11**;
+2. slot 11 later verified as `VERIFIED_PUBLIC`;
+3. the following upload opportunity hit YouTube `uploadLimitExceeded`;
+4. the new uploader persisted cooldown cleanly instead of crashing;
+5. local status reported:
+
+```text
+pending ready uploads: 5
+upload limit cooldown until: 2026-09-01T00:30:07.333703+00:00
+```
+
+That retry time is about **03:30 MSK on 2026-09-01**. During an active cooldown the uploader must not hit the upload endpoint.
 
 ## 5. Authorization / safety state
 
@@ -112,6 +131,7 @@ Commands:
 .\.venv\Scripts\vv-youtube.exe pending-count
 .\.venv\Scripts\vv-youtube.exe verify
 .\.venv\Scripts\vv-youtube.exe stats
+.\.venv\Scripts\vv-youtube.exe report
 .\.venv\Scripts\vv-youtube.exe upload-ready --dry-run
 .\.venv\Scripts\vv-youtube.exe upload-ready --limit 1
 ```
@@ -127,7 +147,7 @@ Guarantees:
 - conservative 24h cooldown is persisted locally;
 - uploader does not hammer the endpoint during active cooldown.
 
-The real first bulk upload successfully published slots 1–10 before YouTube returned the daily channel limit.
+This graceful-limit behavior has now been validated on the real unattended scheduler, not only in tests.
 
 ## 8. YouTube metadata v2 — long-run only
 
@@ -150,7 +170,7 @@ youtube auto_publish: True
 
 YouTube `containsSyntheticMedia` is sent only when metadata says disclosure is warranted, including actually applied AI-generated music or an explicit planner recommendation. Do not blanket-mark every use of AI assistance.
 
-## 9. YouTube observability
+## 9. YouTube observability / performance learning
 
 `vv-youtube verify` checks receipt videos for:
 
@@ -162,7 +182,16 @@ YouTube `containsSyntheticMedia` is sent only when metadata says disclosure is w
 
 Failed/missing publication is fail-closed for unattended scheduling.
 
-`vv-youtube stats` stores current views/likes/comments snapshots. Statistics are observational and their collection failure must not itself block publication.
+`vv-youtube stats` stores current views/likes/comments snapshots plus append-only local history.
+
+`vv-youtube report` builds age-aware metrics:
+
+- views/hour;
+- likes per 1000 views;
+- comments per 1000 views;
+- aggregate `ai_short` vs `animal_compilation`.
+
+First real report had only 11 videos / extremely low counts. Do not optimize policy from that tiny sample. It only proves the measurement path works.
 
 ## 10. Long-run AI fact-check gate
 
@@ -231,6 +260,7 @@ First local setup/generation:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
+.\.venv\Scripts\vv-music.exe status
 .\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
 ```
 
@@ -268,30 +298,28 @@ For ACE-Step: repository code is open source, but generated audio still requires
 Development branch: `mvp/pilot-scaffold`.
 Draft PR #1 into `main` stays open/draft/unmerged until explicit user decision.
 
-Latest fully green **code** checkpoint:
+Latest fully green code checkpoint before this operational-doc update:
 
 ```text
-head: 6def0e462c17eb5f6b536d7d3446daee21ebecf8
-workflow: 33419061821
-pytest: 146 passed in 0.93s
+head: 936bd0956ad0c08fb236c1a97aada6ff0464e88d
+workflow: 33419768393
+pytest: 147 passed in 0.90s
 Ubuntu: success
 Windows bootstrap: success
 Windows scheduler dry-run: success
 Windows ACE-Step helper dry-run: success
 ```
 
-Documentation commits after that checkpoint move branch HEAD; check final HEAD CI before claiming the entire branch is green.
-
 ## 16. Immediate continuation
 
-Server-side implementation for this work block is essentially complete. The next meaningful validations require the user's local machine:
+Current next steps:
 
-1. `git pull` + reinstall editable package;
-2. real OAuth `vv-youtube verify` and `vv-youtube stats` against the 10 receipts;
-3. let scheduler continue draining slots 11–16;
-4. locally install/start ACE-Step and generate 8 candidate WAVs;
-5. user listens/approves candidate tracks; keep `music.enabled=false` until that decision;
-6. after backlog reaches zero, validate slot 17 end-to-end: plan -> fact-check -> MPT auto-start -> render -> metadata v2 -> YouTube -> verification/stats.
+1. let scheduler continue draining slots 12–16 under the proven cooldown/backlog-first policy;
+2. locally run ACE-Step setup on the user's RTX 3060;
+3. generate 8 candidate WAVs;
+4. user listens and approves only good candidates; keep `music.enabled=false` meanwhile;
+5. after backlog reaches zero, validate slot 17 end-to-end: plan -> fact-check -> MPT auto-start -> render -> metadata v2 -> YouTube -> verification/stats;
+6. once enough channel data exists, use `vv-youtube report` for controlled comparisons, including music ON vs OFF.
 
 TikTok remains a later separate work block.
 
