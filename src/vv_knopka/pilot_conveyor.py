@@ -14,6 +14,7 @@ from .budget import BudgetLedger
 from .gates import publication_gate
 from .manifest import Slot, build_manifest
 from .mpt_health import require_mpt_available
+from .music_library import prepare_music_for_slot
 from .publication_metadata import write_upload_metadata
 from .settings import Settings
 
@@ -201,6 +202,17 @@ def _render_one(settings: Settings, config_path: Path, slot: Slot, mpt: MPTProce
     output = expected_output(settings, slot)
     if not output.exists() or output.stat().st_size <= 0:
         raise RuntimeError(f"slot {slot.slot} finished without expected output {output}")
+
+    # Feature-flagged final mix. With [music].enabled=false this is a no-op. Once
+    # a reviewed local library exists, the same render path selects, ducks and
+    # audits a deterministic track before publication metadata is finalized.
+    prepare_music_for_slot(
+        settings,
+        slot=slot.slot,
+        pipeline=slot.pipeline,
+        slot_dir=slot_dir,
+        video=output,
+    )
     write_upload_metadata(settings, slot=slot, output=output, slot_dir=slot_dir)
     return output
 
