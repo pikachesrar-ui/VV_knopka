@@ -195,14 +195,23 @@ class ACEStepClient:
     def wait(self, task_id: str, *, timeout_seconds: float = 1800.0, poll_seconds: float = 3.0) -> dict[str, Any]:
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
-            with httpx.Client(timeout=60) as client:
-                data = self._unwrap(
-                    client.post(
-                        f"{self.base_url}/query_result",
-                        headers={"Content-Type": "application/json", **_headers()},
-                        json={"task_id_list": [task_id]},
+            try:
+                with httpx.Client(timeout=60) as client:
+                    data = self._unwrap(
+                        client.post(
+                            f"{self.base_url}/query_result",
+                            headers={"Content-Type": "application/json", **_headers()},
+                            json={"task_id_list": [task_id]},
+                        )
                     )
-                )
+            except httpx.ReadTimeout:
+                # First-run model loading can keep /query_result busy for longer than
+                # one HTTP read timeout. The API is asynchronous, so a read timeout
+                # while polling is not a task failure; keep polling until the overall
+                # task deadline expires.
+                time.sleep(poll_seconds)
+                continue
+
             rows = data if isinstance(data, list) else []
             row = next((item for item in rows if str(item.get("task_id")) == task_id), None)
             if row is None:
