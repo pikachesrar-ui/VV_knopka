@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -109,15 +110,48 @@ def _desired_discovery_metadata(settings: Settings, target: dict[str, Any]) -> t
 
 def _append_missing_hashtags(description: str, hashtags: Iterable[str]) -> tuple[str, list[str]]:
     value = str(description or "")
-    folded = value.casefold()
-    missing = [tag for tag in hashtags if str(tag).casefold() not in folded]
+    existing = {match.casefold() for match in re.findall(r"(?<!\w)#[\w]+", value, flags=re.UNICODE)}
+    missing = [tag for tag in hashtags if str(tag).casefold() not in existing]
     if not missing:
         return value, []
     suffix = " ".join(missing)
     updated = f"{value.rstrip()}\n\n{suffix}" if value.strip() else suffix
-    if len(updated) > 5000:
-        raise RuntimeError("metadata backfill would exceed YouTube's 5000-character description limit")
+    if len(updated.encode("utf-8")) > 5000:
+        raise RuntimeError("metadata backfill would exceed YouTube's 5000-byte description limit")
     return updated, missing
+
+
+def _youtube_tag_budget(values: list[str]) -> int:
+    if not values:
+        return 0
+    total = max(len(values) - 1, 0)  # commas between tags count toward the API limit
+    for value in values:
+        total += len(value) + (2 if " " in value else 0)  # YouTube counts implicit quotes around tags with spaces
+    return total
+
+
+def _merge_tags_preserving_existing(
+    current_tags: Iterable[Any],
+    desired_tags: Iterable[Any],
+    *,
+    safe_limit: int = 450,
+) -> tuple[list[str], list[str]]:
+    """Keep every remote tag exactly as returned, then append safe new tags when space allows."""
+    merged = [str(value) for value in current_tags if str(value or "").strip()]
+    seen = {" ".join(value.split()).strip().lstrip("#").casefold() for value in merged}
+    added: list[str] = []
+
+    for value in _normalize_tags(list(desired_tags)):
+        key = " ".join(value.split()).strip().lstrip("#").casefold()
+        if not key or key in seen:
+            continue
+        candidate = merged + [value]
+        if _youtube_tag_budget(candidate) > max(int(safe_limit), 0):
+            continue
+        merged.append(value)
+        added.append(value)
+        seen.add(key)
+    return merged, added
 
 
 def _require_same_bound_channel(settings: Settings, service: Any) -> dict[str, str]:
@@ -190,18 +224,21 @@ def _readonly_service(settings: Settings):
 
 
 def _remote_snippets(service: Any, video_ids: list[str]) -> dict[str, dict[str, Any]]:
-    if not video_ids:
-        return {}
-    response = service.videos().list(
-        part="snippet",
-        id=",".join(video_ids[:50]),
-        maxResults=min(len(video_ids), 50),
-    ).execute()
-    return {
-        str(item.get("id") or ""): dict(item.get("snippet") or {})
-        for item in (response.get("items") or [])
-        if item.get("id")
-    }
+    result: dict[str, dict[str, Any]] = {}
+    for start in range(0, len(video_ids), 50):
+        batch = video_ids[start : start + 50]
+        if not batch:
+            continue
+        response = service.videos().list(
+            part="snippet",
+            id=",".join(batch),
+            maxResults=len(batch),
+        ).execute()
+        for item in response.get("items") or []:
+            video_id = str(item.get("id") or "")
+            if video_id:
+                result[video_id] = dict(item.get("snippet") or {})
+    return result
 
 
 def backfill_published_metadata(
@@ -228,9 +265,7 @@ def backfill_published_metadata(
 
         hashtags, desired_tags = _desired_discovery_metadata(settings, target)
         current_tags = [str(value) for value in (current.get("tags") or [])]
-        merged_tags = _normalize_tags(current_tags + desired_tags)
-        current_tag_keys = {value.casefold() for value in _normalize_tags(current_tags)}
-        added_tags = [value for value in merged_tags if value.casefold() not in current_tag_keys]
+        merged_tags, added_tags = _merge_tags_preserving_existing(current_tags, desired_tags)
         new_description, added_hashtags = _append_missing_hashtags(
             str(current.get("description") or ""),
             hashtags,
