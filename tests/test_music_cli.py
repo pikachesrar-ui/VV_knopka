@@ -58,3 +58,36 @@ def test_preset_names_are_stable_by_category():
         "calm_01.wav",
         "calm_02.wav",
     ]
+
+
+def test_approved_track_resolves_only_library_root(tmp_path):
+    settings = _settings(tmp_path)
+    root = music_library_dir(settings)
+    root.mkdir(parents=True)
+    approved = root / "cute_01.wav"
+    approved.write_bytes(b"audio")
+    candidates = root / "candidates"
+    candidates.mkdir()
+    (candidates / "cute_02.wav").write_bytes(b"candidate")
+
+    assert music_cli._approved_track(settings, "cute_01.wav") == approved.resolve()
+
+
+def test_preview_output_defaults_to_runtime_music_previews(tmp_path):
+    settings = _settings(tmp_path)
+    source = tmp_path / "finished.mp4"
+    track = music_library_dir(settings) / "cute_01.wav"
+
+    output = music_cli._preview_output(settings, source, track, "animal_compilation", None)
+
+    assert output == settings.runtime_dir / "music" / "previews" / "finished.animal_compilation.cute_01.preview.mp4"
+
+
+def test_preview_output_resolves_explicit_relative_path(tmp_path):
+    settings = _settings(tmp_path)
+    source = tmp_path / "finished.mp4"
+    track = music_library_dir(settings) / "curious_01.wav"
+
+    output = music_cli._preview_output(settings, source, track, "ai_short", "runtime/custom-preview.mp4")
+
+    assert output == (tmp_path / "runtime" / "custom-preview.mp4").resolve()
