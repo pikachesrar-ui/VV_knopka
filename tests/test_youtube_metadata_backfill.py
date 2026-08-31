@@ -159,3 +159,41 @@ def test_apply_updates_snippet_only_and_preserves_remote_title(tmp_path, monkeyp
     assert "legacy tag" in body["snippet"]["tags"]
     assert "otter" in body["snippet"]["tags"]
     assert "status" not in body
+
+
+def test_metadata_edit_service_loads_full_scope_set(tmp_path, monkeypatch):
+    settings = _settings(tmp_path)
+    token = settings.runtime_dir / "youtube" / "token.json"
+    token.parent.mkdir(parents=True, exist_ok=True)
+    token.write_text("{}", encoding="utf-8")
+
+    captured = {}
+
+    class _Credentials:
+        expired = False
+        refresh_token = None
+        valid = True
+
+        @classmethod
+        def from_authorized_user_file(cls, filename, scopes=None):
+            captured["filename"] = filename
+            captured["scopes"] = tuple(scopes or ())
+            return cls()
+
+        def has_scopes(self, scopes):
+            return backfill.EDIT_SCOPE in set(captured["scopes"]) and set(scopes).issubset(set(captured["scopes"]))
+
+    class _RequestClass:
+        pass
+
+    service = object()
+    monkeypatch.setattr(
+        backfill,
+        "_google_imports",
+        lambda: (_RequestClass, _Credentials, object(), lambda *args, **kwargs: service, object()),
+    )
+    monkeypatch.setattr(backfill, "_require_same_bound_channel", lambda settings, service: {"channel_id": "x"})
+
+    assert backfill._metadata_edit_service(settings) is service
+    assert backfill.EDIT_SCOPE in captured["scopes"]
+    assert set(backfill.METADATA_SCOPES).issubset(set(captured["scopes"]))
