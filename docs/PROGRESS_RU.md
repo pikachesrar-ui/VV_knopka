@@ -1,6 +1,6 @@
 # VV_knopka — LIVE PROGRESS (RU)
 
-Последнее обновление: **2026-08-31**. Подробный контекст — `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, `docs/AI_MUSIC_RU.md`.
+Последнее обновление: **2026-08-31**. Подробный контекст — `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, `docs/AI_MUSIC_RU.md`, `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
 
 ## Реальный локальный checkpoint
 
@@ -15,18 +15,11 @@ next generation target: slot 17 AI EN
 OpenAI spent: $0.1885 / $10.00
 ```
 
-`vv-youtube verify` для slots 1–11:
+`vv-youtube verify` для slots 1–11: `upload=processed`, `processing=succeeded`, `privacy=public`.
 
-```text
-upload=processed
-processing=succeeded
-privacy=public
-publication_state=VERIFIED_PUBLIC
-```
+## Scheduler — real production validation passed
 
-## Windows scheduler — production validation passed
-
-Task `VV Knopka Long Run` установлен и `Ready`:
+Task `VV Knopka Long Run`:
 
 ```text
 01:30 MSK
@@ -35,73 +28,55 @@ Task `VV Knopka Long Run` установлен и `Ready`:
 Russian Standard Time (UTC+03:00)
 ```
 
-Реальный unattended run подтвердил backlog-first flow:
+Unattended flow реально подтвердил backlog-first policy:
 
 1. scheduler сам опубликовал slot 11;
 2. slot 11 стал `VERIFIED_PUBLIC`;
-3. следующая upload opportunity получила `uploadLimitExceeded`;
-4. uploader сохранил cooldown без traceback;
+3. следующая попытка получила `uploadLimitExceeded`;
+4. uploader записал cooldown без traceback;
 5. pending уменьшился до 5.
 
-Последний показанный cooldown:
-
-```text
-2026-09-01T00:30:07.333703+00:00
-```
-
-Во время active cooldown upload endpoint не hammer'ится.
+Последний показанный cooldown: `2026-09-01T00:30:07.333703+00:00` (~03:30 MSK).
 
 ## YouTube v2 — DONE
 
-Для новых long-run slots:
-
-- hashtags в description;
-- CTA rotation для cats;
-- planner AI hashtags реально используются;
-- `snippet.tags` передаются через API;
-- normalization/dedupe/caps;
-- `metadata_version=2`;
-- long-run metadata отражает реальный YouTube auto-publish;
-- frozen pilot остаётся historical review-first;
+- hashtags/CTA/`snippet.tags`;
+- metadata v2 для long-run;
+- real auto-publish semantics;
 - conditional `containsSyntheticMedia`;
-- `vv-youtube verify`, `stats`, `report` работают на реальном канале.
+- graceful daily-limit cooldown;
+- `vv-youtube verify`;
+- `vv-youtube stats` + history;
+- `vv-youtube report` with age-aware metrics.
 
-Первый real stats snapshot = 11 videos. Sample пока слишком маленький для optimisation decisions.
+Первый real stats sample = 11 videos; sample пока слишком мал для optimisation decisions.
 
-## Long-run AI fact-check — DONE
+## AI fact-check — DONE
 
 ```text
 plan candidate
- -> max 1 bounded web-search call
- -> structured evidence verdict
+ -> bounded web-search evidence check
  -> PASS => plan.json
- -> FAIL => no render/no publish
+ -> FAIL => no render / no publish
 ```
 
-Model cost + fixed web-search fee идут в общий `$10` BudgetLedger.
+Стоимость включена в общий `$10` BudgetLedger.
 
 ## MoneyPrinterTurbo autonomy — DONE in code
 
-`MPTProcessManager` умеет сам поднять локальный MPT, дождаться readiness, выполнить AI render и остановить только процесс, который он сам запустил. Постоянно открытый PowerShell с MPT больше не является целевой зависимостью.
+`MPTProcessManager` умеет auto-start/wait/stop локальный MPT. Постоянно открытый PowerShell с MPT не является целевой зависимостью.
 
-## AI background music — REAL LOCAL GENERATION PASSED
+## AI background music — REAL GENERATION PASSED / ALL 8 APPROVED
 
-Production music всё ещё намеренно выключена:
+На RTX 3060 пользователя:
 
-```toml
-[music]
-enabled = false
-```
-
-На реальном RTX 3060 ПК пользователя успешно подтверждено:
-
-1. `scripts/setup-acestep-windows.ps1` клонировал официальный `ACE-Step-1.5`;
-2. Python 3.11 / `uv sync` setup прошёл;
-3. локальный ACE-Step API стартует через `vv-music`;
-4. первый реальный run выявил `httpx.ReadTimeout` при `/query_result` polling;
-5. клиент исправлен: polling `ReadTimeout` теперь считается transient и retry'ится до общего deadline;
-6. regression test добавлен;
-7. после `git pull` повторный запуск успешно сгенерировал все **8 WAV candidates**:
+- ACE-Step 1.5 setup прошёл;
+- local API auto-start работает;
+- реальный `httpx.ReadTimeout` на long `/query_result` polling найден и исправлен;
+- timeout теперь retry'ится до общего task deadline;
+- regression test добавлен;
+- успешно сгенерированы все 8 WAV candidates;
+- пользователь **явно одобрил все 8**:
 
 ```text
 cute_01.wav
@@ -114,64 +89,56 @@ calm_01.wav
 calm_02.wav
 ```
 
-Файлы лежат только в:
+Production flag пока всё ещё OFF:
 
-```text
-runtime/assets/music/candidates/
+```toml
+[music]
+enabled = false
 ```
 
-и не могут попасть в production rotation до explicit `vv-music approve ...`.
+Следующий локальный шаг — promote все 8 через `vv-music approve`, затем safe mixed-video preview. Для этого добавлен `vv-music preview`: он копирует готовый MP4, подмешивает approved track в копию и не меняет source/video config.
 
-Пользователь уже прослушал несколько candidates и сообщил, что музыка нравится. Точный approved subset ещё не выбран.
+После прослушивания preview можно решить, достаточно ли текущих уровней:
 
-### Реализованная music infrastructure
+```toml
+ai_volume = 0.10
+cat_volume = 0.07
+ducking = true
+```
 
-- local library + FFmpeg mixer;
-- ACE-Step async REST client;
-- API auto-start/wait/stop;
-- candidate/approved separation;
-- `vv-music status/list/generate-library/approve`;
-- deterministic rotation + cooldown;
-- SHA256 per-slot audit;
-- separate quiet volumes for AI/cats;
-- sidechain ducking;
-- MPT BGM muted when approved local music is applied;
-- applied AI-generated music propagates YouTube disclosure.
+Только после этого включать production music.
+
+## Future comment feedback loop — PLANNED
+
+Пользователь предложил позже анализировать комментарии и менять BGM, если будет устойчивый негатив именно про музыку.
+
+План зафиксирован в `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`:
+
+- собирать comment history;
+- классифицировать topic отдельно от sentiment;
+- учитывать только music-related feedback для решения о BGM;
+- не реагировать на единичный негатив;
+- сначала recommendation/report, затем human-approved изменение volume/library/enable state.
 
 ## CI
 
-Последний полностью зелёный checkpoint до runtime timeout fix:
+Runtime timeout fix workflow `33429860042`:
 
 ```text
-head: 936bd0956ad0c08fb236c1a97aada6ff0464e88d
-workflow: 33419768393
-pytest: 147 passed
 Ubuntu: PASS
-Windows: PASS
+Windows bootstrap: PASS
 ```
 
-Runtime timeout fix commits:
-
-```text
-795b7f01 — retry ACE-Step polling read timeouts
-463f2d5d — regression test
-```
-
-Ubuntu job на workflow `33429860042` уже PASS; Windows bootstrap ещё выполнялся при последней проверке. Не называть весь current HEAD fully green, пока Windows не завершён.
+Текущий music-preview code добавлен после этого checkpoint и должен пройти свежий CI перед объявлением final green HEAD.
 
 ## Следующий шаг
 
-1. пользователь прослушивает оставшиеся 8 candidates;
-2. сообщает, какие конкретно tracks допускаются в production;
-3. только выбранные файлы promoted через `vv-music approve ...`;
-4. после этого отдельно решаем, включать ли `[music].enabled=true`;
-5. scheduler продолжает draining slots 12–16;
-6. после pending=0 validate slot 17 end-to-end:
+1. локально `git pull`;
+2. approve все 8 tracks;
+3. сделать safe preview на одном готовом cat Short и одном AI Short;
+4. прослушать громкость/ducking;
+5. если всё хорошо — включить `[music].enabled=true`;
+6. scheduler продолжает draining slots 12–16;
+7. после pending=0 validate slot 17 end-to-end.
 
-```text
-plan -> fact-check -> MPT auto-start -> curated stock -> render -> metadata v2 -> YouTube -> verify/stats
-```
-
-TikTok пока не трогать.
-
-Draft PR #1 остаётся open/draft/unmerged.
+TikTok пока не трогать. Draft PR #1 остаётся open/draft/unmerged.
