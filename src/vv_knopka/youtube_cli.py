@@ -6,13 +6,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .settings import load_settings
+from .youtube_observability import collect_statistics, verify_receipts
 from .youtube_uploader import (
     active_upload_limit,
     authorize_and_bind,
     channel_binding_path,
     client_secret_path,
     pending_ready_count,
-    ready_metadata,
     token_path,
     upload_ready,
 )
@@ -27,6 +27,8 @@ def main() -> None:
     sub.add_parser("status")
     sub.add_parser("auth")
     sub.add_parser("pending-count")
+    sub.add_parser("verify", help="Verify processing/privacy state of uploaded receipt videos")
+    sub.add_parser("stats", help="Collect current views/likes/comments for uploaded receipt videos")
 
     upload = sub.add_parser("upload-ready")
     upload.add_argument("--limit", type=int, default=None)
@@ -61,6 +63,39 @@ def main() -> None:
         print(f"Binding: {channel_binding_path(settings)}")
         return
 
+    if args.command == "verify":
+        results = verify_receipts(settings)
+        if not results:
+            print("No uploaded receipt videos to verify.")
+            return
+        failed = False
+        for item in results:
+            state = item["publication_state"]
+            if state in {"FAILED", "MISSING"}:
+                failed = True
+            print(
+                f"slot {item['slot']}: {state} | "
+                f"upload={item.get('upload_status')} processing={item.get('processing_status')} "
+                f"privacy={item.get('privacy_status')}"
+            )
+        if failed:
+            raise SystemExit(74)
+        return
+
+    if args.command == "stats":
+        snapshot = collect_statistics(settings)
+        videos = snapshot.get("videos") or []
+        print(
+            f"YouTube stats: {len(videos)} videos | collected {snapshot.get('collected_at')} | "
+            f"{snapshot.get('channel_title', '')}"
+        )
+        for item in videos:
+            print(
+                f"slot {item['slot']}: {item['views']} views | "
+                f"{item['likes']} likes | {item['comments']} comments | {item.get('title')}"
+            )
+        return
+
     if args.command == "upload-ready":
         results = upload_ready(
             settings,
@@ -75,9 +110,11 @@ def main() -> None:
         deferred = False
         for result in results:
             if result.get("dry_run"):
+                tags = ", ".join(result.get("tags") or [])
+                extra = f" | tags={tags}" if tags else ""
                 print(
                     f"DRY RUN slot {result['slot']}: {result['title']} -> "
-                    f"{result['requested_privacy']} | {result['video_file']}"
+                    f"{result['requested_privacy']} | {result['video_file']}{extra}"
                 )
             elif result.get("deferred"):
                 deferred = True
@@ -93,8 +130,6 @@ def main() -> None:
                     f"requested={result['requested_privacy']} actual={result['actual_privacy']}"
                 )
 
-        # Distinct nonzero code lets the scheduler stop generation while the
-        # platform-level daily upload limit is active, without a Python traceback.
         if deferred:
             raise SystemExit(75)
         return
