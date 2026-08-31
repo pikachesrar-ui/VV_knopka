@@ -2,154 +2,107 @@
 
 ## Цель
 
-Добавить в будущие long-run Shorts очень тихую приятную инструментальную музыку, не забивая:
+Добавлять в будущие long-run Shorts очень тихую приятную инструментальную музыку, не забивая voiceover AI facts, оригинальный звук cat clips и meow на black cards.
 
-- voiceover в AI facts;
-- оригинальный звук cat clips;
-- meow на black cards.
+Музыка не генерируется заново для каждого ролика. Используется небольшая curated local library с deterministic rotation и cooldown.
 
-Музыка не генерируется заново для каждого ролика. Сначала создаётся небольшая локальная библиотека, затем VV_knopka детерминированно ротирует одобренные tracks с cooldown.
+## Current state — 2026-08-31
+
+Реальный локальный ACE-Step flow подтверждён на RTX 3060 пользователя:
+
+- official ACE-Step 1.5 setup — PASS;
+- local API auto-start — PASS;
+- first-run long polling bug (`httpx.ReadTimeout`) найден и исправлен;
+- regression test добавлен;
+- после fix успешно сгенерированы все 8 initial WAV candidates;
+- пользователь прослушал набор и **явно одобрил все 8** для production library.
+
+Approved set:
+
+```text
+cute_01.wav
+cute_02.wav
+playful_01.wav
+playful_02.wav
+curious_01.wav
+curious_02.wav
+calm_01.wav
+calm_02.wav
+```
+
+Local promotion command:
+
+```powershell
+.\.venv\Scripts\vv-music.exe approve `
+  cute_01.wav cute_02.wav `
+  playful_01.wav playful_02.wav `
+  curious_01.wav curious_02.wav `
+  calm_01.wav calm_02.wav
+```
+
+Promotion moves files from `runtime/assets/music/candidates/` to `runtime/assets/music/` and marks the manifest approved. It **does not** turn production music on.
 
 ## Safety state
 
-Production music по умолчанию выключена:
+Until a real mixed-video preview is listened to, production flag remains intentionally:
 
 ```toml
 [music]
 enabled = false
 ```
 
-Это намеренно. Пока трек не был прослушан и явно promoted из `candidates`, он не может попасть в production rotation.
-
-Структура:
+Candidate/approved separation remains important:
 
 ```text
 runtime/assets/music/
-  candidates/          # generated, но ещё НЕ одобрены
-    cute_01.wav
-    ...
-    generation.json
-  curious_01.wav       # только approved tracks лежат прямо в music/
-  calm_01.wav
+  candidates/          # generated but not production-visible
+  cute_01.wav          # approved root files are production-visible
   ...
 ```
 
-`music_library.available_tracks()` читает только файлы непосредственно в `runtime/assets/music/`; подкаталог `candidates/` игнорируется.
+## Safe preview before activation
 
-## ACE-Step
+`vv-music preview` creates a copy of an existing finished Short and mixes one approved track into the copy. The source MP4 and `music.enabled` are unchanged.
 
-Используется локальный open-source ACE-Step 1.5 через его REST API.
+Example for a cat Short:
 
-Официальный async API flow:
+```powershell
+.\.venv\Scripts\vv-music.exe preview `
+  --video <finished-short.mp4> `
+  --track cute_01.wav `
+  --pipeline animal_compilation
+```
+
+Example for an AI fact:
+
+```powershell
+.\.venv\Scripts\vv-music.exe preview `
+  --video <finished-short.mp4> `
+  --track curious_01.wav `
+  --pipeline ai_short
+```
+
+Default preview output:
 
 ```text
-POST /release_task
-  -> task_id
-POST /query_result
-  -> status 0/1/2
-GET /v1/audio?... 
-  -> generated audio
+runtime/music/previews/<source>.<pipeline>.<track>.preview.mp4
 ```
 
-VV_knopka использует instrumental mode (`lyrics=[Instrumental]`, `instrumental=true`), WAV output, один result за task и bounded duration.
-
-Default local API URL:
-
-```text
-http://127.0.0.1:8001
-```
-
-Override при необходимости:
-
-```text
-ACESTEP_BASE_URL=http://127.0.0.1:8001
-```
-
-## Windows setup
-
-После `git pull` и reinstall VV_knopka:
-
-```powershell
-cd D:\KiraS\VV_knopka
-powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
-```
-
-Setup:
-
-1. использует локальный `uv` helper;
-2. клонирует официальный `ACE-Step/ACE-Step-1.5` в ignored `ACE-Step-1.5/`;
-3. устанавливает Python 3.11 environment через `uv sync`;
-4. создаёт local candidates directory.
-
-Setup намеренно **не делает auto-update существующего ACE-Step checkout**, чтобы upstream не менялся неожиданно в production.
-
-Первый запуск ACE-Step может скачивать model weights и занять заметное время/место.
-
-## Generate initial candidates
-
-Основной command:
-
-```powershell
-.\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
-```
-
-`vv-music` сам попробует:
-
-1. обнаружить уже запущенный ACE-Step API;
-2. если API offline — поднять локальный `acestep-api`;
-3. дождаться `/health`;
-4. последовательно сгенерировать candidate WAVs;
-5. скачать их в `runtime/assets/music/candidates/`;
-6. записать generation manifest;
-7. остановить только тот ACE-Step process, который VV_knopka запустил сам.
-
-Preset library сейчас включает 8 вариантов:
-
-- `cute_01`, `cute_02`;
-- `playful_01`, `playful_02`;
-- `curious_01`, `curious_02`;
-- `calm_01`, `calm_02`.
-
-Промпты специально запрещают vocals, heavy bass и dramatic drops.
-
-## Status / list
-
-```powershell
-.\.venv\Scripts\vv-music.exe status
-.\.venv\Scripts\vv-music.exe list
-```
-
-## Approval
-
-После прослушивания выбранные кандидаты можно promoted в production library:
-
-```powershell
-.\.venv\Scripts\vv-music.exe approve curious_01.wav calm_02.wav cute_01.wav
-```
-
-Это только перемещает выбранные WAV из `candidates/` в approved root. Сам feature flag всё ещё остаётся выключенным.
-
-Не включать `[music].enabled=true`, пока пользователь не подтвердил набор одобренных tracks.
+After listening to a real preview, decide whether current `ai_volume=0.10` / `cat_volume=0.07` and ducking are appropriate. Only then switch `[music].enabled=true`.
 
 ## Production rotation
 
-После включения:
+Once enabled:
 
-- AI facts предпочитают `curious_*`, затем `calm_*`, `facts_*`, `generic_*`;
-- cats предпочитают `cute_*`, затем `playful_*`, `calm_*`, `generic_*`;
-- предыдущие tracks блокируются cooldown window;
-- выбор остаётся deterministic;
-- каждый slot сохраняет `music.json` с SHA256, track name, generator и disclosure state.
+- AI facts prefer `curious_*`, then `calm_*`;
+- cats prefer `cute_*`, then `playful_*`, then `calm_*`;
+- recent tracks are blocked by `cooldown_shorts=5` when possible;
+- selection stays deterministic;
+- each slot writes `music.json` with track name, SHA256, generator, volume, ducking and applied state;
+- MPT BGM is muted when approved local music is applied, avoiding double music;
+- AI-generated music can propagate YouTube synthetic-media disclosure.
 
-Default cooldown:
-
-```toml
-cooldown_shorts = 5
-```
-
-## Audio mix
-
-Current target volumes:
+Current target levels:
 
 ```toml
 ai_volume = 0.10
@@ -157,22 +110,28 @@ cat_volume = 0.07
 ducking = true
 ```
 
-Main audio всегда важнее BGM. При ducking музыка дополнительно приглушается под voice/source audio.
+## ACE-Step generation
 
-Когда local music enabled, встроенный random BGM MoneyPrinterTurbo мутится, чтобы две фоновые композиции не играли одновременно.
+Initial generation command:
 
-## YouTube disclosure
-
-Если applied track отмечен как AI-generated, `music.json` сообщает это publication metadata, после чего uploader передаёт `containsSyntheticMedia=true` для конкретного видео.
-
-Если AI music не применялась, сам факт использования AI в других production helpers не заставляет blanket-включать этот flag.
-
-## First production experiment
-
-После выбора библиотеки рекомендуется не сразу включать музыку во все видео, а провести небольшой comparison batch:
-
-```text
-music ON vs music OFF
+```powershell
+.\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
 ```
 
-Дальше сравнивать YouTube stats snapshots (views/likes/comments; при появлении retention data — retention) и оставить музыку только если она реально помогает или по крайней мере не ухудшает результат.
+The client uses ACE-Step async REST flow:
+
+```text
+POST /release_task -> task_id
+POST /query_result -> status 0/1/2
+GET /v1/audio?... -> WAV
+```
+
+Polling read timeouts are treated as transient while the overall task deadline is still active, because first-run/model initialization can hold requests longer than a normal HTTP timeout.
+
+## Feedback loop later
+
+Пользователь предложил в будущем анализировать YouTube comments и менять музыку, если зрители устойчиво жалуются именно на BGM.
+
+Это добавлено в план: `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
+
+На первом этапе comment feedback должен быть observational/recommendation-only. Единичный негативный комментарий не должен автоматически менять production configuration.
