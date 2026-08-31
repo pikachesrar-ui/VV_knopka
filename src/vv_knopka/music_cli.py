@@ -12,6 +12,8 @@ from .music_library import available_tracks, music_library_dir
 from .settings import load_settings
 
 
+_AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac", ".opus"}
+
 _PRESETS = (
     (
         "cute",
@@ -68,7 +70,11 @@ def _approved_names(settings) -> set[str]:
 
 def _candidate_files(settings) -> list[Path]:
     root = _candidate_dir(settings)
-    result = [path for path in root.iterdir() if path.is_file() and path.stat().st_size > 0]
+    result = [
+        path
+        for path in root.iterdir()
+        if path.is_file() and path.suffix.casefold() in _AUDIO_SUFFIXES and path.stat().st_size > 0
+    ]
     return sorted(result, key=lambda path: path.name.casefold())
 
 
@@ -77,22 +83,43 @@ def _next_name(category: str, index: int) -> str:
     return f"{category}_{same_before:02d}.wav"
 
 
+def _manifest_path(settings) -> Path:
+    return _candidate_dir(settings) / "generation.json"
+
+
+def _load_manifest(settings) -> list[dict]:
+    path = _manifest_path(settings)
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [dict(item) for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+
+
 def _write_manifest(settings, records: list[dict]) -> Path:
-    path = _candidate_dir(settings) / "generation.json"
-    previous: list[dict] = []
-    if path.exists():
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(raw, list):
-                previous = [dict(item) for item in raw if isinstance(item, dict)]
-        except (OSError, json.JSONDecodeError):
-            pass
+    path = _manifest_path(settings)
+    previous = _load_manifest(settings)
     by_name = {str(item.get("name") or ""): item for item in previous if item.get("name")}
     for item in records:
         by_name[str(item["name"])] = item
     payload = [by_name[key] for key in sorted(by_name, key=str.casefold)]
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
+
+
+def _mark_approved(settings, names: set[str]) -> Path | None:
+    records = _load_manifest(settings)
+    if not records:
+        return None
+    changed = False
+    for item in records:
+        name = str(item.get("name") or "").casefold()
+        if name in names and item.get("approved") is not True:
+            item["approved"] = True
+            changed = True
+    return _write_manifest(settings, records) if changed else _manifest_path(settings)
 
 
 def main() -> None:
@@ -139,7 +166,7 @@ def main() -> None:
         candidates = {path.name.casefold(): path for path in _candidate_files(settings)}
         destination = music_library_dir(settings)
         destination.mkdir(parents=True, exist_ok=True)
-        moved = 0
+        moved_names: set[str] = set()
         for raw in args.names:
             key = Path(raw).name.casefold()
             source = candidates.get(key)
@@ -149,9 +176,10 @@ def main() -> None:
             if target.exists():
                 raise SystemExit(f"Approved track already exists: {target.name}")
             shutil.move(str(source), str(target))
+            moved_names.add(source.name.casefold())
             print(f"APPROVED {source.name}")
-            moved += 1
-        print(f"Approved {moved} track(s). music.enabled is unchanged.")
+        _mark_approved(settings, moved_names)
+        print(f"Approved {len(moved_names)} track(s). music.enabled is unchanged.")
         return
 
     count = max(0, min(int(args.count), len(_PRESETS)))
@@ -160,6 +188,7 @@ def main() -> None:
         return
 
     candidate_dir = _candidate_dir(settings)
+    approved_names = _approved_names(settings)
     records: list[dict] = []
     manager = ACEStepProcessManager(settings)
     try:
@@ -167,6 +196,9 @@ def main() -> None:
         client = ACEStepClient(settings)
         for index, (category, bpm, prompt) in enumerate(_PRESETS[:count]):
             name = _next_name(category, index)
+            if name.casefold() in approved_names:
+                print(f"SKIP {name}: already approved")
+                continue
             output = candidate_dir / name
             if output.exists() and output.stat().st_size > 0 and not args.force:
                 print(f"SKIP {name}: candidate already exists")
