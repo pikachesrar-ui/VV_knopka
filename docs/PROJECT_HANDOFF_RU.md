@@ -7,31 +7,28 @@ GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft 
 `идея/факт -> validation -> render -> metadata -> YouTube upload -> verification -> statistics`.
 TikTok пока не трогать.
 
-## Реальный checkpoint — 2026-08-31
+## Реальный checkpoint — 2026-09-01
 - frozen pilot slots 1–15 визуально принят и immutable;
 - slots 1–11 опубликованы и `VERIFIED_PUBLIC`;
-- перед пересборкой slot 16 локально было 16 ready Shorts, pending slots 12–16;
-- OpenAI ledger `$0.1885/$10`;
+- OpenAI ledger последний показанный `$0.1885/$10`;
 - scheduler `VV Knopka Long Run` реально работает по 01:30/03:30/05:30 MSK;
 - unattended run auto-uploaded slot 11, затем корректно обработал YouTube `uploadLimitExceeded` через cooldown/defer.
 
+Плохой, но ещё не опубликованный slot 16 / cat #008 был безопасно архивирован в:
+`runtime/backups/slot-16-before-rebuild-20260831-231504`.
+В active ready queue после этого остаются slots 12–15; replacement slot 16 снова является следующим long-run generation target.
+
 ## Cat slot 16 reuse incident — diagnosed
-Пользователь заметил, что cat episode #008 / slot 16 повторяет много котов из #001.
-Локальные audits подтвердили:
+Первый slot 16 повторял почти весь первый кошачий выпуск:
 
 ```text
-slot 16 final sources: 6
+final sources: 6
 fresh: 1
-cooled-down reused: 5
-all 5 reused clips came from slot 2 / cat #001
-cooled_history_local_fallback: enabled
-seeded_sources: 8
-source_slots: 2,4
+cooled reused: 5
+all 5 reused clips from slot 2 / cat #001
 ```
 
-`source_reuse_audit.json` показывал 5 cooled overlaps и всё равно `passed=true`, потому что старая gate ограничивала recent-window repeats, но не концентрацию cooled history.
-
-### Исправленная policy
+Исправленная anti-remake policy:
 ```toml
 [long_run]
 cat_source_cooldown_episodes = 5
@@ -39,26 +36,62 @@ cat_cooled_reuse_max_sources = 2
 cat_cooled_reuse_max_per_history_episode = 1
 ```
 
-Теперь:
-- fresh discovery всегда первая;
-- предыдущие 5 cat episodes защищены;
-- cooled fallback максимум 2 клипа на новый Short;
-- максимум 1 клип из одного старого episode;
-- fallback идёт newest-cooled-first, а не начинает с самого старого #001;
-- если после fresh + bounded fallback не достигается minimum usable source count, генерация fail closed;
-- audit пишет `cooled_reuse_by_history_slot` и отдельно валидирует total/per-episode limits.
+Теперь максимум два old clips total и максимум один из одного старого episode; при нехватке fresh stock pipeline fail closed.
 
-Существующий slot 16 ещё не опубликован и должен быть архивирован/пересобран до upload turn. Slots 1–15 не трогать.
+## Real replacement attempt — correct fail-closed
+После архивирования старого slot 16 пользователь запустил `vv longrun-next`.
+Результат:
 
-## AI music — approved and enabled for future long-run
-ACE-Step real local path на RTX 3060 полностью подтверждён. Все 8 initial tracks одобрены и promoted в local approved library.
+```text
+fresh usable: 1/5
+fresh + bounded cooled fallback: 3/5
+render stopped; no replacement MP4
+```
+
+Audit показал точный bottleneck:
+
+```text
+Pexels candidates: 59
+vision reviewed: 59
+vision approved: 56
+new Pexels audio accepted: 0
+56 rejects: downloaded file is missing audible audio
+selected pool after fallback: 3
+Pixabay candidates: 0
+```
+
+То есть geometry и visual relevance почти не ограничивают выбор; проблема — stock files без реально слышимого source audio.
+
+## Cat source v6 — audio first, vision second
+`vv` теперь маршрутизирует cat sourcing через `animal_audio_sources_v6`.
+
+Новая policy:
+- до Luna проверяется remote audio stream;
+- при наличии stream FFmpeg измеряет реальный mean volume первых секунд;
+- confirmed-silent stock не расходует vision calls;
+- unmeasurable CDN candidates допускаются только маленьким bounded tail;
+- remote cooled history полностью исключена из discovery, historical reuse идёт только через bounded local v5 fallback;
+- retry не может добавить ещё один cooled batch поверх уже существующего;
+- deep/audibility audit записывается даже на fail;
+- audit показывает наличие `PEXELS_API_KEY` / `PIXABAY_API_KEY` только boolean-ами, без секретов.
+
+Config:
+```toml
+[animal]
+remote_audio_probe_seconds = 6.0
+remote_audio_unknown_max_candidates = 12
+```
+
+Если replacement slot 16 снова fail closed, сначала смотреть `provider_availability` и `remote_audibility_gate`; не ослаблять anti-repeat/audio/9:16 gates вслепую.
+
+## AI music — approved and enabled
+ACE-Step real local path на RTX 3060 подтверждён. Все 8 initial tracks одобрены и promoted в local approved library.
 
 Preview results:
-- AI mix нормальный при `ai_volume=0.10`, ducking ON;
-- первый cat mix был слишком тихим;
-- cat v2 принят при `cat_volume=0.11`, cat ducking OFF.
+- AI `0.10` + ducking = accepted;
+- cats `0.11` + cat ducking OFF = accepted.
 
-Current target config:
+Current config:
 ```toml
 [music]
 enabled = true
@@ -68,7 +101,7 @@ ai_ducking = true
 cat_ducking = false
 ```
 
-Для rebuilt slot 16 использовать `vv longrun-next`, а не только `render-animal`, чтобы conveyor после render применил reviewed music, записал `music.json` и пересобрал final upload metadata / synthetic-media disclosure.
+Replacement slot 16 запускать через `vv longrun-next`, чтобы после render применились reviewed music, `music.json` и final upload metadata / synthetic-media disclosure.
 
 ## YouTube v2
 Реализовано и проверено на реальном канале:
@@ -89,7 +122,7 @@ cat_ducking = false
 - MPT умеет auto-start/wait/stop через conveyor.
 
 ## Future comment feedback
-`docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`: в будущем собирать comments, отдельно классифицировать music-topic и sentiment, реагировать только на устойчивый сигнал по нескольким комментариям/videos. First stage recommendation-only.
+`docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`: позже собирать comments, отдельно классифицировать music-topic и sentiment, реагировать только на устойчивый сигнал по нескольким комментариям/videos. First stage recommendation-only.
 
 ## Safety
 - `$10` OpenAI hard cap;
@@ -99,11 +132,11 @@ cat_ducking = false
 - PR #1 не merge автоматически.
 
 ## Immediate continuation
-1. дождаться green CI после anti-remake + music enable;
+1. дождаться green CI для v6;
 2. user local `git pull`;
-3. убедиться, что slot 16 не имеет YouTube receipt;
-4. безопасно архивировать старый `runtime/slots/16` + `slot-16-en-animals.mp4` + sidecar;
-5. запустить `vv longrun-next` — он должен снова выбрать slot 16;
-6. проверить `source_reuse_audit.json`, `animal_audio_sources.json`, `music.json` и preview;
-7. после принятия нового slot 16 продолжать backlog-first uploads;
-8. slot 17 не генерировать, пока pending backlog не станет 0.
+3. проверить boolean provider availability без вывода ключей;
+4. снова `vv longrun-next` для slot 16;
+5. при success проверить source audits + `music.json` + preview;
+6. при fail использовать новый audit для решения, нужен ли Pixabay key / другой safe provider path / deeper fresh strategy;
+7. scheduler продолжает draining slots 12–15;
+8. slot 17 не генерировать, пока replacement slot 16 и backlog policy не завершены.
