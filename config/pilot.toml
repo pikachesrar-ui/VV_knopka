@@ -46,6 +46,13 @@ terra_output_per_million_usd = 12.0
 luna_input_per_million_usd = 0.20
 luna_output_per_million_usd = 1.20
 max_estimated_cost_per_call_usd = 0.25
+# Long-run AI facts fail closed before rendering. One bounded web-search tool call
+# is allowed and its separate feature fee is explicitly written into our local ledger.
+fact_check_enabled = true
+fact_check_model = "gpt-5.6-luna"
+fact_check_max_tool_calls = 1
+fact_check_max_estimated_cost_usd = 0.05
+web_search_call_usd = 0.01
 
 [video]
 aspect = "9:16"
