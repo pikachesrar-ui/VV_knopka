@@ -21,11 +21,15 @@ def _clip(tmp_path, provider, provider_id):
     }
 
 
-def _settings(tmp_path, *, cooldown=1):
+def _settings(tmp_path, *, cooldown=1, max_cooled=2, max_per_episode=1):
     return Settings(
         raw={
             "pilot": {"runtime_dir": "runtime", "total_shorts": 15},
-            "long_run": {"cat_source_cooldown_episodes": cooldown},
+            "long_run": {
+                "cat_source_cooldown_episodes": cooldown,
+                "cat_cooled_reuse_max_sources": max_cooled,
+                "cat_cooled_reuse_max_per_history_episode": max_per_episode,
+            },
             "animal": {"material_count": 6},
         },
         root=tmp_path,
@@ -109,13 +113,41 @@ def test_cooled_history_seed_uses_old_local_stock_but_not_recent_window(tmp_path
     assert [item["provider_id"] for item in payload["clips"]] == ["old"]
 
 
-def test_retry_after_failed_minimum_uses_fresh_then_cooled_local_stock(tmp_path, monkeypatch):
+def test_cooled_history_seed_is_capped_and_distributed_across_episodes(tmp_path):
+    settings = _settings(tmp_path, cooldown=1, max_cooled=2, max_per_episode=1)
+    slot2a = _clip(tmp_path, "pexels", "slot2-a")
+    slot2b = _clip(tmp_path, "pexels", "slot2-b")
+    slot4a = _clip(tmp_path, "pexels", "slot4-a")
+    slot4b = _clip(tmp_path, "pixabay", "slot4-b")
+    recent = _clip(tmp_path, "pexels", "recent")
+    _write_history(settings, 2, [slot2a, slot2b], language="ru")
+    _write_history(settings, 4, [slot4a, slot4b])
+    _write_history(settings, 6, [recent])
+
+    source_manifest = settings.runtime_dir / "slots" / "16" / "sources.json"
+    seeded = seed_cooled_history_sources(
+        settings,
+        slot=16,
+        source_manifest=source_manifest,
+        protected={("pexels", "recent")},
+        max_sources=12,
+    )
+
+    assert [(item["provider_id"], item["reused_from_slot"]) for item in seeded] == [
+        ("slot4-a", 4),
+        ("slot2-a", 2),
+    ]
+
+
+def test_retry_after_failed_minimum_uses_fresh_then_one_per_old_episode(tmp_path, monkeypatch):
     settings = _settings(tmp_path, cooldown=1)
     old1 = _clip(tmp_path, "pexels", "old-1")
     old2 = _clip(tmp_path, "pixabay", "old-2")
+    old3 = _clip(tmp_path, "pexels", "old-3")
     recent = _clip(tmp_path, "pexels", "recent")
     _write_history(settings, 2, [old1, old2], language="ru")
-    _write_history(settings, 4, [recent])
+    _write_history(settings, 4, [old3])
+    _write_history(settings, 6, [recent])
 
     slot_dir = settings.runtime_dir / "slots" / "16"
     slot_dir.mkdir(parents=True, exist_ok=True)
@@ -150,7 +182,8 @@ def test_retry_after_failed_minimum_uses_fresh_then_cooled_local_stock(tmp_path,
     )
 
     assert result == source_manifest
-    assert calls == [["fresh", "old-1", "old-2"]]
+    assert calls == [["fresh", "old-3", "old-1"]]
+    assert "old-2" not in calls[0]
     assert "recent" not in calls[0]
 
 
