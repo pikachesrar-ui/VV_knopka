@@ -6,6 +6,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .settings import load_settings
+from .youtube_metadata_backfill import (
+    authorize_metadata_edit,
+    backfill_published_metadata,
+    parse_slot_spec,
+)
 from .youtube_observability import build_performance_report, collect_statistics, verify_receipts
 from .youtube_uploader import (
     active_upload_limit,
@@ -26,6 +31,17 @@ def main() -> None:
 
     sub.add_parser("status")
     sub.add_parser("auth")
+    sub.add_parser(
+        "auth-metadata",
+        help="Reauthorize the already-bound channel with metadata-edit scope without changing the channel binding",
+    )
+    backfill = sub.add_parser(
+        "backfill-metadata",
+        help="Add discovery tags/hashtags to already-uploaded videos; dry-run unless --apply is supplied",
+    )
+    backfill.add_argument("--slots", default=None, help="Slot list/range, for example 1-11 or 1,3,5-8")
+    backfill.add_argument("--apply", action="store_true")
+
     sub.add_parser("pending-count")
     sub.add_parser("verify", help="Verify processing/privacy state of uploaded receipt videos")
     sub.add_parser("stats", help="Collect current views/likes/comments for uploaded receipt videos")
@@ -63,6 +79,48 @@ def main() -> None:
         print(f"YouTube channel bound: {channel['channel_title']} ({channel['channel_id']})")
         print(f"Token: {token_path(settings)}")
         print(f"Binding: {channel_binding_path(settings)}")
+        return
+
+    if args.command == "auth-metadata":
+        channel = authorize_metadata_edit(settings)
+        print(f"YouTube metadata-edit authorization ready: {channel['channel_title']} ({channel['channel_id']})")
+        print(f"Token upgraded in place: {token_path(settings)}")
+        print("Existing upload automation remains bound to the same channel.")
+        return
+
+    if args.command == "backfill-metadata":
+        try:
+            slots = parse_slot_spec(args.slots)
+        except ValueError as exc:
+            parser.error(str(exc))
+        results = backfill_published_metadata(settings, slots=slots, apply=bool(args.apply))
+        if not results:
+            print("No uploaded receipt videos matched the requested slots.")
+            return
+        changed = 0
+        applied = 0
+        missing = 0
+        for item in results:
+            if item.get("missing"):
+                missing += 1
+                print(f"MISSING slot {item['slot']}: YouTube video {item['video_id']} was not returned by the API")
+                continue
+            tags = ", ".join(item.get("added_tags") or []) or "none"
+            hashtags = " ".join(item.get("added_hashtags") or []) or "none"
+            if item.get("changed"):
+                changed += 1
+            if item.get("applied"):
+                applied += 1
+                prefix = "UPDATED"
+            elif item.get("changed"):
+                prefix = "DRY RUN"
+            else:
+                prefix = "UNCHANGED"
+            print(f"{prefix} slot {item['slot']}: +tags=[{tags}] | +hashtags=[{hashtags}]")
+        mode = "APPLY" if args.apply else "DRY RUN"
+        print(f"{mode} summary: {len(results)} videos | changed={changed} | applied={applied} | missing={missing}")
+        if not args.apply and changed:
+            print("Nothing was changed on YouTube. Re-run with --apply after reviewing this output.")
         return
 
     if args.command == "verify":
