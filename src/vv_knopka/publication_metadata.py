@@ -205,6 +205,16 @@ def build_upload_metadata(
         description_lines.append("Sources / Creative Commons attribution:")
         description_lines.extend(f"- {text}" for text in attributions)
 
+    if longrun:
+        auto_publish = bool(settings.youtube_auto_publish)
+        review_required = not auto_publish
+        publication_allowed = auto_publish
+    else:
+        # Frozen pilot metadata is historical and must remain review-first.
+        auto_publish = False
+        review_required = True
+        publication_allowed = False
+
     result = {
         "slot": slot.slot,
         "pipeline": slot.pipeline,
@@ -213,9 +223,9 @@ def build_upload_metadata(
         "youtube_title": title,
         "youtube_description": "\n".join(description_lines).strip(),
         "attributions": attributions,
-        "review_required": True,
-        "auto_publish": False,
-        "publication_allowed_by_conveyor": False,
+        "review_required": review_required,
+        "auto_publish": auto_publish,
+        "publication_allowed_by_conveyor": publication_allowed,
     }
 
     if longrun:
