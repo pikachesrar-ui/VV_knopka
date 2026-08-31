@@ -1,28 +1,25 @@
 # VV_knopka — LIVE PROGRESS (RU)
 
-Последнее обновление: **2026-08-31**.
+Последнее обновление: **2026-09-01**.
 
 ## YouTube / scheduler
 ```text
 published + VERIFIED_PUBLIC: slots 1–11
-pending before slot-16 rebuild: slots 12–16
-OpenAI spent: $0.1885 / $10.00
+active ready backlog after archiving bad slot 16: slots 12–15
+replacement long-run target: slot 16 cats EN
+OpenAI spent last shown: $0.1885 / $10.00
 scheduler: 01:30 / 03:30 / 05:30 MSK
 ```
 
 Real unattended validation passed: slot 11 auto-uploaded; later `uploadLimitExceeded` was converted to persisted cooldown/defer without traceback.
 
+Bad unuploaded slot 16 is safely archived at:
+`runtime/backups/slot-16-before-rebuild-20260831-231504`.
+
 ## Music — REAL LOCAL APPROVAL COMPLETE
-ACE-Step setup/generation works on user's RTX 3060.
-All 8 tracks are approved locally:
-`cute_01/02`, `playful_01/02`, `curious_01/02`, `calm_01/02`.
+ACE-Step setup/generation works on user's RTX 3060. All 8 tracks are approved locally.
 
-Real preview feedback:
-- AI: `0.10` + ducking = accepted;
-- cats: initial `0.07` + ducking = far too quiet;
-- cats v2: `0.11` + no cat sidechain ducking = accepted.
-
-Production config now:
+Accepted real preview profiles:
 ```toml
 [music]
 enabled = true
@@ -32,53 +29,74 @@ ai_ducking = true
 cat_ducking = false
 ```
 
-Future long-run renders may use deterministic approved music rotation. Applied AI-generated music must set synthetic-media disclosure.
+Future long-run renders use deterministic approved rotation; applied AI-generated music propagates synthetic-media disclosure.
 
-## Cat source repetition — REAL BUG FOUND
-User visually noticed cat #008 / slot 16 repeats several cats from #001.
-Audits proved the issue exactly:
+## Cat source repetition — fixed anti-remake policy
+Original slot 16 / cat #008 had 5/6 clips reused from cat #001.
 
-```text
-slot 16 unique sources: 6
-reused recent-window sources: 0
-reused cooled-down sources: 5
-all five cooled-down sources came from slot 2 / cat #001
-fresh final source: only 1
-cooled fallback was enabled
-```
-
-Old fallback seeded old local stock oldest-first and had no total/per-history-episode cooled reuse cap. Therefore it could legally make most of a new Short from one old episode.
-
-### FIXED POLICY
+Current limits:
 ```toml
 cat_source_cooldown_episodes = 5
 cat_cooled_reuse_max_sources = 2
 cat_cooled_reuse_max_per_history_episode = 1
 ```
 
-Implementation now:
-- fresh stock first;
-- recent five cat episodes protected;
-- max 2 cooled clips total;
-- max 1 from one old episode;
-- newest-cooled episode first;
-- fail closed if source minimum cannot be reached under these limits;
-- `source_reuse_audit.json` reports cooled reuse by history slot and rejects concentration.
+## Replacement attempt — fail-closed worked correctly
+After archiving old slot 16, real `vv longrun-next` stopped instead of making another remake:
 
-Regression suite on anti-remake HEAD: **155 passed in 0.99s** on Ubuntu. Windows CI still needed/was running at the time of this documentation update.
+```text
+first pass: 1/5 usable
+with bounded cooled fallback: 3/5 usable
+no replacement MP4 produced
+```
 
-## Slot 16 action
-Current slot 16 is **not published** and should not be allowed to reach YouTube in its current form.
-Do not touch frozen slots 1–15.
+Detailed source audit:
+```text
+Pexels candidates: 59
+vision reviewed: 59
+vision approved: 56
+audio accepted from those new candidates: 0
+rejection reason: 56 × downloaded file is missing audible audio
+selected after fallback: 3
+Pixabay candidates: 0
+```
 
-Next local procedure after green CI:
-1. `git pull`;
-2. verify no YouTube receipt for slot 16;
-3. archive existing `runtime/slots/16`, ready MP4 and upload sidecar (no destructive delete);
-4. run `vv longrun-next` so deterministic next missing slot is again 16;
-5. this full conveyor render will use strict cat-source policy + approved music + final metadata;
-6. inspect new source audits/music audit and preview output;
-7. only then leave slot 16 in pending upload queue.
+Conclusion: Luna/visual relevance and 9:16 geometry were not the bottleneck. The dominant problem is silent stock footage.
+
+## Cat source v6 — IMPLEMENTED, CI validation in progress
+Current `vv` path now uses `animal_audio_sources_v6`.
+
+Changes:
+- actual audibility check happens before Luna vision review;
+- FFmpeg measures remote mean volume only after audio stream is confirmed;
+- confirmed-silent files never consume Luna review calls;
+- remote probe failures are capped to 12 unknown fresh candidates/provider;
+- remote cooled-history candidates are excluded; cooled reuse remains only bounded local fallback;
+- retry cannot stack a second cooled batch on top of an existing cooled fallback;
+- failure audits now include deep-search/audibility diagnostics;
+- `provider_availability` records only boolean Pexels/Pixabay key presence.
+
+Config:
+```toml
+remote_audio_probe_seconds = 6.0
+remote_audio_unknown_max_candidates = 12
+```
+
+Regression tests for v6 were added. Await final Ubuntu + Windows CI on the latest code/docs HEAD before declaring the checkpoint fully green.
+
+## Next local step after green CI
+```powershell
+git pull
+.\.venv\Scripts\vv.exe longrun-next
+```
+
+Before/after the run, check provider availability without printing secrets. If the run fails again, inspect:
+- `remote_audibility_gate`;
+- `provider_availability`;
+- Pexels/Pixabay stats;
+- rejection reasons.
+
+Do not loosen anti-repeat, audible-audio or 9:16 gates merely to force a render.
 
 ## Other completed blocks
 - YouTube metadata v2 / tags / hashtags / CTA;
