@@ -1,169 +1,262 @@
 # VV_knopka — PROJECT HANDOFF (RU)
 
-GitHub = source of truth. Ветка `mvp/pilot-scaffold`. Draft PR #1 открыт; не merge без отдельного решения пользователя.
+GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft PR #1 открыт и не должен merge без отдельного решения пользователя.
 
-## Что завершено
+## Текущая продуктовая цель
 
-- Frozen pilot: 15/15 Shorts, визуально принят пользователем.
-- Первый real long-run slot 16 EN cats / #008 успешно завершён.
-- Следующий deterministic generation target = slot 17 AI EN.
-- Long-run scheduler = до 3 запусков за ночь: 01:30, 03:30, 05:30 МСК.
-- Последний показанный OpenAI ledger: `$0.1885 / $10.00`.
-- YouTube OAuth Desktop-app flow реально пройден пользователем и channel binding создан.
+Довести VV_knopka до максимально автономного long-run конвейера:
 
-## Auto-publish intent
+`идея/факт -> проверки -> рендер -> metadata -> YouTube upload -> processing/privacy verification -> statistics`
 
-Пользователь явно попросил:
+Сейчас фокус только на YouTube. TikTok запланирован позже отдельным блоком.
 
-1. будущие generated Shorts сразу выкладывать на YouTube;
-2. уже готовые ролики тоже выложить.
+## Что подтверждено на реальном ПК пользователя
 
-Config `[youtube]` намеренно:
+На 2026-08-31:
 
-```toml
-enabled = true
-auto_publish = true
-privacy_status = "public"
-category_id = "15"
-made_for_kids = false
-notify_subscribers = false
+- frozen pilot: 15/15 Shorts, визуально принят;
+- long-run slot 16 EN cats / #008 готов локально;
+- всего готово локально: **16**;
+- YouTube OAuth успешно пройден и channel binding создан;
+- реальные uploads через API работают;
+- slots **1–10** имеют `.youtube.json` receipts;
+- у проверенных 1–10 `requested_privacy=public`, `actual_privacy=public`;
+- pending queue = **6** (slots 11–16);
+- следующий generation target = slot 17 AI EN, но backlog-first policy не разрешает генерировать его, пока pending > 0.
+
+Реальный канал: `Knopka322`.
+
+## Scheduler
+
+Windows Scheduled Task `VV Knopka Long Run` реально установлен и имеет состояние `Ready`.
+
+Триггеры:
+
+```text
+01:30 MSK
+03:30 MSK
+05:30 MSK
 ```
 
-Frozen pilot `pilot.auto_publish=false` остаётся только исторической настройкой.
+Пользователь подтвердил Windows timezone:
 
-## Реальный backlog upload — channel daily limit
+```text
+Russian Standard Time
+UTC+03:00 Москва, Санкт-Петербург
+```
 
-Первый реальный `vv-youtube upload-ready` на ПК пользователя дошёл до YouTube API error:
+PowerShell не обязан быть открыт. Для запуска задачи ПК должен оставаться включён, пользователь Windows — залогинен; сон/гибернация могут помешать.
+
+Текущая trigger-policy:
+
+1. status;
+2. при наличии OAuth/receipts проверить уже uploaded видео;
+3. best-effort собрать статистику;
+4. если pending > 0 — загрузить ровно один oldest pending и закончить trigger;
+5. если pending == 0 — создать ровно один следующий long-run slot;
+6. после рендера загрузить только новый newest pending;
+7. upload fail/deferred блокирует дальнейшее раздувание backlog.
+
+Нормальное давление = максимум 3 upload opportunities/day.
+
+## YouTube daily limit
+
+Первая массовая ручная загрузка успела успешно отправить slots 1–10, после чего YouTube вернул:
 
 ```text
 400 uploadLimitExceeded
 The user has exceeded the number of videos they may upload.
 ```
 
-Это **не Google Cloud API quota**. По официальной документации YouTube это channel-level daily video upload limit, общий для desktop/mobile/API. YouTube рекомендует retry через 24 часа. Точное число не фиксировать в проекте: оно зависит от channel/account history/eligibility и может меняться.
+Это channel-level daily upload limit, а не Google Cloud quota.
 
-YouTube Advanced feature access обычно даёт более высокий daily upload limit. Проверять в YouTube Studio → Settings → Channel → Feature eligibility.
+Реализовано:
 
-Важно: старый uploader загружал последовательно и писал receipt сразу после каждого success. Поэтому все ролики, успевшие загрузиться до `uploadLimitExceeded`, должны иметь `<name>.upload.youtube.json` и при retry не должны дублироваться.
+- отдельное распознавание `uploadLimitExceeded`;
+- `DEFERRED` вместо traceback;
+- exit code 75;
+- ignored `runtime/youtube/upload-limit.json`;
+- conservative cooldown 24h;
+- active cooldown не hammer'ит upload endpoint;
+- receipts делают retry idempotent.
 
-## Upload-limit fix
+Старый лимит произошёл до установки новой graceful-версии, поэтому локальный cooldown мог не существовать до следующего наблюдения лимита.
 
-Новая policy/реализация:
+## YouTube metadata v2
 
-- `uploadLimitExceeded` распознаётся отдельно;
-- вместо Python traceback CLI печатает `DEFERRED` и завершает exit code `75`;
-- момент лимита записывается в ignored `runtime/youtube/upload-limit.json`;
-- сохраняется conservative `retry_not_before = observed + 24h`;
-- пока cooldown активен, uploader не повторяет бессмысленные API upload attempts;
-- `vv-youtube status` показывает cooldown;
-- добавлен `vv-youtube pending-count`;
-- successful receipts остаются idempotency source of truth.
+Для **новых long-run slots** реализовано:
 
-## Scheduler после реального limit
+- 3–5 релевантных hashtags в description;
+- котовые CTA с детерминированной ротацией;
+- planner-generated AI hashtags теперь используются, а не выбрасываются;
+- `snippet.tags` заполняется нормализованными keyword tags;
+- `metadata_version=2`;
+- long-run publication semantics совпадает с реальной авторизацией: при `[youtube].auto_publish=true` metadata пишет `auto_publish=true`, `review_required=false`, `publication_allowed_by_conveyor=true`;
+- frozen pilot metadata остаётся исторически review-first и не переписывается ради новых улучшений.
 
-Раньше scheduler мог upload old pending + generate + upload new в одном trigger, что давало до 6 upload attempts/day при трёх triggers.
+Uploader передаёт `containsSyntheticMedia=true` только если конкретная metadata этого требует — например, если реально применена AI-generated music или planner отдельно рекомендовал disclosure.
 
-Теперь каждый trigger имеет **не более одной публикации**:
+## Post-upload verification + statistics
 
-1. status checks + lock;
-2. `pending-count`;
-3. если pending > 0 — upload exactly one oldest pending и завершить trigger **без нового render**;
-4. только если pending = 0 — generate one long-run slot и upload newest;
-5. любой deferred/failed upload блокирует новую generation до восстановления публикации.
-
-Таким образом approved 01:30/03:30/05:30 schedule создаёт максимум 3 uploads/day и сначала реально уменьшает backlog.
-
-## YouTube uploader files / commands
-
-```text
-src/vv_knopka/youtube_uploader.py
-src/vv_knopka/youtube_cli.py
-docs/YOUTUBE_PUBLISHING_RU.md
-vv-youtube
-```
-
-Commands:
+Добавлены команды:
 
 ```powershell
-.\.venv\Scripts\vv-youtube.exe status
-.\.venv\Scripts\vv-youtube.exe pending-count
-.\.venv\Scripts\vv-youtube.exe upload-ready --dry-run
-.\.venv\Scripts\vv-youtube.exe upload-ready
+.\.venv\Scripts\vv-youtube.exe verify
+.\.venv\Scripts\vv-youtube.exe stats
 ```
 
-Local ignored files:
+`verify` читает upload receipts, запрашивает YouTube и отслеживает:
+
+- upload status;
+- processing status;
+- privacy;
+- failure/rejection;
+- publication state.
+
+`FAILED`/`MISSING` считаются fail-closed для unattended scheduler.
+
+`stats` сохраняет snapshots для:
+
+- views;
+- likes;
+- comments;
+- title/slot/video ID.
+
+Stats — observational: сбой их сбора не должен сам по себе блокировать публикацию.
+
+## Fact-check gate для AI facts
+
+Long-run AI planning теперь имеет fail-closed evidence step до рендера.
+
+Flow:
 
 ```text
-runtime/youtube/client_secret.json
-runtime/youtube/token.json
-runtime/youtube/channel.json
-runtime/youtube/upload-limit.json
+plan candidate
+ -> one bounded OpenAI web-search tool call
+ -> structured fact verdict + evidence sources
+ -> PASS => promote to plan.json
+ -> FAIL => no render / no publish
 ```
 
-OAuth scopes = `youtube.upload` + `youtube.readonly`; uploader channel-binds and fail-closes on wrong channel. Each successful upload writes `.upload.youtube.json` receipt with video ID/URL and requested vs actual privacy.
+Config:
 
-## Existing backlog
-
-Ready local backlog originally had slots 1–16. Unknown exactly how many succeeded before the real daily-limit error; determine locally from `.youtube.json` receipts or YouTube Studio. Do not guess.
-
-Useful local check:
-
-```powershell
-Get-ChildItem .\runtime\ready_for_review\*.youtube.json | Sort-Object Name | Select-Object Name
-(Get-ChildItem .\runtime\ready_for_review\*.youtube.json).Count
+```toml
+fact_check_enabled = true
+fact_check_model = "gpt-5.6-luna"
+fact_check_max_tool_calls = 1
+fact_check_max_estimated_cost_usd = 0.05
+web_search_call_usd = 0.01
 ```
 
-After the 24h window (or legitimate feature-eligibility increase), rerunning `upload-ready` is safe because receipts skip already successful slots.
+Проверка требует не только `pass=true`, но и supported claim results + реальные returned evidence sources.
 
-## Long-run cat sourcing
+Стоимость model tokens и отдельная fixed fee web-search учитываются в том же project-side `$10` ledger.
 
-- last 5 rendered cat episodes source IDs protected;
-- fresh remote Pexels/Pixabay first;
-- cooled old stock fallback only;
-- local cooled history can seed after fresh minimum failure;
-- local history revalidated 9:16 + audible audio;
-- provenance/commercial-use/Luna/minimum-count gates unchanged.
+## MoneyPrinterTurbo lifecycle
 
-## Budget / safety
+Long-run conveyor уже имел `MPTProcessManager`, который:
 
-- OpenAI hard cap `$10` unchanged.
-- Не добавлять paid providers без explicit approval.
-- OAuth/token/client secret не коммитить и не просить пользователя вставлять в чат.
-- `runtime/` ignored.
-- PR #1 stays draft/open/unmerged.
+- проверяет локальный MPT;
+- при необходимости сам запускает его;
+- ждёт health readiness;
+- пишет runtime log;
+- после batch закрывает процесс, если сам его поднял.
+
+Ручной `render-ai` также переведён на auto-availability helper.
+
+Таким образом оставлять отдельный PowerShell с MoneyPrinterTurbo как постоянное условие больше не требуется, если локальный MPT checkout/env исправен.
+
+## AI background music
+
+Пользователь одобрил идею: сгенерировать небольшую библиотеку спокойной/приятной фоновой музыки и ротировать её между Shorts.
+
+Текущая инфраструктура уже готова:
+
+- target local generator: **ACE-Step**;
+- local ignored library: `runtime/assets/music`;
+- pipeline-oriented track naming/ranking: `curious_*`, `calm_*`, `cute_*`, `playful_*`, `generic_*`;
+- cooldown по последним использованным трекам;
+- per-slot `music.json` audit;
+- SHA256 трека в audit;
+- AI-generator/disclosure metadata;
+- FFmpeg mix под существующий audio;
+- quiet levels: AI и cats отдельно;
+- ducking включён;
+- если local library включена, MPT BGM автоматически мутится, чтобы не было двойной музыки.
+
+Важно: сейчас в config:
+
+```toml
+[music]
+enabled = false
+```
+
+Не включать production music до локального generation/listening checkpoint с пользователем. План: сгенерировать примерно 8–12 инструментальных треков и оставить только одобренные.
+
+Для cat compilations original clip audio остаётся главным; музыка должна быть очень тихой.
+
+## Cat pipeline — актуальные правила
+
+- local FFmpeg renderer;
+- generic cats;
+- real source audio required;
+- real meow on black cards;
+- no bass/drop/impact/boom SFX;
+- minimum 5 unique usable clips;
+- near-9:16 source gate, tolerance 0.08;
+- provenance/commercial-use fail-closed;
+- Pexels/Pixabay normal sources;
+- frozen pilot reuse protection all-history;
+- long-run source cooldown previous 5 cat episodes;
+- fresh-first, cooled-history fallback.
+
+Future approved AI music may be added quietly only after `[music].enabled=true`.
+
+## Budget
+
+Project-side OpenAI hard cap remains **$10.00**.
+
+Last explicitly shown real local ledger before this block: approximately `$0.1885 / $10.00`.
+
+Новые платные providers не добавлять без explicit approval.
+
+Fact-check web-search fee теперь тоже учитывается внутри ledger.
 
 ## Tests / CI
 
-Upload-limit regressions added for:
-
-- parsing `uploadLimitExceeded` from Google API error content;
-- active 24h cooldown state;
-- stopping backlog cleanly at limit after prior success;
-- pending count ignoring receipted videos.
-
-Code checkpoint `573bc4f2eb904da20fab03456f90391079144914`, workflow `33328852436`:
+Полностью зелёный checkpoint перед последними semantic/docs commits:
 
 ```text
-121 passed in 0.82s
-publication gate: PASS
-long_run: True
+head: cdf9e2adbc709a93269ef7b2a560f890544a9075
+workflow: 33416185965
+138 passed
+Ubuntu: success
+Windows bootstrap: success
+Windows scheduler dry-run: success
 ```
 
-Workflow fully **success**:
+Windows CI отдельно подтвердил scheduler dry-run с новым описанием behavior и 3 triggers/day.
 
-- Ubuntu tests green;
-- Windows bootstrap green;
-- Windows scheduler dry-run green.
-
-Docs commits after code checkpoint move branch HEAD.
+Последующие commits с publication semantics/docs двигают HEAD, поэтому финальный HEAD нужно перепроверить после завершения этого блока.
 
 ## Immediate continuation
 
-1. На ПК пользователя посмотреть число receipts и actual privacy уже загруженных роликов.
-2. Проверить YouTube Studio → Settings → Channel → Feature eligibility; если Advanced features не доступны, рассмотреть официальную verification path для higher daily limit.
-3. `git pull` + reinstall editable package to get graceful daily-limit handling.
-4. Не повторять массовый upload до конца текущего platform limit window; YouTube рекомендует 24h.
-5. После восстановления лимита повторить `vv-youtube upload-ready`; receipts предотвратят дубли.
-6. После/вместо ручного backlog drain установить scheduler; он будет публиковать максимум один ролик на trigger и не генерировать новое, пока backlog существует.
+Без участия пользователя можно:
 
-PR #1 остаётся draft/open/unmerged.
+1. дождаться green CI текущего HEAD;
+2. поддерживать docs/PR в актуальном состоянии;
+3. не менять current real scheduler автоматически через GitHub — пользовательский ПК должен сначала сделать `git pull`/reinstall;
+4. после pull проверить `vv-youtube verify` + `vv-youtube stats` на реальных receipts;
+5. позволить scheduler догрузить slots 11–16;
+6. после pending=0 проверить первый полностью автономный slot 17: plan -> fact-check -> MPT autostart -> render -> metadata v2 -> YouTube.
+
+Первый ожидаемый пользовательский checkpoint по новому feature block: локальная установка/запуск ACE-Step и прослушивание generated music.
+
+TikTok пока не трогать.
+
+## Git rules
+
+- branch: `mvp/pilot-scaffold`;
+- PR #1 stays draft/open/unmerged;
+- secrets under `runtime/` / `.env` never commit;
+- после substantive work обновлять этот handoff + `PROGRESS_RU.md` + `AGENT.md`.
