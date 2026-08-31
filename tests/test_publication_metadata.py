@@ -24,6 +24,7 @@ def _settings(tmp_path):
                 "ai_language": "en",
             },
             "animal": {"language_cycle": ["en", "en", "en", "en", "ru"]},
+            "youtube": {"enabled": True, "auto_publish": True},
         },
         root=tmp_path,
     )
@@ -86,6 +87,8 @@ def test_ai_upload_title_comes_from_specific_plan_and_preserves_pilot_metadata(t
     assert metadata["youtube_title"] == "Why Owls Fly So Quietly #shorts"
     assert metadata["youtube_description"] == "Their feathers hide a clever trick."
     assert "youtube_tags" not in metadata
+    assert metadata["review_required"] is True
+    assert metadata["auto_publish"] is False
 
 
 def test_longrun_cat_metadata_continues_numbering_and_adds_discovery_metadata(tmp_path):
@@ -116,6 +119,9 @@ def test_longrun_cat_metadata_continues_numbering_and_adds_discovery_metadata(tm
     assert "#shorts" in first["youtube_description"]
     assert "cats" in first["youtube_tags"]
     assert first["metadata_version"] == 2
+    assert first["review_required"] is False
+    assert first["auto_publish"] is True
+    assert first["publication_allowed_by_conveyor"] is True
 
 
 def test_longrun_ai_uses_planner_hashtags_and_anchor_as_youtube_tags(tmp_path):
@@ -148,6 +154,7 @@ def test_longrun_ai_uses_planner_hashtags_and_anchor_as_youtube_tags(tmp_path):
     assert "owl" in metadata["youtube_tags"]
     assert "animal facts" in metadata["youtube_tags"]
     assert metadata["contains_synthetic_media"] is False
+    assert metadata["auto_publish"] is True
 
 
 def test_applied_ai_music_enables_synthetic_media_disclosure(tmp_path):
