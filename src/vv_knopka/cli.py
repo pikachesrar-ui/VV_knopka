@@ -17,7 +17,7 @@ from .long_run_conveyor import run_longrun_batch
 from .manifest import resolve_slot, write_manifest
 from .material_fallback import CuratedMaterialFallbackError, load_duration_sufficient_materials
 from .mpt import MoneyPrinterTurboClient
-from .mpt_health import require_mpt_available
+from .mpt_health import ensure_mpt_available
 from .openai_client import OpenAIPlanner
 from .pexels_curator import prepare_pexels_materials
 from .pilot_conveyor import run_batch
@@ -200,7 +200,7 @@ def main() -> None:
         content = json.loads(plan_path.read_text(encoding="utf-8"))
 
         try:
-            require_mpt_available(settings)
+            ensure_mpt_available(settings)
         except RuntimeError as exc:
             raise SystemExit(str(exc)) from exc
 
