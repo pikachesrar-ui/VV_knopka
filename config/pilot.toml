@@ -112,9 +112,9 @@ meow_volume = 0.90
 transition_sfx = "soft_meow"
 
 [music]
-# Infrastructure is ready, but production mixing remains off until the final
-# local preview is accepted. All 8 ACE-Step tracks have been approved by the user.
-enabled = false
+# All 8 local ACE-Step tracks were generated, listened to and explicitly approved.
+# AI and cat preview mixes were also accepted, so future long-run renders may use them.
+enabled = true
 library_dir = "runtime/assets/music"
 cooldown_shorts = 5
 ai_generated = true
@@ -142,7 +142,7 @@ pixabay_vision_max_candidates = 40
 vision_min_confidence = 0.72
 vision_max_estimated_cost_per_call_usd = 0.03
 highlight_vision_max_estimated_cost_usd = 0.05
-# A YouTube uploader-declared CC license can be useful discovery/reference metadata,
+# A YouTube uploader-declared CC metadata can be useful discovery/reference metadata,
 # but it is not proof of chain-of-title or permission for a particular acquisition method.
 youtube_clean_vision_min_confidence = 0.78
 youtube_clean_vision_max_estimated_cost_usd = 0.02
