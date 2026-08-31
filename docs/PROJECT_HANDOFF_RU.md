@@ -10,17 +10,20 @@ TikTok пока не трогать.
 ## Реальный checkpoint — 2026-09-01
 - frozen pilot slots 1–15 визуально принят и immutable;
 - slots 1–11 опубликованы и `VERIFIED_PUBLIC`;
+- replacement slot 16 успешно пересобран;
+- ready локально снова **16**;
+- active pending queue: **slots 12–16 (5)**;
+- next generation after pending=0: **slot 17 AI EN**;
 - OpenAI ledger последний показанный `$0.1885/$10`;
 - scheduler `VV Knopka Long Run` реально работает по 01:30/03:30/05:30 MSK;
 - unattended run auto-uploaded slot 11, затем корректно обработал YouTube `uploadLimitExceeded` через cooldown/defer.
 
-Плохой, но ещё не опубликованный slot 16 / cat #008 был безопасно архивирован в:
+Плохой первый slot 16 / cat #008 безопасно архивирован в:
 `runtime/backups/slot-16-before-rebuild-20260831-231504`.
-В active ready queue после этого остаются slots 12–15; replacement slot 16 снова является следующим long-run generation target.
+Он не имеет YouTube receipt и больше не находится в active ready queue.
 
-## Cat slot 16 reuse incident — diagnosed
-Первый slot 16 повторял почти весь первый кошачий выпуск:
-
+## Cat slot 16 reuse incident — fixed and real-validated
+Первый slot 16 имел:
 ```text
 final sources: 6
 fresh: 1
@@ -36,44 +39,51 @@ cat_cooled_reuse_max_sources = 2
 cat_cooled_reuse_max_per_history_episode = 1
 ```
 
-Теперь максимум два old clips total и максимум один из одного старого episode; при нехватке fresh stock pipeline fail closed.
+Теперь:
+- fresh discovery первая;
+- previous 5 cat episodes защищены;
+- cooled fallback максимум 2 clips total;
+- максимум 1 clip из одного старого episode;
+- newest-cooled-first;
+- при нехватке fresh + bounded fallback generation fail closed;
+- `source_reuse_audit.json` валидирует total/per-episode concentration.
 
-## Real replacement attempt — correct fail-closed
-После архивирования старого slot 16 пользователь запустил `vv longrun-next`.
-Результат:
+### Реальный replacement slot 16
+Новый `vv longrun-next` завершился успешно.
 
+Final source composition:
 ```text
-fresh usable: 1/5
-fresh + bounded cooled fallback: 3/5
-render stopped; no replacement MP4
+6 unique sources
+4 fresh Pexels
+2 cooled total
+cooled slot 2: 1
+cooled slot 4: 1
+protected-window overlap: 0
+source reuse audit: PASS
 ```
 
-Audit показал точный bottleneck:
+Fresh IDs:
+`4427731`, `10467051`, `14326398`, `14927525`.
 
-```text
-Pexels candidates: 59
-vision reviewed: 59
-vision approved: 56
-new Pexels audio accepted: 0
-56 rejects: downloaded file is missing audible audio
-selected pool after fallback: 3
-Pixabay candidates: 0
-```
+Cooled IDs:
+- `10358235` from slot 2;
+- `5335581` from slot 4.
 
-То есть geometry и visual relevance почти не ограничивают выбор; проблема — stock files без реально слышимого source audio.
+Таким образом новая #008 больше не является near-remake #001.
 
 ## Cat source v6 — audio first, vision second
-`vv` теперь маршрутизирует cat sourcing через `animal_audio_sources_v6`.
+`vv` маршрутизирует cat sourcing через `animal_audio_sources_v6`.
 
-Новая policy:
-- до Luna проверяется remote audio stream;
-- при наличии stream FFmpeg измеряет реальный mean volume первых секунд;
-- confirmed-silent stock не расходует vision calls;
-- unmeasurable CDN candidates допускаются только маленьким bounded tail;
-- remote cooled history полностью исключена из discovery, historical reuse идёт только через bounded local v5 fallback;
-- retry не может добавить ещё один cooled batch поверх уже существующего;
-- deep/audibility audit записывается даже на fail;
-- audit показывает наличие `PEXELS_API_KEY` / `PIXABAY_API_KEY` только boolean-ами, без секретов.
+Policy:
+- remote audio-stream check до Luna;
+- FFmpeg mean-volume check до Luna, если stream подтверждён;
+- confirmed-silent stock не расходует vision review;
+- unmeasurable fresh CDN candidates допускаются только bounded tail;
+- remote cooled history исключена из discovery;
+- old clips приходят только через explicit bounded local fallback;
+- retry не может stack-нуть второй cooled batch;
+- failure diagnostics сохраняются;
+- provider availability записывается boolean-ами, без секретов.
 
 Config:
 ```toml
@@ -82,14 +92,29 @@ remote_audio_probe_seconds = 6.0
 remote_audio_unknown_max_candidates = 12
 ```
 
-Если replacement slot 16 снова fail closed, сначала смотреть `provider_availability` и `remote_audibility_gate`; не ослаблять anti-repeat/audio/9:16 gates вслепую.
+Real replacement audit:
+```text
+PEXELS_API_KEY present: true
+PIXABAY_API_KEY present: true
+reused_audio_sources: 3
+Pexels candidates: 54
+vision reviewed: 54
+vision approved: 51
+new Pexels audio accepted: 3
+Pixabay candidates: 0
+```
 
-## AI music — approved and enabled
-ACE-Step real local path на RTX 3060 подтверждён. Все 8 initial tracks одобрены и promoted в local approved library.
+Pixabay не понадобился, потому что Pexels после recovery/accepted fresh clips довёл pool до target раньше fallback provider.
+`vision_reviewed=54` всё ещё выглядит дороже, чем хотелось бы; это отдельная efficiency optimization, не blocker корректности slot 16.
 
-Preview results:
-- AI `0.10` + ducking = accepted;
-- cats `0.11` + cat ducking OFF = accepted.
+Latest green code checkpoint для v6: `6e94b5d54309955a10ae2c499bd36e3db91f4320`, Ubuntu PASS + Windows PASS, **160 tests passed**.
+
+## AI music — approved, enabled and real-applied
+ACE-Step real local path на RTX 3060 подтверждён. Все 8 initial tracks одобрены и promoted.
+
+Accepted profiles:
+- AI `0.10` + ducking ON;
+- cats `0.11` + cat ducking OFF.
 
 Current config:
 ```toml
@@ -101,7 +126,22 @@ ai_ducking = true
 cat_ducking = false
 ```
 
-Replacement slot 16 запускать через `vv longrun-next`, чтобы после render применились reviewed music, `music.json` и final upload metadata / synthetic-media disclosure.
+Replacement slot 16 music audit:
+```text
+track_name: curious_02.wav
+applied_to_video: true
+music_volume_applied: 0.11
+ducking: false
+```
+
+Final upload metadata:
+```text
+slot: 16
+pipeline: animal_compilation
+language: en
+metadata_version: 2
+contains_synthetic_media: true
+```
 
 ## YouTube v2
 Реализовано и проверено на реальном канале:
@@ -113,7 +153,7 @@ Replacement slot 16 запускать через `vv longrun-next`, чтобы 
 - `vv-youtube stats` + history;
 - `vv-youtube report` age-aware metrics.
 
-Первый stats sample очень маленький — не оптимизировать policy по нему.
+Первый stats sample маленький — не оптимизировать content policy по нему.
 
 ## AI fact-check / MPT
 - AI plan fail-closed через bounded evidence check;
@@ -132,11 +172,8 @@ Replacement slot 16 запускать через `vv longrun-next`, чтобы 
 - PR #1 не merge автоматически.
 
 ## Immediate continuation
-1. дождаться green CI для v6;
-2. user local `git pull`;
-3. проверить boolean provider availability без вывода ключей;
-4. снова `vv longrun-next` для slot 16;
-5. при success проверить source audits + `music.json` + preview;
-6. при fail использовать новый audit для решения, нужен ли Pixabay key / другой safe provider path / deeper fresh strategy;
-7. scheduler продолжает draining slots 12–15;
-8. slot 17 не генерировать, пока replacement slot 16 и backlog policy не завершены.
+1. corrected slot 16 оставить в pending queue;
+2. scheduler drains slots 12–16 oldest-first;
+3. slot 17 не генерировать пока pending != 0;
+4. после полного drain проверить slot 17 AI EN end-to-end;
+5. позже уменьшить число Luna reviews на каждый реально audible fresh cat clip без ослабления quality gates.
