@@ -22,9 +22,14 @@ ai_language = "en"
 # Do not choose the same AI fact subject among the most recent N AI Shorts.
 fact_subject_cooldown = 6
 # Cat stock is finite. In long-run a source remains blocked for the immediately
-# preceding N rendered cat episodes, then becomes eligible as a fresh-first fallback.
+# preceding N rendered cat episodes, then becomes eligible only as fresh-first fallback.
 # Reusing it starts the cooldown again. The frozen pilot keeps its all-history rule.
 cat_source_cooldown_episodes = 5
+# Cooled history is deliberately small and distributed. A new cat Short may reuse at
+# most two old clips total and at most one clip from any one older episode. If fresh
+# stock plus this fallback cannot reach the quality minimum, generation fails closed.
+cat_cooled_reuse_max_sources = 2
+cat_cooled_reuse_max_per_history_episode = 1
 
 [youtube]
 # Explicitly enabled after the completed human-reviewed pilot. The immutable pilot
