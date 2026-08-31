@@ -9,8 +9,9 @@ Before changing code or giving project-status claims:
 1. Read this file completely.
 2. Read `docs/PROJECT_HANDOFF_RU.md` completely.
 3. Read `docs/PROGRESS_RU.md` completely for the newest operational checkpoint.
-4. Check the current repository state, active branch, and draft PR #1.
-5. Treat GitHub as source of truth for code/history; handoff as product intent; `PROGRESS_RU.md` as live checkpoint.
+4. For music work also read `docs/AI_MUSIC_RU.md`.
+5. Check the current repository state, active branch, and draft PR #1.
+6. Treat GitHub as source of truth for code/history; handoff as product intent; `PROGRESS_RU.md` as live checkpoint.
 
 ## 2. Project goal
 
@@ -19,46 +20,47 @@ Build an automated short-form video pipeline under **Animals / Nature Curiositie
 - `ai_short`: original animal/nature fact/story Short through MoneyPrinterTurbo;
 - `animal_compilation`: cat compilation assembled locally with FFmpeg.
 
-Current product goal is an unattended long-run system that can generate, validate, publish and observe YouTube Shorts. TikTok is planned later and is explicitly out of the current work block.
+Current phase: unattended long-run generation + user-authorized YouTube publishing + verification/statistics. TikTok is planned later and is explicitly out of the current block.
 
 ## 3. Frozen pilot — immutable history
 
 - 15 Shorts total: 8 AI + 7 cat compilations.
 - Slot 1 RU AI + slot 2 RU cats; slots 3–15 EN.
 - All 15 ready outputs were generated and visually accepted by the user.
-- Final explicitly shown pilot ledger: **$0.1786 / $10.00**.
+- Final explicitly shown frozen-pilot ledger: **$0.1786 / $10.00**.
 - Do not rebuild the frozen pilot solely for later metadata refinements.
 - Frozen pilot config/metadata stays review-first (`pilot.auto_publish=false`).
-- YouTube metadata v2 is long-run-only so pilot sidecars remain historically stable.
+- Metadata v2 is long-run-only; pilot sidecars remain historical.
 
-## 4. Current real local checkpoint (2026-08-31)
+## 4. Real local checkpoint — 2026-08-31
 
 Confirmed by the user on the real Windows machine:
 
 - ready local Shorts: **16**;
-- successful YouTube receipts: **10** (slots 1–10);
-- every checked receipt had `requested_privacy=public` and `actual_privacy=public`;
-- pending ready uploads: **6** (slots 11–16);
-- next generation target remains slot **17 AI EN**, but generation is backlog-first and must wait until pending publication drains;
-- Windows scheduled task `VV Knopka Long Run` is installed and `Ready`;
+- successful YouTube receipts: **10**, slots 1–10;
+- all inspected receipts: `requested_privacy=public`, `actual_privacy=public`;
+- pending ready uploads: **6**, slots 11–16;
+- next generation target: **slot 17 AI EN**, but backlog-first policy blocks generation until pending reaches zero;
+- Scheduled Task `VV Knopka Long Run` is installed and `Ready`;
 - triggers: **01:30, 03:30, 05:30 MSK**;
 - Windows timezone confirmed `Russian Standard Time (UTC+03:00)`.
 
-PowerShell windows do not need to remain open for Task Scheduler. The PC must remain on and the Windows user logged in; sleep/hibernation should not interrupt scheduled runs.
+PowerShell windows do not need to remain open. The PC must remain on and the Windows user logged in; sleep/hibernation should not interrupt scheduled runs.
 
-## 5. Current authorization / safety state
+## 5. Authorization / safety state
 
-User explicitly authorized:
+The user explicitly authorized:
 
 - automatically publish future generated Shorts to YouTube;
-- upload the already generated ready backlog;
-- add YouTube metadata/discovery improvements;
-- add an automatic fact-check gate for long-run AI facts;
-- prepare an AI-generated background-music library and rotation infrastructure.
+- upload the existing ready backlog;
+- YouTube metadata/discovery improvements;
+- fail-closed automatic fact checking for long-run AI facts;
+- preparation of a small rotating AI-generated background-music library.
 
-Current `[youtube]` policy is intentionally:
+Current YouTube policy is intentionally:
 
 ```toml
+[youtube]
 enabled = true
 auto_publish = true
 privacy_status = "public"
@@ -68,13 +70,13 @@ Do **not** silently revert this to review-only unless the user asks.
 
 Still mandatory:
 
-- project-side OpenAI hard cap = **$10 USD**;
-- no new paid provider or increased paid cap without explicit user approval;
+- OpenAI project-side hard cap = **$10 USD**;
+- do not add paid providers or raise the paid cap without explicit approval;
 - source/provenance/audio/geometry/vision gates stay fail-closed;
 - OAuth secrets/tokens stay local under ignored `runtime/youtube/`;
 - uploader must channel-bind and fail closed if OAuth resolves to a different channel;
 - successful uploads must leave idempotent `.youtube.json` receipts;
-- draft PR #1 must stay open/draft/unmerged until an explicit user decision.
+- draft PR #1 stays open/draft/unmerged until explicit user decision.
 
 ## 6. Long-run schedule
 
@@ -82,26 +84,27 @@ Long-run starts at slot 16 and is deterministic:
 
 - pipeline cycle: cats, AI, cats, AI...;
 - AI language EN;
-- long-run cat language cycle: `en,en,en,en,ru`;
-- cat episode numbering continues after pilot (#008 at slot 16);
+- cat language cycle: `en,en,en,en,ru`;
+- cat numbering continues after pilot (#008 at slot 16);
 - AI subject cooldown = 6 recent distinct anchors;
 - cat source cooldown = 5 recent cat episodes.
 
-Scheduler is **backlog-first** with one publication opportunity per trigger:
+Each Windows trigger is backlog-first:
 
-1. lock + status;
-2. verify existing YouTube receipts when credentials exist;
-3. best-effort collect YouTube statistics;
-4. if pending uploads exist, upload exactly one oldest pending and stop without generation;
-5. only when pending is zero, generate one next long-run slot;
-6. upload only that newly rendered slot;
-7. a deferred/failed publication prevents further generation from expanding backlog.
+1. lock + `vv status`;
+2. `vv-youtube status`;
+3. verify existing uploaded receipts when credentials exist;
+4. best-effort collect YouTube stats;
+5. if pending > 0, upload exactly one oldest pending and stop without generation;
+6. only when pending == 0, generate one next long-run slot;
+7. upload only that newly rendered slot;
+8. deferred/failed publication prevents new generation from expanding backlog.
 
-This caps normal scheduled upload pressure at **3 uploads/day** for the approved triggers.
+Normal maximum = **3 upload opportunities/day**.
 
-## 7. YouTube uploader and observability
+## 7. YouTube upload / daily-limit behavior
 
-Entry point:
+Commands:
 
 ```powershell
 .\.venv\Scripts\vv-youtube.exe status
@@ -113,49 +116,64 @@ Entry point:
 .\.venv\Scripts\vv-youtube.exe upload-ready --limit 1
 ```
 
-Implementation guarantees:
+Guarantees:
 
 - OAuth scopes: `youtube.upload` + `youtube.readonly`;
-- Desktop OAuth JSON: `runtime/youtube/client_secret.json`;
-- token: `runtime/youtube/token.json`;
-- channel binding: `runtime/youtube/channel.json`;
-- upload-limit state: `runtime/youtube/upload-limit.json`;
-- queue defaults oldest slot first; scheduler uses one item only;
-- requested vs actual privacy stored separately;
-- `uploadLimitExceeded` is converted to clean `DEFERRED` / exit code `75`;
-- a conservative 24h cooldown prevents repeated endpoint hammering;
-- receipts are idempotency source of truth.
+- OAuth/client/token/channel files live under ignored `runtime/youtube/`;
+- requested and actual privacy stored separately;
+- receipts are duplicate guards;
+- `uploadLimitExceeded` is YouTube channel daily limit, not Google Cloud quota;
+- it becomes clean `DEFERRED` / exit code `75`;
+- conservative 24h cooldown is persisted locally;
+- uploader does not hammer the endpoint during active cooldown.
 
-`vv-youtube verify` checks receipt videos via YouTube API and records publication states around upload/processing/privacy/failure/rejection. Failed/missing videos are fail-closed for the scheduler.
-
-`vv-youtube stats` records current views/likes/comments snapshots for uploaded receipt videos. Statistics are observational and must not block publication if collection itself fails.
+The real first bulk upload successfully published slots 1–10 before YouTube returned the daily channel limit.
 
 ## 8. YouTube metadata v2 — long-run only
 
-Future long-run metadata now includes:
+Future long-run metadata includes:
 
 - 3–5 relevant hashtags in description;
-- deterministic CTA rotation for cat videos;
-- AI planner hashtags reused instead of discarded;
-- `snippet.tags` keyword tags (normalized/capped);
-- explicit metadata version 2;
-- long-run publication fields aligned with real policy: when YouTube auto-publish is enabled, `auto_publish=true`, `review_required=false`, `publication_allowed_by_conveyor=true`;
-- frozen pilot keeps historical review-first fields.
+- deterministic CTA rotation for cats;
+- AI planner hashtags are reused instead of discarded;
+- normalized/capped `snippet.tags`;
+- `metadata_version=2`;
+- long-run publication fields reflect real authorization: when YouTube auto-publish is enabled, `auto_publish=true`, `review_required=false`, `publication_allowed_by_conveyor=true`;
+- frozen pilot remains historical review-first.
 
-YouTube `containsSyntheticMedia` is sent only when metadata says disclosure is warranted, including applied AI-generated music or a planner recommendation. Do not blanket-mark every use of AI assistance.
+`vv status` separately reports:
 
-## 9. AI fact-check gate
+```text
+pilot auto_publish (historical): False
+youtube auto_publish: True
+```
 
-Long-run `ai_short` planning is now fail-closed before rendering.
+YouTube `containsSyntheticMedia` is sent only when metadata says disclosure is warranted, including actually applied AI-generated music or an explicit planner recommendation. Do not blanket-mark every use of AI assistance.
 
-Flow:
+## 9. YouTube observability
+
+`vv-youtube verify` checks receipt videos for:
+
+- upload status;
+- processing status;
+- privacy;
+- failure/rejection;
+- missing videos.
+
+Failed/missing publication is fail-closed for unattended scheduling.
+
+`vv-youtube stats` stores current views/likes/comments snapshots. Statistics are observational and their collection failure must not itself block publication.
+
+## 10. Long-run AI fact-check gate
+
+Long-run `ai_short` planning is fail-closed before render:
 
 ```text
 OpenAI plan candidate
-  -> bounded evidence web search
-  -> fact-check audit
-  -> PASS: promote to plan.json
-  -> FAIL: do not render/publish
+ -> bounded evidence web search
+ -> structured claim verdict + actual sources
+ -> PASS: promote to plan.json
+ -> FAIL: no render / no publish
 ```
 
 Config:
@@ -168,86 +186,115 @@ fact_check_max_estimated_cost_usd = 0.05
 web_search_call_usd = 0.01
 ```
 
-The fact checker requires supported claim verdicts plus actual returned evidence sources. Its model token cost and fixed web-search call cost are both written to the same `$10` project ledger.
+Model token cost and fixed web-search-call cost are both written to the same `$10` ledger. Do not loosen the gate merely to make generation succeed.
 
-Do not loosen this gate just to make generation succeed.
+## 11. MoneyPrinterTurbo lifecycle
 
-## 10. MoneyPrinterTurbo lifecycle
+`VV_knopka` does not vendor MPT.
 
-`VV_knopka` does not vendor MoneyPrinterTurbo.
+`MPTProcessManager` can start local MoneyPrinterTurbo when an AI slot needs it, wait for readiness, log under runtime, and stop only the process it started. Manual `render-ai` also uses automatic availability handling.
 
-Long-run conveyor already has an `MPTProcessManager` capable of starting local MoneyPrinterTurbo when an AI slot needs it, waiting for health readiness, logging under runtime, and shutting down the process it started. Manual `render-ai` also uses the automatic availability helper.
+Therefore a permanently open MoneyPrinterTurbo PowerShell window is no longer a product requirement, assuming the local MPT checkout/environment exists and starts successfully.
 
-Therefore an already-open MoneyPrinterTurbo PowerShell window is no longer a product requirement for future long-run AI generation, assuming the local MPT checkout/environment exists and starts successfully.
+## 12. AI background music
 
-## 11. Background music plan/infrastructure
+User approved quiet pleasant AI-generated BGM using a small curated rotating library.
 
-User approved adding quiet pleasant AI-generated background music and rotating a small curated library.
+Production music remains intentionally OFF:
 
-Current state:
+```toml
+[music]
+enabled = false
+```
 
-- music infrastructure implemented;
-- target generator = **ACE-Step** locally;
-- library directory = `runtime/assets/music` (ignored/local assets);
-- selector supports pipeline-oriented names such as `curious_*`, `calm_*`, `cute_*`, `playful_*`;
-- deterministic rotation with recent-track cooldown;
-- per-slot `music.json` audit includes track name/hash/generator/disclosure data;
-- FFmpeg mixer preserves primary voice/source audio and supports ducking;
-- when our local library is enabled, MPT background music is muted to avoid double-BGM;
-- **`music.enabled=false` remains mandatory until initial tracks are locally generated and listened to/approved by the user**.
+Do not enable it until generated candidates are listened to and explicitly approved.
 
-Initial planned library: about 8–12 instrumental tracks. User help is expected only for the local ACE-Step generation/listening checkpoint.
+Implemented:
 
-## 12. Cat production rules
+- target generator: **ACE-Step 1.5** locally;
+- ignored checkout: `ACE-Step-1.5/`;
+- local approved library: `runtime/assets/music/`;
+- generated-but-unapproved files: `runtime/assets/music/candidates/`;
+- production selector does not scan `candidates/`;
+- `vv-music status`, `list`, `generate-library`, `approve`;
+- REST client for ACE-Step async API + `/health`;
+- automatic ACE-Step API start/wait/stop;
+- Windows setup/debug helpers with CI dry-runs;
+- stable initial candidates: `cute_01/02`, `playful_01/02`, `curious_01/02`, `calm_01/02`;
+- deterministic selection + recent-track cooldown;
+- per-slot `music.json` with SHA256/generator/disclosure data;
+- quiet pipeline-specific volumes + sidechain ducking;
+- when approved local music is enabled, MPT BGM is muted to avoid double music;
+- applied AI music can trigger YouTube synthetic-media disclosure.
+
+First local setup/generation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
+.\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
+```
+
+Generated WAVs remain candidates. `vv-music approve ...` moves selected tracks to approved library but does **not** turn `music.enabled=true`.
+
+Full guide: `docs/AI_MUSIC_RU.md`.
+
+## 13. Cat production rules
 
 - Local FFmpeg renderer; no MPT for cats.
 - Generic cats; no voiceover.
 - Real source audio stays primary.
 - Real meow on black cards; no bass/drop/impact/boom SFX.
-- Frozen pilot and current approved outputs stay unchanged.
-- Future long-run may receive very quiet approved background music only after `music.enabled` is explicitly turned on.
-- Source footage must carry provenance/commercial-use evidence, audible audio and near-9:16 geometry.
+- Future approved BGM must remain very quiet.
+- Source footage requires provenance/commercial-use evidence, audible audio, near-9:16 geometry.
 - Aspect tolerance = `0.08`; fewer than 5 unique usable clips = fail closed.
-- Pexels/Pixabay are normal automated downloadable stock paths.
+- Pexels/Pixabay normal automated sources.
 - Frozen pilot reuse protection = all-history.
 - Long-run source cooldown = previous 5 rendered cat episodes.
-- Fresh never-used stock first; cooled historical sources fallback only.
+- Fresh never-used stock first; cooled historical source fallback only.
 
-## 13. YouTube / UGC compliance wording
+## 14. YouTube / UGC compliance wording
 
-- YouTube Data API discovery metadata is not a media-download permission mechanism.
-- Uploader-declared CC metadata does not prove chain-of-title or authorize arbitrary acquisition.
-- yt-dlp capability != official YouTube/API permission.
+- YouTube Data API discovery metadata is not media-download permission.
+- Uploader-declared CC metadata is not chain-of-title proof.
+- yt-dlp capability != official permission.
 - Production media should be Pexels/Pixabay, owned/creator-supplied/directly authorized, or another independently authorized downloadable source.
-- `videos.insert` is used only to upload our finished local MP4s to the user's authorized channel.
-- `uploadLimitExceeded` means YouTube channel daily upload limit, not Google Cloud quota; exact numeric limit must not be invented/hardcoded.
+- `videos.insert` uploads only our finished local MP4s to the authorized channel.
+- Never invent/hardcode a numeric YouTube daily upload limit.
 
-## 14. Git / CI workflow
+For ACE-Step: repository code is open source, but generated audio still requires normal originality/copyright caution. Do not make blanket legal guarantees about generated tracks.
+
+## 15. Git / CI workflow
 
 Development branch: `mvp/pilot-scaffold`.
 Draft PR #1 into `main` stays open/draft/unmerged until explicit user decision.
 
-Last fully green YouTube-v2 checkpoint before documentation refresh:
+Latest fully green **code** checkpoint:
 
 ```text
-head: cdf9e2adbc709a93269ef7b2a560f890544a9075
-workflow: 33416185965
-pytest: 138 passed
+head: 6def0e462c17eb5f6b536d7d3446daee21ebecf8
+workflow: 33419061821
+pytest: 146 passed in 0.93s
 Ubuntu: success
-Windows bootstrap/scheduler dry-run: success
+Windows bootstrap: success
+Windows scheduler dry-run: success
+Windows ACE-Step helper dry-run: success
 ```
 
-Later documentation/semantic commits move HEAD and must be rechecked before declaring the new HEAD green.
+Documentation commits after that checkpoint move branch HEAD; check final HEAD CI before claiming the entire branch is green.
 
-## 15. Immediate continuation
+## 16. Immediate continuation
 
-1. Keep the existing real scheduler enabled and let slots 11–16 drain after YouTube permits uploads again.
-2. Pull/reinstall latest branch locally before relying on new metadata/fact-check/observability behavior.
-3. Confirm `vv-youtube verify` and `vv-youtube stats` against the real 10 receipts.
-4. Confirm slot 17 goes through fact-check + automatic MPT lifecycle end-to-end only after backlog reaches zero.
-5. Generate initial ACE-Step music library locally, listen/approve tracks, then enable music and perform a small music-vs-no-music comparison.
-6. TikTok remains a later separate work block.
+Server-side implementation for this work block is essentially complete. The next meaningful validations require the user's local machine:
 
-## 16. Context persistence
+1. `git pull` + reinstall editable package;
+2. real OAuth `vv-youtube verify` and `vv-youtube stats` against the 10 receipts;
+3. let scheduler continue draining slots 11–16;
+4. locally install/start ACE-Step and generate 8 candidate WAVs;
+5. user listens/approves candidate tracks; keep `music.enabled=false` until that decision;
+6. after backlog reaches zero, validate slot 17 end-to-end: plan -> fact-check -> MPT auto-start -> render -> metadata v2 -> YouTube -> verification/stats.
 
-At the end of every substantial session update `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, and `docs/PROGRESS_RU.md` so a fresh chat can resume from GitHub without relying on conversational memory.
+TikTok remains a later separate work block.
+
+## 17. Context persistence
+
+After substantial work update `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, and `docs/PROGRESS_RU.md` so a fresh chat can resume from GitHub without relying on conversation memory.
