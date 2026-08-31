@@ -42,6 +42,11 @@ def _strict_remote_audio_probe_factory(
         stream_state = _base.has_audio_stream(link, timeout=12.0)
         if stream_state is False:
             return False
+        if stream_state is None:
+            # Do not immediately stack a second long network/FFmpeg timeout on a
+            # CDN URL that ffprobe could not inspect. A bounded unknown tail may
+            # still reach the normal downloaded-file validator later.
+            return None
 
         mean_db = _base.mean_audio_volume_db(link, seconds=max(float(probe_seconds), 1.0))
         if mean_db is not None:
