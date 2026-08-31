@@ -8,115 +8,115 @@ GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft 
 TikTok пока не трогать.
 
 ## Реальный checkpoint — 2026-09-01
-- frozen pilot slots 1–15 визуально принят и immutable;
+- frozen pilot slots 1–15 визуально принят; MP4 slots 1–15 не ререндерить;
 - slots 1–11 опубликованы и `VERIFIED_PUBLIC`;
-- replacement slot 16 успешно пересобран;
-- ready локально снова **16**;
-- active pending queue: **slots 12–16 (5)**;
-- next generation after pending=0: **slot 17 AI EN**;
+- пользователь реально применил metadata backfill к slots 1–11;
+- финальная проверка backfill: **все 1–11 UNCHANGED**, то есть tags/hashtags уже присутствуют;
+- replacement slot 16 успешно пересобран и прошёл source/music/metadata audits;
+- active pending queue до следующего scheduler-run: slots 12–16;
+- next generation after pending=0: slot 17 AI EN;
 - OpenAI ledger последний показанный `$0.1885/$10`;
-- scheduler `VV Knopka Long Run` реально работает по 01:30/03:30/05:30 MSK;
-- unattended run auto-uploaded slot 11, затем корректно обработал YouTube `uploadLimitExceeded` через cooldown/defer.
+- scheduler `VV Knopka Long Run`: 01:30/03:30/05:30 MSK, backlog-first.
 
-Плохой первый slot 16 / cat #008 безопасно архивирован в:
+Плохой первый slot 16 безопасно архивирован в:
 `runtime/backups/slot-16-before-rebuild-20260831-231504`.
-Он не имеет YouTube receipt и больше не находится в active ready queue.
 
-## Cat slot 16 reuse incident — fixed and real-validated
-Первый slot 16 имел:
-```text
-final sources: 6
-fresh: 1
-cooled reused: 5
-all 5 reused clips from slot 2 / cat #001
+## YouTube discovery metadata
+### Уже опубликованные slots 1–11 — DONE
+Пользователь выполнил `auth-metadata` и `backfill-metadata --slots 1-11 --apply`.
+
+Реальный итог:
+- 11/11 обновлены;
+- slot 7 имел краткую read-after-write задержку YouTube, затем тоже стал UNCHANGED;
+- final dry-run по каждому slot 1–11: tags none, hashtags none to add.
+
+Backfill не меняет video bytes, URL, views, privacy/status или title.
+
+### Ещё не опубликованные slots 12–15 — final one-time local upgrade
+Добавлена отдельная команда:
+```powershell
+vv-youtube upgrade-pending-metadata --slots 12-15
+vv-youtube upgrade-pending-metadata --slots 12-15 --apply
 ```
 
-Исправленная anti-remake policy:
+Она:
+- работает только с ready `.upload.json` без YouTube receipt;
+- добавляет/merge-ит hidden `youtube_tags`;
+- дописывает отсутствующие hashtags в `youtube_description`;
+- записывает `youtube_hashtags` и `metadata_version=2`;
+- сохраняет все unrelated sidecar fields;
+- вообще не трогает MP4;
+- делает backup исходного sidecar в `runtime/youtube/pending-metadata-backups/`;
+- пишет audit `runtime/youtube/pending-metadata-upgrade-latest.json`;
+- published slots автоматически пропускает.
+
+Если scheduler успеет опубликовать один из 12–15 раньше upgrade, этот slot нужно просто прогнать через уже проверенный `backfill-metadata` как published target.
+
+## Autonomous scheduler behavior
+Каждый trigger:
+1. status;
+2. verify receipts;
+3. best-effort stats;
+4. если pending > 0 — upload ровно одного oldest и выход;
+5. если pending == 0 — `longrun-next`;
+6. render одного следующего slot;
+7. upload только нового newest slot.
+
+Таким образом backlog не растёт. Когда текущие готовые ролики закончатся, pipeline сам начнёт генерировать новые.
+
+AI slots:
+- план + fact-check;
+- MPT auto-start/wait/render/stop-own-process;
+- ACE-Step approved music;
+- metadata v2 + tags/hashtags;
+- YouTube upload.
+
+Cat slots:
+- fresh stock first;
+- audio/geometry/provenance/vision gates;
+- anti-repeat policy;
+- FFmpeg render;
+- ACE-Step approved music;
+- metadata v2 + tags/hashtags;
+- YouTube upload.
+
+OpenAI generation hard cap = `$10`; при достижении cap новые generation attempts fail closed. Existing pending uploads могут продолжить выгружаться, потому что backlog обрабатывается до generation.
+
+## Cat slot 16 incident — fixed
+Original #008: 5/6 clips reused from #001.
+Current policy:
 ```toml
-[long_run]
 cat_source_cooldown_episodes = 5
 cat_cooled_reuse_max_sources = 2
 cat_cooled_reuse_max_per_history_episode = 1
 ```
 
-Теперь:
-- fresh discovery первая;
-- previous 5 cat episodes защищены;
-- cooled fallback максимум 2 clips total;
-- максимум 1 clip из одного старого episode;
-- newest-cooled-first;
-- при нехватке fresh + bounded fallback generation fail closed;
-- `source_reuse_audit.json` валидирует total/per-episode concentration.
-
-### Реальный replacement slot 16
-Новый `vv longrun-next` завершился успешно.
-
-Final source composition:
+Replacement #008:
 ```text
-6 unique sources
-4 fresh Pexels
+6 unique
+4 fresh
 2 cooled total
-cooled slot 2: 1
-cooled slot 4: 1
+1 from slot 2
+1 from slot 4
 protected-window overlap: 0
 source reuse audit: PASS
 ```
 
-Fresh IDs:
-`4427731`, `10467051`, `14326398`, `14927525`.
-
-Cooled IDs:
-- `10358235` from slot 2;
-- `5335581` from slot 4.
-
-Таким образом новая #008 больше не является near-remake #001.
-
-## Cat source v6 — audio first, vision second
-`vv` маршрутизирует cat sourcing через `animal_audio_sources_v6`.
-
-Policy:
-- remote audio-stream check до Luna;
-- FFmpeg mean-volume check до Luna, если stream подтверждён;
-- confirmed-silent stock не расходует vision review;
-- unmeasurable fresh CDN candidates допускаются только bounded tail;
-- remote cooled history исключена из discovery;
-- old clips приходят только через explicit bounded local fallback;
-- retry не может stack-нуть второй cooled batch;
-- failure diagnostics сохраняются;
-- provider availability записывается boolean-ами, без секретов.
-
-Config:
-```toml
-[animal]
-remote_audio_probe_seconds = 6.0
-remote_audio_unknown_max_candidates = 12
-```
-
-Real replacement audit:
+## Cat source v6
+Audio-first / fail-closed source pipeline is active.
+Real replacement run:
 ```text
-PEXELS_API_KEY present: true
-PIXABAY_API_KEY present: true
-reused_audio_sources: 3
 Pexels candidates: 54
 vision reviewed: 54
 vision approved: 51
 new Pexels audio accepted: 3
 Pixabay candidates: 0
 ```
+Later optimization target: reduce Luna reviews per accepted fresh audible clip without weakening gates.
 
-Pixabay не понадобился, потому что Pexels после recovery/accepted fresh clips довёл pool до target раньше fallback provider.
-`vision_reviewed=54` всё ещё выглядит дороже, чем хотелось бы; это отдельная efficiency optimization, не blocker корректности slot 16.
-
-Latest green code checkpoint для v6: `6e94b5d54309955a10ae2c499bd36e3db91f4320`, Ubuntu PASS + Windows PASS, **160 tests passed**.
-
-## AI music — approved, enabled and real-applied
-ACE-Step real local path на RTX 3060 подтверждён. Все 8 initial tracks одобрены и promoted.
-
-Accepted profiles:
-- AI `0.10` + ducking ON;
-- cats `0.11` + cat ducking OFF.
-
-Current config:
+## Music
+All 8 local ACE-Step tracks approved.
+Production:
 ```toml
 [music]
 enabled = true
@@ -125,84 +125,21 @@ cat_volume = 0.11
 ai_ducking = true
 cat_ducking = false
 ```
-
-Replacement slot 16 music audit:
-```text
-track_name: curious_02.wav
-applied_to_video: true
-music_volume_applied: 0.11
-ducking: false
-```
-
-Final upload metadata:
-```text
-slot: 16
-pipeline: animal_compilation
-language: en
-metadata_version: 2
-contains_synthetic_media: true
-```
-
-## YouTube v2
-Реализовано и проверено на реальном канале:
-- metadata v2;
-- hashtags/CTA/tags;
-- conditional `containsSyntheticMedia`;
-- graceful upload-limit cooldown;
-- `vv-youtube verify`;
-- `vv-youtube stats` + history;
-- `vv-youtube report` age-aware metrics.
-
-Первый stats sample маленький — не оптимизировать content policy по нему.
-
-## Backfill tags/hashtags для уже опубликованных slots 1–11
-Пользователь явно попросил добавить discovery metadata в уже опубликованные pilot-видео без reupload.
-
-Реализовано:
-```powershell
-vv-youtube backfill-metadata --slots 1-11
-vv-youtube auth-metadata
-vv-youtube backfill-metadata --slots 1-11 --apply
-```
-
-Поведение:
-- `backfill-metadata` без `--apply` только читает remote snippet и показывает diff;
-- target только локальные uploaded receipts;
-- remote title/category/language сохраняются;
-- existing hidden tags сохраняются и merge-ятся с новыми;
-- в existing description дописываются только отсутствующие hashtags;
-- privacy/status, URL, video bytes, views и receipt не изменяются;
-- apply требует `youtube.force-ssl`;
-- `auth-metadata` переавторизует тот же token с расширенным scope и проверяет, что Google вернул тот же bound channel;
-- при wrong-channel token восстанавливается из предыдущей копии и операция fail closed;
-- audit: `runtime/youtube/metadata-backfill-latest.json`.
-
-Важно: slots 1–11 пока нельзя считать реально обновлёнными — это произойдёт только после локального `--apply` и успешного вывода пользователя. Existing upload scheduler не зависит от edit scope и продолжает работать как раньше.
-
-## AI fact-check / MPT
-- AI plan fail-closed через bounded evidence check;
-- FAIL = no render/no publish;
-- стоимость входит в `$10` ledger;
-- MPT умеет auto-start/wait/stop через conveyor.
-
-## Future comment feedback
-`docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`: позже собирать comments, отдельно классифицировать music-topic и sentiment, реагировать только на устойчивый сигнал по нескольким комментариям/videos. First stage recommendation-only.
+Replacement slot 16 used `curious_02.wav`, volume 0.11, ducking false.
 
 ## Safety
 - `$10` OpenAI hard cap;
-- никаких новых платных providers без explicit approval;
+- no new paid providers without explicit approval;
 - secrets runtime-only;
-- source/provenance/audio/geometry/vision gates fail closed;
-- PR #1 не merge автоматически.
+- source/provenance/audio/geometry/vision/fact-check gates fail closed;
+- Draft PR #1 не merge автоматически;
+- TikTok out of current scope.
 
 ## Immediate continuation
-1. дождаться green CI для metadata backfill;
-2. user local `git pull`;
-3. `vv-youtube backfill-metadata --slots 1-11` dry-run;
-4. если diff нормальный — `vv-youtube auth-metadata`;
-5. `vv-youtube backfill-metadata --slots 1-11 --apply`;
-6. повторить dry-run: ожидается `UNCHANGED` по 1–11;
-7. scheduler продолжает draining slots 12–16;
-8. slot 17 не генерировать пока pending != 0;
-9. после полного drain проверить slot 17 AI EN end-to-end;
-10. позже уменьшить число Luna reviews на каждый реально audible fresh cat clip без ослабления quality gates.
+1. дождаться/check CI для pending-sidecar upgrade;
+2. `git pull`;
+3. dry-run `upgrade-pending-metadata --slots 12-15`;
+4. apply;
+5. повторить dry-run, ожидая UNCHANGED для всех still-pending slots;
+6. после этого оставить scheduler работать автономно несколько дней;
+7. не делать manual slot17 пока backlog не обнулится.
