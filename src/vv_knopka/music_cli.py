@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .acestep_client import ACEStepClient, ACEStepProcessManager, api_available
-from .music_library import available_tracks, music_library_dir
+from .music_library import available_tracks, mix_background_music, music_library_dir
 from .settings import load_settings
 
 
@@ -122,6 +122,27 @@ def _mark_approved(settings, names: set[str]) -> Path | None:
     return _write_manifest(settings, records) if changed else _manifest_path(settings)
 
 
+def _approved_track(settings, raw_name: str) -> Path:
+    key = Path(raw_name).name.casefold()
+    tracks = {path.name.casefold(): path for path in available_tracks(settings)}
+    track = tracks.get(key)
+    if track is None:
+        raise SystemExit(f"Approved track not found: {raw_name}")
+    return track
+
+
+def _preview_output(settings, source: Path, track: Path, pipeline: str, raw_output: str | None) -> Path:
+    if raw_output:
+        output = Path(raw_output).expanduser()
+        if not output.is_absolute():
+            output = (settings.root / output).resolve()
+    else:
+        root = settings.runtime_dir / "music" / "previews"
+        output = root / f"{source.stem}.{pipeline}.{track.stem}.preview.mp4"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    return output
+
+
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(prog="vv-music")
@@ -138,6 +159,12 @@ def main() -> None:
 
     approve = sub.add_parser("approve")
     approve.add_argument("names", nargs="+")
+
+    preview = sub.add_parser("preview", help="Mix one approved track into a copy of a finished Short")
+    preview.add_argument("--video", required=True)
+    preview.add_argument("--track", required=True)
+    preview.add_argument("--pipeline", choices=("ai_short", "animal_compilation"), required=True)
+    preview.add_argument("--output", default=None)
 
     args = parser.parse_args()
     settings = load_settings(Path(args.config).resolve())
@@ -180,6 +207,28 @@ def main() -> None:
             print(f"APPROVED {source.name}")
         _mark_approved(settings, moved_names)
         print(f"Approved {len(moved_names)} track(s). music.enabled is unchanged.")
+        return
+
+    if args.command == "preview":
+        source = Path(args.video).expanduser()
+        if not source.is_absolute():
+            source = (settings.root / source).resolve()
+        if not source.exists() or not source.is_file() or source.stat().st_size <= 0:
+            raise SystemExit(f"Video not found: {source}")
+        track = _approved_track(settings, args.track)
+        output = _preview_output(settings, source, track, args.pipeline, args.output)
+        if output.resolve() == source.resolve():
+            raise SystemExit("Preview output must not overwrite the source video.")
+        shutil.copy2(source, output)
+        try:
+            mix_background_music(settings, video=output, track=track, pipeline=args.pipeline)
+        except Exception:
+            output.unlink(missing_ok=True)
+            raise
+        print(f"PREVIEW {output}")
+        print(f"source unchanged: {source}")
+        print(f"track: {track.name} | pipeline: {args.pipeline}")
+        print("music.enabled is unchanged.")
         return
 
     count = max(0, min(int(args.count), len(_PRESETS)))
