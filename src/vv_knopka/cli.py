@@ -141,7 +141,8 @@ def main() -> None:
 
     if args.command == "status":
         print(f"OpenAI spent: ${ledger.spent_usd():.4f} / ${settings.budget_usd:.2f}")
-        print(f"auto_publish: {settings.auto_publish}")
+        print(f"pilot auto_publish (historical): {settings.auto_publish}")
+        print(f"youtube auto_publish: {settings.youtube_auto_publish}")
         print(f"publication gate: {'PASS' if publication_gate(settings).passed else 'FAIL'}")
         print(f"long_run: {bool(settings.raw.get('long_run', {}).get('enabled', False))}")
         return
