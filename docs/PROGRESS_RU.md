@@ -6,8 +6,9 @@
 ```text
 published + VERIFIED_PUBLIC: slots 1–11
 published metadata backfill: slots 1–11 DONE and final dry-run UNCHANGED
+pending metadata upgrade: slots 12–15 DONE locally before first upload
 ready local before next scheduler trigger: through slot 16
-pending: slots 12–16 unless a scheduler trigger has since uploaded one
+pending at checkpoint: slots 12–16
 next generation after pending=0: slot 17 AI EN
 OpenAI spent last shown: $0.1885 / $10.00
 scheduler: 01:30 / 03:30 / 05:30 MSK
@@ -26,27 +27,26 @@ Second validation:
 
 No reuploads occurred. URL/views/privacy/status/video bytes remained untouched.
 
-## Pending slots 12–15 discovery metadata — CODE READY
-These frozen-pilot MP4s predate metadata v2. User wants them upgraded once before leaving the conveyor unattended.
+## Pending slots 12–15 discovery metadata — REAL COMPLETE
+User ran the new sidecar-only upgrade before any of these four videos had a YouTube receipt.
 
-New command:
-```powershell
-.\.venv\Scripts\vv-youtube.exe upgrade-pending-metadata --slots 12-15
-.\.venv\Scripts\vv-youtube.exe upgrade-pending-metadata --slots 12-15 --apply
+Dry-run showed expected discovery metadata for cats/dogs/elephants. Then:
+```text
+APPLY summary: 4 pending sidecars | changed=4 | applied=4
 ```
 
-Properties:
-- default dry-run;
-- only unpublished sidecars are eligible;
-- adds hidden tags + missing hashtags + metadata_version=2;
-- preserves all unrelated sidecar fields;
-- preserves MP4 bytes exactly;
-- makes one-time sidecar backups in `runtime/youtube/pending-metadata-backups/`;
-- audit at `runtime/youtube/pending-metadata-upgrade-latest.json`;
-- slots that already have receipts are skipped.
+A subsequent published backfill attempt for slots 12–15 returned:
+```text
+No uploaded receipt videos matched the requested slots.
+```
+So none of 12–15 had been published before the sidecar upgrade. Their first normal scheduler uploads will therefore include the new hidden tags + hashtags directly.
 
-Tests cover idempotency, immutable video bytes, backup creation and published-slot skip behavior.
-Fresh CI for this code is running/pending at this checkpoint.
+The upgrade:
+- changed `.upload.json` sidecars only;
+- preserved all unrelated fields;
+- preserved MP4 bytes exactly;
+- created original-sidecar backups in `runtime/youtube/pending-metadata-backups/`;
+- recorded metadata v2 and discovery fields for upload.
 
 ## Slot 16 — fixed and accepted
 Bad first #008 archived at:
@@ -89,7 +89,12 @@ cat_ducking = false
 ```
 
 ## Autonomous continuation
-After slots 12–15 sidecars are upgraded, no manual intervention is expected for normal healthy operation:
+Metadata cleanup is now complete for the whole existing queue:
+- published 1–11 are updated remotely;
+- pending 12–15 have upgraded local sidecars;
+- slot 16 was already generated under metadata v2.
+
+Normal healthy operation now needs no manual metadata intervention:
 - scheduler drains pending 12–16;
 - when empty, generates slot 17 AI EN;
 - AI uses fact-check + automatic MoneyPrinterTurbo lifecycle;
@@ -101,12 +106,7 @@ After slots 12–15 sidecars are upgraded, no manual intervention is expected fo
 Already-ready backlog can still upload after generation budget is exhausted because backlog handling occurs before new generation.
 
 ## Next step
-1. check CI green;
-2. user `git pull`;
-3. dry-run slots 12–15;
-4. apply slots 12–15;
-5. dry-run again => expected UNCHANGED for every still-pending slot;
-6. then leave the conveyor alone for a few days and observe.
+Leave the conveyor alone for a few days and observe normal unattended operation. Do not manually generate slot 17 while pending > 0. Later, if desired, inspect scheduler logs/statistics and optimize cat sourcing cost.
 
 TikTok remains out of scope.
 Draft PR #1 remains open/draft/unmerged.
