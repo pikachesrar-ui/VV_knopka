@@ -113,6 +113,7 @@ class FactChecker:
         prompt = (
             "You are a strict factual verification gate for a short educational animal/nature video.\n"
             "Use web search before deciding. Verify every material factual claim, not merely whether it sounds plausible.\n"
+            "Return one claim result for EACH requested claim, in the same order.\n"
             "Prefer authoritative scientific, university, museum, government, major encyclopedia, or primary sources.\n"
             "PASS only when every claim is well supported by the evidence you found. If a claim is species-specific but "
             "the video presents it as true of a broader animal, mark it unsupported. If evidence is ambiguous, conflicting, "
@@ -163,11 +164,11 @@ class FactChecker:
             fixed_cost_usd=web_calls * web_search_call_usd,
         )
 
-        claim_results = list(verdict.get("claims") or [])
-        all_supported = bool(claim_results) and all(
+        claim_results = [item for item in (verdict.get("claims") or []) if isinstance(item, dict)]
+        coverage_complete = len(claim_results) >= len(fact_items)
+        all_supported = coverage_complete and all(
             str(item.get("status") or "") == "supported"
             for item in claim_results
-            if isinstance(item, dict)
         )
         passed = bool(verdict.get("pass")) and all_supported and web_calls >= 1 and bool(sources)
         return {
@@ -175,6 +176,8 @@ class FactChecker:
             "pass": bool(verdict.get("pass")),
             "summary": str(verdict.get("summary") or "").strip(),
             "claims": claim_results,
+            "requested_claim_count": len(fact_items),
+            "checked_claim_count": len(claim_results),
             "evidence_sources": sources,
             "web_search_calls": web_calls,
             "model": model,
