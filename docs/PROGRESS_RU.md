@@ -1,134 +1,229 @@
 # VV_knopka — LIVE PROGRESS (RU)
 
-Последнее обновление: **2026-08-30**. Подробный контекст — `AGENT.md` и `docs/PROJECT_HANDOFF_RU.md`.
+Последнее обновление: **2026-08-31**. Подробный контекст — `AGENT.md` и `docs/PROJECT_HANDOFF_RU.md`.
 
-## Подтверждено на ПК пользователя
+## Реальный локальный checkpoint
 
-- Frozen pilot: **15/15**, визуально принят.
-- Real long-run slot 16 EN cats / #008: SUCCESS.
-- Scheduler dry-run после slot16: target slot17 AI EN.
-- Последний показанный OpenAI ledger: `$0.1885 / $10.00`.
-- Google OAuth для YouTube успешно пройден; uploader привязан к реальному каналу.
-- Первый real backlog upload запущен и остановлен самим YouTube на channel daily upload limit:
+Пользователь подтвердил на своём Windows ПК:
+
+```text
+готово локально: 16 Shorts
+YouTube receipts: 10
+published public: slots 1–10
+pending: slots 11–16 (6 штук)
+next generation target: slot 17 AI EN
+```
+
+У всех показанных receipts:
+
+```text
+requested_privacy = public
+actual_privacy = public
+```
+
+То есть настоящий YouTube API upload и public visibility подтверждены.
+
+## Windows scheduler
+
+Task Scheduler:
+
+```text
+TaskName: VV Knopka Long Run
+State: Ready
+```
+
+Триггеры подтверждены пользователем:
+
+```text
+01:30 +03:00
+03:30 +03:00
+05:30 +03:00
+```
+
+Windows timezone:
+
+```text
+Russian Standard Time (UTC+03:00)
+```
+
+PowerShell окна можно закрывать. ПК должен оставаться включённым и Windows user — logged in; сон/hibernation нежелателен.
+
+## Current scheduler policy
+
+Каждый trigger:
+
+1. `vv status`;
+2. `vv-youtube status`;
+3. если credentials/receipts доступны — `vv-youtube verify`;
+4. best-effort `vv-youtube stats`;
+5. если pending > 0 — upload exactly one oldest pending и exit без generation;
+6. если pending == 0 — `vv longrun-next`;
+7. затем upload только newest newly rendered video;
+8. upload deferred/failure блокирует дальнейшую generation.
+
+Максимум: **3 upload opportunities/day**.
+
+## YouTube upload limit
+
+После 10 успешных реальных uploads YouTube вернул:
 
 ```text
 400 uploadLimitExceeded
 The user has exceeded the number of videos they may upload.
 ```
 
-## Что означает ошибка
+Новый uploader умеет:
 
-Это **не Google Cloud quota**. Официальный YouTube `videos.insert` error `uploadLimitExceeded` = достигнут дневной лимит видео на канале. Он общий для desktop/mobile/API. YouTube рекомендует повторить через 24 часа. Daily limit variable; не хардкодить число.
+- распознавать это отдельно;
+- возвращать `DEFERRED` без traceback;
+- exit code 75;
+- писать 24h cooldown в ignored `runtime/youtube/upload-limit.json`;
+- не hammer'ить endpoint во время active cooldown;
+- безопасно retry через idempotent receipts.
 
-Advanced YouTube feature eligibility обычно даёт higher daily upload limits. Проверка: YouTube Studio → Settings → Channel → Feature eligibility.
+## YouTube metadata v2 — DONE
 
-## Что уже могло успешно загрузиться
+Для новых long-run slots:
 
-Old `upload-ready` шёл slot-by-slot и после каждого success сразу писал `.upload.youtube.json` receipt. Поэтому до момента ошибки часть slots могла реально успеть загрузиться.
+- hashtags добавляются в description;
+- cats получают CTA rotation;
+- planner AI hashtags реально используются;
+- `snippet.tags` передаются через API;
+- tags/hashtags dedupe + caps;
+- metadata version 2;
+- long-run publication metadata теперь отражает реальный auto-publish policy;
+- frozen pilot metadata остаётся review-first.
 
-Не угадывать количество. Проверить локально:
+AI/synthetic disclosure:
+
+- uploader поддерживает `containsSyntheticMedia`;
+- он включается только когда конкретная metadata это рекомендует;
+- applied AI-generated music автоматически ставит disclosure flag.
+
+## YouTube observability — DONE
+
+Добавлены:
 
 ```powershell
-Get-ChildItem .\runtime\ready_for_review\*.youtube.json | Sort-Object Name | Select-Object Name
-(Get-ChildItem .\runtime\ready_for_review\*.youtube.json).Count
+vv-youtube verify
+vv-youtube stats
 ```
 
-Receipt = duplicate guard для следующего запуска.
+`verify` проверяет processing/upload/privacy/failure/rejection для videos из receipts.
 
-## Fix — graceful daily-limit handling
+`stats` собирает текущие views/likes/comments и сохраняет snapshots для дальнейшего анализа эффективности форматов/тем.
 
-Добавлено:
+Publication verification fail-closed; stats collection best-effort.
 
-- отдельное распознавание `uploadLimitExceeded`;
-- CLI больше не должен показывать Python traceback для этого ожидаемого platform condition;
-- вывод `DEFERRED ... Retry not before ...`;
-- exit code `75` для scheduler;
-- local ignored `runtime/youtube/upload-limit.json`;
-- conservative 24h cooldown;
-- `vv-youtube status` показывает cooldown;
-- `vv-youtube pending-count` печатает pending queue size;
-- во время active cooldown uploader не hammer'ит YouTube upload endpoint.
+## Long-run AI fact check — DONE
 
-## Scheduler — backlog-first, max one upload/trigger
-
-Approved triggers остаются:
+Перед promotion long-run AI plan в `plan.json` теперь идёт bounded evidence check.
 
 ```text
-01:30 MSK
-03:30 MSK
-05:30 MSK
+plan candidate
+ -> 1 web-search tool call max
+ -> structured claims verdict
+ -> actual evidence sources required
+ -> PASS => render allowed
+ -> FAIL => candidate не рендерится и не публикуется
 ```
 
-Новая последовательность каждого trigger:
+Config:
 
-1. lock/status;
-2. count pending uploads;
-3. если pending > 0 — upload exactly one oldest pending, затем exit **без generation**;
-4. только при pending = 0 — generate one new long-run slot + immediately upload it;
-5. deferred/failed publication blocks further generation until recovery.
+```text
+fact_check_enabled = true
+fact_check_model = gpt-5.6-luna
+fact_check_max_tool_calls = 1
+web_search_call_usd = 0.01
+```
 
-Это уменьшает upload pressure с потенциальных 6/day до **максимум 3/day** и позволяет backlog реально уменьшаться.
+Model token cost + web-search fixed fee учитываются в `$10` BudgetLedger.
+
+## MoneyPrinterTurbo autonomy — DONE in code
+
+Long-run уже умеет сам поднимать MPT при необходимости через `MPTProcessManager`.
+
+Manual `render-ai` тоже переведён на auto-availability helper.
+
+Следовательно отдельное постоянно открытое PowerShell окно с MPT больше не должно быть обязательным для будущего unattended AI slot, если локальный MPT environment исправен.
+
+## AI background music — INFRASTRUCTURE DONE / CONTENT PENDING
+
+User approved AI-generated quiet BGM.
+
+Реализовано:
+
+- local music library abstraction;
+- target generator = ACE-Step;
+- `runtime/assets/music`;
+- track ranking by `curious/calm/cute/playful/generic` prefixes;
+- deterministic rotation;
+- recent-track cooldown;
+- per-slot music audit + SHA256;
+- quiet volume settings separately for AI/cats;
+- sidechain ducking;
+- FFmpeg mix into final video;
+- MPT BGM muting when local library enabled;
+- YouTube synthetic-media disclosure when AI music actually applied.
+
+Но production music пока **OFF**:
+
+```toml
+[music]
+enabled = false
+```
+
+Следующий music checkpoint требует пользователя: локально сгенерировать примерно 8–12 ACE-Step instrumentals, прослушать и оставить только хорошие.
 
 ## Tests / CI
 
-Upload-limit code checkpoint:
+YouTube-v2 implementation checkpoint:
 
 ```text
-573bc4f2eb904da20fab03456f90391079144914
-workflow: 33328852436
+head: cdf9e2adbc709a93269ef7b2a560f890544a9075
+workflow: 33416185965
+pytest: 138 passed
+Ubuntu: PASS
+Windows bootstrap: PASS
+Windows scheduler dry-run: PASS
 ```
 
-Result:
+После этого сделаны publication-semantics + docs commits. Новый HEAD должен пройти свежий CI перед финальной фиксацией.
 
-```text
-121 passed in 0.82s
-publication gate: PASS
-long_run: True
-```
+## Что делаем дальше
 
-Full workflow = **success**:
+Сейчас без пользователя:
 
-- Ubuntu tests green;
-- Windows bootstrap green;
-- Windows scheduler dry-run green.
+1. дождаться свежего CI текущего HEAD;
+2. при необходимости исправить regressions;
+3. обновить PR #1 summary;
+4. сохранить PR draft/open/unmerged.
 
-Regression coverage:
-
-- Google error reason parser;
-- 24h cooldown state;
-- backlog stops cleanly at limit after earlier successful item;
-- receipted files excluded from pending count.
-
-## Immediate next local steps
-
-Сначала не повторять `upload-ready` прямо сейчас: YouTube официально рекомендует retry через 24h после daily-limit error.
-
-Проверить, сколько успело загрузиться и какую privacy реально вернул YouTube:
-
-```powershell
-Get-ChildItem .\runtime\ready_for_review\*.youtube.json |
-  ForEach-Object { Get-Content $_ | ConvertFrom-Json } |
-  Select-Object slot, title, requested_privacy, actual_privacy, youtube_url |
-  Sort-Object slot
-```
-
-Затем проверить YouTube Studio → Settings → Channel → Feature eligibility. Если Advanced features ещё нет, official verification path может увеличить daily upload limit.
-
-Подтянуть fix:
+На реальном ПК позже:
 
 ```powershell
 cd D:\KiraS\VV_knopka
 git pull
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\vv-youtube.exe status
+.\.venv\Scripts\vv-youtube.exe verify
+.\.venv\Scripts\vv-youtube.exe stats
 ```
 
-После окончания limit window безопасно повторить:
+После этого scheduler продолжит backlog-first upload slots 11–16.
 
-```powershell
-.\.venv\Scripts\vv-youtube.exe upload-ready
+Когда pending станет 0, первый важный unattended generation test — slot 17:
+
+```text
+AI plan
+ -> fact-check
+ -> MPT auto-start
+ -> curated stock
+ -> render
+ -> metadata v2
+ -> YouTube upload
+ -> verification/statistics
 ```
 
-Receipts не дадут залить уже успешные slots повторно.
+TikTok пока отложен.
 
 Draft PR #1 остаётся open/draft/unmerged.
