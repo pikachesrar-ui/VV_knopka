@@ -1,3 +1,7 @@
+param(
+    [switch]$DryRun
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -11,6 +15,17 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $VvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $UvExe = Join-Path $ProjectRoot ".venv\Scripts\uv.exe"
 $AceDir = Join-Path $ProjectRoot "ACE-Step-1.5"
+$CandidateDir = Join-Path $ProjectRoot "runtime\assets\music\candidates"
+
+if ($DryRun) {
+    Write-Host "DRY RUN: ACE-Step bootstrap"
+    Write-Host "Project    : $ProjectRoot"
+    Write-Host "Checkout   : $AceDir"
+    Write-Host "Candidates : $CandidateDir"
+    Write-Host "API default: http://127.0.0.1:8001"
+    Write-Host "No clone, dependency install, model download or file mutation was performed."
+    exit 0
+}
 
 if (-not (Test-Path $VvPython)) {
     throw "VV_knopka virtual environment is missing. Run scripts/setup-windows.ps1 first."
@@ -44,7 +59,6 @@ try {
     Pop-Location
 }
 
-$CandidateDir = Join-Path $ProjectRoot "runtime\assets\music\candidates"
 New-Item -ItemType Directory -Force -Path $CandidateDir | Out-Null
 
 Write-Host ""
