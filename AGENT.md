@@ -27,15 +27,20 @@ TikTok is out of the current block.
 - do not rebuild slots 1–15 for later metadata/music/source-policy changes.
 
 ## Real YouTube checkpoint — 2026-09-01
-Confirmed locally before slot-16 replacement:
-- YouTube receipts: 11;
+Confirmed locally:
+- ready Shorts: **16**;
+- YouTube receipts: **11**;
 - slots 1–11 = `VERIFIED_PUBLIC`;
+- active pending queue: **slots 12–16 (5)**;
+- next generation target after pending=0: **slot 17 AI EN**;
 - OpenAI ledger last shown: `$0.1885/$10`;
 - scheduler `VV Knopka Long Run` installed, Ready, triggers 01:30/03:30/05:30 MSK.
 
 Real unattended validation passed: scheduler auto-uploaded slot 11, then gracefully handled `uploadLimitExceeded` with persisted cooldown/defer behavior.
 
-The bad unuploaded slot 16 was archived to `runtime/backups/slot-16-before-rebuild-20260831-231504` and removed from the active ready queue. Active upload backlog is therefore slots 12–15 until a replacement slot 16 is successfully rendered.
+The original bad unuploaded slot 16 was archived to:
+`runtime/backups/slot-16-before-rebuild-20260831-231504`.
+A corrected replacement slot 16 has now been rendered successfully and is the active pending artifact.
 
 ## Long-run generation
 Starts at slot 16:
@@ -53,14 +58,10 @@ Backlog-first scheduler:
 6. upload only newest generated video;
 7. deferred/failure prevents backlog growth.
 
-Do not generate slot 17 while slot 16 is missing or upload backlog remains.
+Do not generate slot 17 while upload backlog remains.
 
 ## Cat source reuse policy — IMPORTANT
-The user inspected real slot 16 / cat episode #008 and found heavy repetition from episode #001.
-Original audit proved:
-- 6 final sources;
-- 5 were cooled-down Pexels sources from slot 2 / cat #001;
-- fresh search contributed only one source.
+The first real slot 16 / cat #008 had 5/6 cooled-down clips reused from cat #001. This was treated as a product bug.
 
 Current anti-remake policy:
 ```toml
@@ -78,43 +79,63 @@ Rules:
 - if fresh + bounded cooled history cannot reach minimum quality/source count, fail closed;
 - `source_reuse_audit.json` records cooled reuse by history slot and rejects concentration.
 
-### Real rebuild test
-After archiving old slot 16, `vv longrun-next` ran under the anti-remake policy and correctly failed closed:
-- first pass: only `1/5` usable fresh clips;
-- bounded fallback raised the pool only to `3/5`;
-- no replacement MP4 was produced.
+### Real corrected slot 16 validation
+Replacement slot 16 rendered successfully under the new policy.
+Final source composition:
+- 6 unique clips total;
+- 4 fresh Pexels clips;
+- 2 cooled clips total;
+- one cooled clip from slot 2 and one from slot 4;
+- zero overlap with the protected recent-5-episode window.
 
-Detailed audit showed the real bottleneck:
+Real audit:
 ```text
-Pexels candidates: 59
-vision reviewed: 59
-vision approved: 56
-audio accepted from new Pexels candidates: 0
-rejection: 56 × downloaded file is missing audible audio
-selected after fallback: 3 (1 fresh + 2 cooled)
-Pixabay candidates: 0
+current_unique_sources: 6
+reused_sources: []
+reused_cooled_down_sources: 2
+cooled_reuse_by_history_slot: {2:1, 4:1}
+recent_reuse_passed: true
+cooled_reuse_passed: true
+passed: true
 ```
 
-This proved visual relevance and 9:16 were not the limiting gates; audible source audio was.
+Final source IDs:
+- fresh: `4427731`, `10467051`, `14326398`, `14927525`;
+- cooled: `10358235` from slot 2, `5335581` from slot 4.
 
-## Cat source policy v6 — audibility before vision
+## Cat source v6 — audibility before vision
 Current CLI routes cat sourcing through `animal_audio_sources_v6`.
 
-New behavior:
-- remote file must first pass audio-stream inspection;
-- when a stream exists, FFmpeg measures the first configured seconds against `min_source_mean_volume_db` before Luna review;
+Behavior:
+- remote audio stream checked before Luna;
+- confirmed stream gets FFmpeg mean-volume probe before Luna review;
 - confirmed-silent files are rejected before paid vision review;
-- CDN probe failures are allowed only in a small bounded fresh `unknown` tail;
-- remote cooled-history candidates are excluded entirely; only v5 bounded local fallback can reuse history;
-- retry after a failed attempt cannot stack a second cooled fallback on top of existing cooled clips;
-- diagnostic audit is appended even when sourcing fails;
-- audit records whether Pexels/Pixabay API keys are present without exposing secrets.
+- CDN probe failures are limited to a small bounded fresh unknown tail;
+- remote cooled-history candidates are excluded entirely; only bounded local v5 fallback may reuse history;
+- retry cannot stack another cooled fallback on top of an existing one;
+- diagnostics are appended even on sourcing failure;
+- provider availability is recorded only as booleans, never secrets.
 
 Config:
 ```toml
 remote_audio_probe_seconds = 6.0
 remote_audio_unknown_max_candidates = 12
 ```
+
+Real successful replacement run:
+```text
+provider availability: Pexels=true, Pixabay=true
+reused_audio_sources at retry start: 3
+Pexels candidates: 54
+vision reviewed: 54
+vision approved: 51
+new Pexels audio accepted: 3
+Pixabay candidates: 0 (Pexels reached target before Pixabay fallback was needed)
+```
+
+`vision_reviewed=54` is still higher than desirable and is a later efficiency/cost optimization target, not a correctness blocker for the accepted slot 16.
+
+Latest green code checkpoint for v6: `6e94b5d54309955a10ae2c499bd36e3db91f4320`, Ubuntu PASS + Windows PASS, **160 tests passed**.
 
 ## AI music — production approved
 ACE-Step 1.5 local setup/generation works on user's RTX 3060.
@@ -134,7 +155,16 @@ ai_ducking = true
 cat_ducking = false
 ```
 
-Approved local library is runtime-only and not committed. Applied AI music must propagate YouTube synthetic-media disclosure.
+Replacement slot 16 real music audit:
+```text
+track: curious_02.wav
+applied_to_video: true
+music_volume_applied: 0.11
+ducking: false
+```
+
+Its YouTube metadata is `metadata_version=2` with `contains_synthetic_media=true`.
+Approved local library is runtime-only and not committed.
 
 ## YouTube v2 / observability
 Implemented and real-channel validated:
@@ -145,7 +175,7 @@ Implemented and real-channel validated:
 - `vv-youtube stats` + append-only history;
 - `vv-youtube report` age-aware metrics.
 
-Do not optimize from the first tiny sample.
+Do not optimize content strategy from the first tiny sample.
 
 ## AI fact-check
 Long-run AI planning is fail-closed before render:
@@ -164,13 +194,10 @@ See `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
 Music-related negative comments should be topic-classified separately, aggregated across multiple comments/videos, and initially produce recommendations only.
 
 ## Immediate continuation
-1. wait for green CI on cat-source v6;
-2. local `git pull`;
-3. check provider availability without printing API keys;
-4. rerun `vv longrun-next` for replacement slot 16;
-5. inspect `animal_audio_sources.json`, `source_reuse_audit.json`, `music.json` and preview if render succeeds;
-6. if v6 still cannot find enough audible fresh stock, use provider-availability audit to decide the next sourcing expansion instead of loosening anti-remake/audio gates;
-7. scheduler continues draining slots 12–15;
-8. slot 17 remains blocked until replacement slot 16 and backlog policy are satisfied.
+1. corrected slot 16 is accepted by source/music/metadata audits and remains in pending queue;
+2. scheduler continues draining slots 12–16 oldest-first;
+3. do not generate slot 17 until pending reaches zero;
+4. after backlog drains, validate slot 17 AI EN end-to-end;
+5. later optimize cat audio-first discovery so fewer Luna vision reviews are spent per accepted audible fresh clip.
 
 After substantive work update this file plus `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md`.
