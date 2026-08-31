@@ -2,26 +2,83 @@
 
 Последнее обновление: **2026-09-01**.
 
-## YouTube / scheduler
+## Current YouTube state
 ```text
 published + VERIFIED_PUBLIC: slots 1–11
-ready local: 16
-active pending: slots 12–16 (5)
+published metadata backfill: slots 1–11 DONE and final dry-run UNCHANGED
+ready local before next scheduler trigger: through slot 16
+pending: slots 12–16 unless a scheduler trigger has since uploaded one
 next generation after pending=0: slot 17 AI EN
 OpenAI spent last shown: $0.1885 / $10.00
 scheduler: 01:30 / 03:30 / 05:30 MSK
 ```
 
-Real unattended validation passed: slot 11 auto-uploaded; later `uploadLimitExceeded` was converted to persisted cooldown/defer without traceback.
+Scheduler is backlog-first: one oldest upload per trigger; only when pending reaches zero does it generate one next slot and upload it.
 
-Bad first slot 16 is safely archived at:
+## Published metadata backfill — REAL COMPLETE
+User ran real apply for slots 1–11.
+Initial result: 11/11 UPDATED.
+Second validation:
+- slots 1–6, 8–11 immediately UNCHANGED;
+- slot 7 briefly re-reported missing hidden tags due to YouTube propagation;
+- subsequent apply/dry-run for slot 7 returned UNCHANGED;
+- final state: all slots 1–11 require no further tags/hashtags changes.
+
+No reuploads occurred. URL/views/privacy/status/video bytes remained untouched.
+
+## Pending slots 12–15 discovery metadata — CODE READY
+These frozen-pilot MP4s predate metadata v2. User wants them upgraded once before leaving the conveyor unattended.
+
+New command:
+```powershell
+.\.venv\Scripts\vv-youtube.exe upgrade-pending-metadata --slots 12-15
+.\.venv\Scripts\vv-youtube.exe upgrade-pending-metadata --slots 12-15 --apply
+```
+
+Properties:
+- default dry-run;
+- only unpublished sidecars are eligible;
+- adds hidden tags + missing hashtags + metadata_version=2;
+- preserves all unrelated sidecar fields;
+- preserves MP4 bytes exactly;
+- makes one-time sidecar backups in `runtime/youtube/pending-metadata-backups/`;
+- audit at `runtime/youtube/pending-metadata-upgrade-latest.json`;
+- slots that already have receipts are skipped.
+
+Tests cover idempotency, immutable video bytes, backup creation and published-slot skip behavior.
+Fresh CI for this code is running/pending at this checkpoint.
+
+## Slot 16 — fixed and accepted
+Bad first #008 archived at:
 `runtime/backups/slot-16-before-rebuild-20260831-231504`.
-Corrected replacement slot 16 is now active in ready queue.
 
-## Music — REAL LOCAL APPROVAL + APPLICATION COMPLETE
-ACE-Step works on user's RTX 3060. All 8 tracks are approved locally.
+Corrected replacement:
+```text
+6 unique clips
+4 fresh
+2 cooled total
+1 cooled from slot 2
+1 cooled from slot 4
+0 protected-window repeats
+source audit: PASS
+music: curious_02.wav @ 0.11, ducking false
+metadata_version: 2
+contains_synthetic_media: true
+```
 
-Accepted profiles:
+## Cat anti-repeat / audio-first
+Current limits:
+```toml
+cat_source_cooldown_episodes = 5
+cat_cooled_reuse_max_sources = 2
+cat_cooled_reuse_max_per_history_episode = 1
+```
+
+Current source pipeline uses audio-first gating and fails closed instead of creating near-remakes.
+Later non-blocking optimization: reduce Luna reviews per accepted fresh audible clip.
+
+## Music
+All 8 ACE-Step tracks approved and production-enabled.
 ```toml
 [music]
 enabled = true
@@ -31,129 +88,25 @@ ai_ducking = true
 cat_ducking = false
 ```
 
-Replacement slot 16 real audit:
-```text
-track: curious_02.wav
-applied_to_video: true
-music volume: 0.11
-ducking: false
-```
+## Autonomous continuation
+After slots 12–15 sidecars are upgraded, no manual intervention is expected for normal healthy operation:
+- scheduler drains pending 12–16;
+- when empty, generates slot 17 AI EN;
+- AI uses fact-check + automatic MoneyPrinterTurbo lifecycle;
+- cats use local FFmpeg + source gates;
+- both get approved ACE-Step music and metadata v2 tags/hashtags;
+- upload/verify/stats continue automatically;
+- process repeats until a safety/failure gate stops it or OpenAI ledger reaches `$10`.
 
-Upload metadata correctly contains:
-```text
-metadata_version: 2
-contains_synthetic_media: true
-```
+Already-ready backlog can still upload after generation budget is exhausted because backlog handling occurs before new generation.
 
-## Cat source repetition — FIXED AND REAL-VALIDATED
-Original #008 had 5/6 clips reused from #001.
-
-Current limits:
-```toml
-cat_source_cooldown_episodes = 5
-cat_cooled_reuse_max_sources = 2
-cat_cooled_reuse_max_per_history_episode = 1
-```
-
-Corrected replacement slot 16 succeeded with:
-```text
-6 unique clips
-4 fresh
-2 cooled total
-1 cooled from slot 2
-1 cooled from slot 4
-0 protected-window repeats
-recent_reuse_passed: true
-cooled_reuse_passed: true
-passed: true
-```
-
-Fresh Pexels IDs:
-`4427731`, `10467051`, `14326398`, `14927525`.
-
-Cooled IDs:
-`10358235` (slot 2), `5335581` (slot 4).
-
-## Cat source v6 — AUDIO-FIRST WORKING
-Current `vv` uses `animal_audio_sources_v6`.
-
-Real replacement audit:
-```text
-remote audibility gate: enabled
-audio-before-vision: true
-PEXELS_API_KEY present: true
-PIXABAY_API_KEY present: true
-reused_audio_sources: 3
-Pexels candidates: 54
-vision reviewed: 54
-vision approved: 51
-new Pexels audio accepted: 3
-Pixabay candidates: 0
-```
-
-Pexels alone completed the target before Pixabay fallback was required.
-
-The run proves correctness of:
-- audio-first gate;
-- anti-remake fallback limits;
-- retry-safe cooled reuse;
-- music final mix;
-- metadata v2 synthetic disclosure.
-
-Remaining non-blocking optimization: `vision_reviewed=54` is still high relative to 3 newly accepted audible clips. Later improve source/cache/audio prefilter efficiency without weakening audio, geometry, provenance or anti-repeat gates.
-
-Latest green code checkpoint for v6:
-```text
-6e94b5d54309955a10ae2c499bd36e3db91f4320
-Ubuntu: PASS
-Windows bootstrap: PASS
-160 tests passed
-```
-
-## Published YouTube metadata backfill — IMPLEMENTED, REAL APPLY PENDING
-User requested adding tags/hashtags to already published slots 1–11.
-
-New commands:
-```powershell
-.\.venv\Scripts\vv-youtube.exe backfill-metadata --slots 1-11
-.\.venv\Scripts\vv-youtube.exe auth-metadata
-.\.venv\Scripts\vv-youtube.exe backfill-metadata --slots 1-11 --apply
-```
-
-Design:
-- first command is safe dry-run;
-- reads current remote YouTube snippets;
-- merges hidden tags; never deletes existing tags;
-- appends only missing hashtags to current description;
-- keeps remote title/category/language;
-- never changes privacy/status/video/URL/views;
-- only uploaded receipt videos are eligible;
-- apply requires one-time `youtube.force-ssl` OAuth grant;
-- `auth-metadata` verifies same bound channel before overwriting local token;
-- existing upload automation remains compatible with its old scope usage;
-- writes `runtime/youtube/metadata-backfill-latest.json` audit.
-
-Code/tests are committed on `mvp/pilot-scaffold`; fresh CI is pending/running at this checkpoint. Slots 1–11 are **not yet claimed as updated remotely** until the user runs the real apply command and confirms output.
-
-## Next operational step
-1. wait for metadata-backfill CI green;
-2. `git pull`;
-3. dry-run slots 1–11;
-4. if the proposed tags/hashtags look good, run `auth-metadata` once;
-5. apply slots 1–11;
-6. rerun dry-run and expect `UNCHANGED`;
-7. scheduler continues backlog-first uploads of slots 12–16;
-8. do **not** generate slot 17 while pending > 0;
-9. after backlog reaches zero, validate slot 17 AI EN end-to-end.
-
-## Other completed blocks
-- YouTube metadata v2 / tags / hashtags / CTA for long-run;
-- upload-limit cooldown;
-- verify/stats/history/report;
-- fail-closed AI fact-check;
-- MPT auto lifecycle;
-- ACE-Step timeout retry;
-- future comment-music feedback plan in `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
+## Next step
+1. check CI green;
+2. user `git pull`;
+3. dry-run slots 12–15;
+4. apply slots 12–15;
+5. dry-run again => expected UNCHANGED for every still-pending slot;
+6. then leave the conveyor alone for a few days and observe.
 
 TikTok remains out of scope.
 Draft PR #1 remains open/draft/unmerged.
