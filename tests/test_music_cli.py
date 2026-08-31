@@ -29,7 +29,6 @@ def test_candidate_listing_ignores_generation_manifest(tmp_path):
 def test_mark_approved_updates_generation_manifest(tmp_path):
     settings = _settings(tmp_path)
     path = music_cli._manifest_path(settings)
-    path.parent.mkdir(parents=True)
     path.write_text(
         json.dumps([
             {"name": "cute_01.wav", "approved": False},
