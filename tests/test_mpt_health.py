@@ -25,6 +25,13 @@ class FakeClient:
         return self.response
 
 
+class FakeProcess:
+    returncode = None
+
+    def poll(self):
+        return None
+
+
 def test_mpt_health_accepts_reachable_non_5xx(monkeypatch):
     response = httpx.Response(200, request=httpx.Request("GET", "http://127.0.0.1:8080/docs"))
     monkeypatch.setattr(mpt_health.httpx, "Client", lambda **kwargs: FakeClient(response=response))
@@ -48,3 +55,43 @@ def test_mpt_health_rejects_server_error(monkeypatch):
 
     with pytest.raises(RuntimeError, match="returned HTTP 503"):
         mpt_health.require_mpt_available(DummySettings())
+
+
+def test_ensure_mpt_autostarts_only_when_endpoint_is_offline(monkeypatch):
+    probes = iter(
+        [
+            (False, None, "connection refused"),
+            (True, 200, None),
+        ]
+    )
+    starts = []
+    monkeypatch.setattr(mpt_health, "_probe_mpt", lambda *args, **kwargs: next(probes))
+    monkeypatch.setattr(
+        mpt_health,
+        "start_mpt_background",
+        lambda settings: starts.append(settings) or FakeProcess(),
+    )
+
+    mpt_health.ensure_mpt_available(
+        DummySettings(),
+        startup_timeout_seconds=1,
+        poll_seconds=0.01,
+    )
+
+    assert starts == [pytest.approx(starts[0])] if False else starts
+    assert len(starts) == 1
+
+
+def test_ensure_mpt_does_not_start_second_server_on_http_5xx(monkeypatch):
+    starts = []
+    monkeypatch.setattr(mpt_health, "_probe_mpt", lambda *args, **kwargs: (False, 503, None))
+    monkeypatch.setattr(
+        mpt_health,
+        "start_mpt_background",
+        lambda settings: starts.append(settings) or FakeProcess(),
+    )
+
+    with pytest.raises(RuntimeError, match="returned HTTP 503"):
+        mpt_health.ensure_mpt_available(DummySettings())
+
+    assert starts == []
