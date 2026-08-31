@@ -12,9 +12,10 @@ from .animal_highlights import select_highlights
 from .animal_v3 import render_cat_v3
 from .budget import BudgetLedger
 from .cat_compilation import build_generic_cat_plan
+from .fact_check import FactChecker
 from .gates import publication_gate
 from .long_run_conveyor import run_longrun_batch
-from .manifest import resolve_slot, write_manifest
+from .manifest import longrun_start_slot, resolve_slot, write_manifest
 from .material_fallback import CuratedMaterialFallbackError, load_duration_sufficient_materials
 from .mpt import MoneyPrinterTurboClient
 from .mpt_health import ensure_mpt_available
@@ -187,6 +188,30 @@ def main() -> None:
             topic_hint=args.topic,
         )
         path = slot_dir / "plan.json"
+        should_fact_check = (
+            slot.pipeline == "ai_short"
+            and slot.slot >= longrun_start_slot(settings)
+            and bool(settings.raw.get("openai", {}).get("fact_check_enabled", False))
+        )
+        if should_fact_check:
+            candidate_path = slot_dir / "plan-candidate.json"
+            candidate_path.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+            checker = FactChecker(settings, ledger)
+            audit = checker.check(slot=slot.slot, plan=content)
+            audit["candidate_title"] = str(content.get("title") or "")
+            audit["visual_anchor"] = str(content.get("visual_anchor") or "")
+            audit_path = slot_dir / "fact-check.json"
+            audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"Fact-check audit: {audit_path}")
+            if not audit.get("passed"):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
+                raise SystemExit(
+                    "Fact-check gate FAIL; candidate was not promoted to plan.json. "
+                    f"Reason: {audit.get('summary') or 'unsupported/uncertain factual claim'}"
+                )
         path.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
         print(path)
         return
