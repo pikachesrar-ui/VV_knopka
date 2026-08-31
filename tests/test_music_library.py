@@ -46,6 +46,14 @@ def test_disabled_music_never_selects_track(tmp_path):
     assert select_background_track(settings, slot=17, pipeline="ai_short") is None
 
 
+def test_candidate_subdirectory_is_not_part_of_production_rotation(tmp_path):
+    settings = _settings(tmp_path)
+    root = music_library_dir(settings)
+    _track(root / "candidates", "curious_01.wav")
+    assert available_tracks(settings) == []
+    assert select_background_track(settings, slot=17, pipeline="ai_short") is None
+
+
 def test_pipeline_prefers_matching_track_category(tmp_path):
     settings = _settings(tmp_path)
     root = music_library_dir(settings)
