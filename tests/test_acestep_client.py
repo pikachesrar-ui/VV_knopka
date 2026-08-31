@@ -89,6 +89,35 @@ def test_wait_parses_success_result_json(monkeypatch, tmp_path):
     assert item["seed_value"] == "42"
 
 
+def test_wait_retries_read_timeout_during_first_run_model_loading(monkeypatch, tmp_path):
+    settings = _settings(tmp_path)
+    calls = {"count": 0}
+    result = [{
+        "file": "/v1/audio?path=%2Ftmp%2Ftrack.wav",
+        "seed_value": "99",
+        "lm_model": "acestep-5Hz-lm-0.6B",
+        "dit_model": "acestep-v15-turbo",
+    }]
+
+    def handler(method, url, kwargs):
+        assert method == "POST"
+        assert url.endswith("/query_result")
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ReadTimeout("model loading", request=httpx.Request(method, url))
+        return _response(
+            method,
+            url,
+            {"data": [{"task_id": "task-1", "status": 1, "result": json.dumps(result)}], "code": 200, "error": None},
+        )
+
+    monkeypatch.setattr(ac.httpx, "Client", lambda **kwargs: FakeClient(handler, **kwargs))
+    item = ac.ACEStepClient(settings).wait("task-1", timeout_seconds=1, poll_seconds=0)
+
+    assert calls["count"] == 2
+    assert item["seed_value"] == "99"
+
+
 def test_download_resolves_relative_audio_url(monkeypatch, tmp_path):
     settings = _settings(tmp_path)
     seen = {}
