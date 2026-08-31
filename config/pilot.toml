@@ -99,6 +99,19 @@ meow_file = "runtime/assets/cat-transition-meow.mp3"
 meow_volume = 0.90
 transition_sfx = "soft_meow"
 
+[music]
+# Infrastructure is ready, but production mixing remains off until the initial
+# locally generated ACE-Step tracks are listened to and approved.
+enabled = false
+library_dir = "runtime/assets/music"
+cooldown_shorts = 5
+ai_generated = true
+generator = "ACE-Step"
+# Existing voice/source audio remains primary. These are intentionally quiet.
+ai_volume = 0.10
+cat_volume = 0.07
+ducking = true
+
 [materials]
 ai_material_count = 8
 min_unique_ai_materials = 3
