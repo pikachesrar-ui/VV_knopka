@@ -4,24 +4,29 @@
 
 ## Реальный локальный checkpoint пользователя
 
+На вечер 2026-08-31 пользователь подтвердил на своём Windows ПК:
+
 ```text
 готово локально: 16 Shorts
-YouTube receipts: 10
-published public: slots 1–10
-pending: slots 11–16 (6 штук)
+YouTube receipts: 11
+published + VERIFIED_PUBLIC: slots 1–11
+pending: slots 12–16 (5 штук)
 next generation target: slot 17 AI EN
+OpenAI spent: $0.1885 / $10.00
 ```
 
-У всех показанных receipts:
+У всех slots 1–11 `vv-youtube verify` вернул:
 
 ```text
-requested_privacy = public
-actual_privacy = public
+upload=processed
+processing=succeeded
+privacy=public
+publication_state=VERIFIED_PUBLIC
 ```
 
-Реальный YouTube API upload и public visibility подтверждены.
+Реальный YouTube API upload, processing verification и public visibility подтверждены.
 
-## Windows scheduler
+## Windows scheduler — REAL PRODUCTION VALIDATION PASSED
 
 Task Scheduler:
 
@@ -33,6 +38,21 @@ State: Ready
 05:30 +03:00
 Timezone: Russian Standard Time (UTC+03:00)
 ```
+
+Ночной unattended run реально подтвердил backlog-first поведение:
+
+1. scheduler самостоятельно опубликовал **slot 11**;
+2. slot 11 после processing стал `VERIFIED_PUBLIC`;
+3. следующая upload opportunity получила YouTube `uploadLimitExceeded`;
+4. новый uploader сохранил cooldown вместо traceback;
+5. локальный status показал:
+
+```text
+pending ready uploads: 5
+upload limit cooldown until: 2026-09-01T00:30:07.333703+00:00
+```
+
+Это соответствует примерно **03:30 MSK 2026-09-01**. Во время active cooldown scheduler не должен повторно hammer'ить upload endpoint.
 
 PowerShell окна можно закрывать. Для выполнения задачи ПК должен оставаться включённым, Windows user — logged in; сон/hibernation нежелателен.
 
@@ -49,16 +69,9 @@ PowerShell окна можно закрывать. Для выполнения �
 
 Максимум: **3 upload opportunities/day**.
 
-## YouTube upload limit — DONE
+## YouTube upload limit — DONE / REAL VALIDATED
 
-После 10 успешных реальных uploads YouTube вернул:
-
-```text
-400 uploadLimitExceeded
-The user has exceeded the number of videos they may upload.
-```
-
-Новый uploader:
+Uploader:
 
 - возвращает clean `DEFERRED` вместо traceback;
 - использует exit code 75;
@@ -66,6 +79,8 @@ The user has exceeded the number of videos they may upload.
 - держит conservative 24h cooldown;
 - не hammer'ит endpoint во время cooldown;
 - безопасно retry через idempotent receipts.
+
+Это поведение теперь подтверждено не только тестами, но и настоящим ночным scheduler run.
 
 ## YouTube metadata v2 — DONE
 
@@ -79,20 +94,32 @@ The user has exceeded the number of videos they may upload.
 - `metadata_version=2`;
 - long-run metadata отражает реальный YouTube auto-publish policy;
 - frozen pilot остаётся исторически review-first;
-- `vv status` теперь отдельно показывает `pilot auto_publish (historical)` и `youtube auto_publish`, поэтому старая путаница убрана.
+- `vv status` отдельно показывает `pilot auto_publish (historical)` и `youtube auto_publish`.
 
 Synthetic-media disclosure включается только когда конкретная metadata требует этого; applied AI-generated music автоматически включает flag.
 
-## YouTube observability — DONE
+## YouTube observability + performance report — DONE
+
+Команды:
 
 ```powershell
 vv-youtube verify
 vv-youtube stats
+vv-youtube report
 ```
 
 `verify` проверяет processing/upload/privacy/failure/rejection для videos из receipts. Failed/missing publication fail-closed для scheduler.
 
-`stats` сохраняет views/likes/comments snapshots для будущего анализа того, какие темы/форматы работают на канале. Stats collection — best-effort.
+`stats` сохраняет views/likes/comments snapshots и append-only `statistics-history.jsonl`.
+
+`report` строит age-aware comparison:
+
+- views/hour;
+- likes per 1000 views;
+- comments per 1000 views;
+- aggregate AI vs animal_compilation.
+
+Первый реальный snapshot (11 videos) пока слишком маленький для optimisation decisions, но data path работает. На момент проверки лидировал slot 5 (`How Ants Build Invisible Highways`) с 12 views; sample size ещё нельзя считать статистически значимым.
 
 ## Long-run AI fact check — DONE
 
@@ -154,54 +181,50 @@ enabled = false
 
 Документация: `docs/AI_MUSIC_RU.md`.
 
-## Финальный code checkpoint этого блока
+## Финальный CI checkpoint
 
 ```text
-head: 6def0e462c17eb5f6b536d7d3446daee21ebecf8
-workflow: 33419061821
-pytest: 146 passed in 0.93s
+head: 936bd0956ad0c08fb236c1a97aada6ff0464e88d
+workflow: 33419768393
+pytest: 147 passed in 0.90s
 Ubuntu: PASS
 Windows bootstrap: PASS
 Windows scheduler dry-run: PASS
 Windows ACE-Step helper dry-run: PASS
 ```
 
-Перед этим CI поймал один regression только в test setup (`FileExistsError` из-за повторного mkdir); production code не был причиной. Тест исправлен, свежий полный CI зелёный.
+## Следующий локальный checkpoint — ACE-Step
 
-## Что осталось до следующего server-side milestone
+Пользователь уже готов продолжать на реальном RTX 3060 PC.
 
-- поддерживать PR/docs в актуальном состоянии;
-- PR #1 оставить draft/open/unmerged;
-- TikTok пока не трогать;
-- не включать `[music].enabled=true` без прослушивания локально generated tracks.
-
-## Следующий шаг уже требует локального ПК пользователя
-
-Сначала подтянуть свежий код:
+Setup:
 
 ```powershell
 cd D:\KiraS\VV_knopka
-git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-```
-
-После этого можно реальным OAuth проверить YouTube observability:
-
-```powershell
-.\.venv\Scripts\vv-youtube.exe verify
-.\.venv\Scripts\vv-youtube.exe stats
-```
-
-Для первого music checkpoint:
-
-```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
+.\.venv\Scripts\vv-music.exe status
+```
+
+После успешного setup первые candidates:
+
+```powershell
 .\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
 ```
 
 Первый ACE-Step launch может скачивать model weights и занять время. Generated WAVs останутся **candidates** и сами не попадут в production.
 
-После прослушивания выбранные tracks можно approved отдельно; только затем решать, включать ли production music и делать небольшой comparison music ON vs OFF.
+После прослушивания:
+
+```text
+cute_01/02
+playful_01/02
+curious_01/02
+calm_01/02
+```
+
+выбранные tracks можно approve отдельно. Даже после approve `[music].enabled=false` остаётся неизменным до отдельного решения.
+
+Дальше планируется небольшой controlled comparison music ON vs OFF с использованием собственного `vv-youtube report`.
 
 Когда YouTube backlog станет 0, первый важный unattended generation test — slot 17:
 
@@ -217,3 +240,5 @@ AI plan
 ```
 
 TikTok — отдельный более поздний work block.
+
+Draft PR #1 остаётся open/draft/unmerged.
