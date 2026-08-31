@@ -83,13 +83,21 @@ def test_parse_slot_spec_supports_ranges_and_lists():
     assert backfill.parse_slot_spec(None) is None
 
 
-def test_append_missing_hashtags_is_idempotent():
-    description, added = backfill._append_missing_hashtags("hello\n\n#shorts", ["#cats", "#shorts"])
-    assert description == "hello\n\n#shorts\n\n#cats"
+def test_append_missing_hashtags_is_idempotent_and_exact():
+    description, added = backfill._append_missing_hashtags("hello\n\n#shorts #catshorts", ["#cats", "#shorts"])
+    assert description == "hello\n\n#shorts #catshorts\n\n#cats"
     assert added == ["#cats"]
     again, added_again = backfill._append_missing_hashtags(description, ["#cats", "#shorts"])
     assert again == description
     assert added_again == []
+
+
+def test_merge_tags_preserves_more_than_twelve_existing_tags():
+    existing = [f"legacy-{index}" for index in range(15)]
+    merged, added = backfill._merge_tags_preserving_existing(existing, ["cats", "funny cats"])
+    assert merged[:15] == existing
+    assert len(merged) >= 15
+    assert all(value in merged for value in added)
 
 
 def test_dry_run_merges_cat_tags_without_remote_update(tmp_path, monkeypatch):
