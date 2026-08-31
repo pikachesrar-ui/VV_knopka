@@ -12,6 +12,7 @@ from .youtube_metadata_backfill import (
     parse_slot_spec,
 )
 from .youtube_observability import build_performance_report, collect_statistics, verify_receipts
+from .youtube_pending_metadata import upgrade_pending_metadata
 from .youtube_uploader import (
     active_upload_limit,
     authorize_and_bind,
@@ -41,6 +42,13 @@ def main() -> None:
     )
     backfill.add_argument("--slots", default=None, help="Slot list/range, for example 1-11 or 1,3,5-8")
     backfill.add_argument("--apply", action="store_true")
+
+    pending_upgrade = sub.add_parser(
+        "upgrade-pending-metadata",
+        help="Add discovery tags/hashtags to unpublished ready sidecars without touching video bytes",
+    )
+    pending_upgrade.add_argument("--slots", default=None, help="Slot list/range, for example 12-15")
+    pending_upgrade.add_argument("--apply", action="store_true")
 
     sub.add_parser("pending-count")
     sub.add_parser("verify", help="Verify processing/privacy state of uploaded receipt videos")
@@ -121,6 +129,36 @@ def main() -> None:
         print(f"{mode} summary: {len(results)} videos | changed={changed} | applied={applied} | missing={missing}")
         if not args.apply and changed:
             print("Nothing was changed on YouTube. Re-run with --apply after reviewing this output.")
+        return
+
+    if args.command == "upgrade-pending-metadata":
+        try:
+            slots = parse_slot_spec(args.slots)
+        except ValueError as exc:
+            parser.error(str(exc))
+        results = upgrade_pending_metadata(settings, slots=slots, apply=bool(args.apply))
+        if not results:
+            print("No unpublished ready metadata matched the requested slots.")
+            return
+        changed = 0
+        applied = 0
+        for item in results:
+            tags = ", ".join(item.get("added_tags") or []) or "none"
+            hashtags = " ".join(item.get("added_hashtags") or []) or "none"
+            if item.get("changed"):
+                changed += 1
+            if item.get("applied"):
+                applied += 1
+                prefix = "UPDATED"
+            elif item.get("changed"):
+                prefix = "DRY RUN"
+            else:
+                prefix = "UNCHANGED"
+            print(f"{prefix} slot {item['slot']}: +tags=[{tags}] | +hashtags=[{hashtags}]")
+        mode = "APPLY" if args.apply else "DRY RUN"
+        print(f"{mode} summary: {len(results)} pending sidecars | changed={changed} | applied={applied}")
+        if not args.apply and changed:
+            print("No local upload sidecar was changed. Re-run with --apply after reviewing this output.")
         return
 
     if args.command == "verify":
