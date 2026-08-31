@@ -1,136 +1,109 @@
 # VV_knopka — PROJECT HANDOFF (RU)
 
-GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft PR #1 открыт и **не merge** без отдельного решения пользователя.
+GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft PR #1 остаётся **open/draft/unmerged** до явного решения пользователя.
 
 ## Цель
-
 Автономный long-run pipeline:
-
-`идея/факт -> validation -> render -> metadata -> YouTube upload -> publication verification -> statistics`
-
-Текущий work block = YouTube v2 + AI fact-check + local AI-music. TikTok отложен.
+`идея/факт -> validation -> render -> metadata -> YouTube upload -> verification -> statistics`.
+TikTok пока не трогать.
 
 ## Реальный checkpoint — 2026-08-31
+- frozen pilot slots 1–15 визуально принят и immutable;
+- slots 1–11 опубликованы и `VERIFIED_PUBLIC`;
+- перед пересборкой slot 16 локально было 16 ready Shorts, pending slots 12–16;
+- OpenAI ledger `$0.1885/$10`;
+- scheduler `VV Knopka Long Run` реально работает по 01:30/03:30/05:30 MSK;
+- unattended run auto-uploaded slot 11, затем корректно обработал YouTube `uploadLimitExceeded` через cooldown/defer.
 
-На Windows ПК подтверждено:
+## Cat slot 16 reuse incident — diagnosed
+Пользователь заметил, что cat episode #008 / slot 16 повторяет много котов из #001.
+Локальные audits подтвердили:
 
-- frozen pilot 15/15 визуально принят;
-- slot 16 EN cats / #008 готов локально;
-- ready локально: **16**;
-- slots **1–11** опубликованы через API и `VERIFIED_PUBLIC`;
-- pending = **5**, slots 12–16;
-- next generation = slot 17 AI EN after pending=0;
-- OpenAI ledger = **$0.1885/$10**;
-- scheduler `VV Knopka Long Run` установлен и работает по 01:30/03:30/05:30 MSK.
+```text
+slot 16 final sources: 6
+fresh: 1
+cooled-down reused: 5
+all 5 reused clips came from slot 2 / cat #001
+cooled_history_local_fallback: enabled
+seeded_sources: 8
+source_slots: 2,4
+```
 
-Реальный unattended run подтвердил: slot 11 auto-uploaded, затем `uploadLimitExceeded` корректно превратился в cooldown/defer без traceback.
+`source_reuse_audit.json` показывал 5 cooled overlaps и всё равно `passed=true`, потому что старая gate ограничивала recent-window repeats, но не концентрацию cooled history.
+
+### Исправленная policy
+```toml
+[long_run]
+cat_source_cooldown_episodes = 5
+cat_cooled_reuse_max_sources = 2
+cat_cooled_reuse_max_per_history_episode = 1
+```
+
+Теперь:
+- fresh discovery всегда первая;
+- предыдущие 5 cat episodes защищены;
+- cooled fallback максимум 2 клипа на новый Short;
+- максимум 1 клип из одного старого episode;
+- fallback идёт newest-cooled-first, а не начинает с самого старого #001;
+- если после fresh + bounded fallback не достигается minimum usable source count, генерация fail closed;
+- audit пишет `cooled_reuse_by_history_slot` и отдельно валидирует total/per-episode limits.
+
+Существующий slot 16 ещё не опубликован и должен быть архивирован/пересобран до upload turn. Slots 1–15 не трогать.
+
+## AI music — approved and enabled for future long-run
+ACE-Step real local path на RTX 3060 полностью подтверждён. Все 8 initial tracks одобрены и promoted в local approved library.
+
+Preview results:
+- AI mix нормальный при `ai_volume=0.10`, ducking ON;
+- первый cat mix был слишком тихим;
+- cat v2 принят при `cat_volume=0.11`, cat ducking OFF.
+
+Current target config:
+```toml
+[music]
+enabled = true
+ai_volume = 0.10
+cat_volume = 0.11
+ai_ducking = true
+cat_ducking = false
+```
+
+Для rebuilt slot 16 использовать `vv longrun-next`, а не только `render-animal`, чтобы conveyor после render применил reviewed music, записал `music.json` и пересобрал final upload metadata / synthetic-media disclosure.
 
 ## YouTube v2
-
-Реализовано и real-channel validated:
-
-- hashtags + CTA + normalized `snippet.tags`;
+Реализовано и проверено на реальном канале:
 - metadata v2;
-- real long-run auto-publish semantics;
+- hashtags/CTA/tags;
 - conditional `containsSyntheticMedia`;
 - graceful upload-limit cooldown;
 - `vv-youtube verify`;
 - `vv-youtube stats` + history;
 - `vv-youtube report` age-aware metrics.
 
-Первый sample пока слишком маленький для оптимизации.
+Первый stats sample очень маленький — не оптимизировать policy по нему.
 
-## AI fact-check
+## AI fact-check / MPT
+- AI plan fail-closed через bounded evidence check;
+- FAIL = no render/no publish;
+- стоимость входит в `$10` ledger;
+- MPT умеет auto-start/wait/stop через conveyor.
 
-Long-run AI plan fail-closed до render:
+## Future comment feedback
+`docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`: в будущем собирать comments, отдельно классифицировать music-topic и sentiment, реагировать только на устойчивый сигнал по нескольким комментариям/videos. First stage recommendation-only.
 
-```text
-candidate plan -> bounded web-search evidence check -> PASS/FAIL
-```
-
-FAIL = no render/no publish. Стоимость включена в общий `$10` ledger.
-
-## MoneyPrinterTurbo
-
-`MPTProcessManager` может auto-start/wait/stop локальный MPT. Постоянно открытый MPT PowerShell не требуется как product dependency.
-
-## AI background music — all initial tracks approved
-
-ACE-Step 1.5 real local validation на RTX 3060 прошёл. Первый live run обнаружил долгий `/query_result` `httpx.ReadTimeout`; клиент исправлен так, чтобы polling timeout считался transient до общего task deadline. Regression test добавлен.
-
-После fix успешно сгенерированы и пользователем **явно одобрены все 8** initial tracks:
-
-```text
-cute_01.wav
-cute_02.wav
-playful_01.wav
-playful_02.wav
-curious_01.wav
-curious_02.wav
-calm_01.wav
-calm_02.wav
-```
-
-Локально они пока могут ещё лежать в `runtime/assets/music/candidates/`; explicit promotion:
-
-```powershell
-.\.venv\Scripts\vv-music.exe approve `
-  cute_01.wav cute_02.wav `
-  playful_01.wav playful_02.wav `
-  curious_01.wav curious_02.wav `
-  calm_01.wav calm_02.wav
-```
-
-`approve` не включает feature flag.
-
-Production music пока:
-
-```toml
-[music]
-enabled = false
-```
-
-Перед activation добавлен safe `vv-music preview`: он копирует finished MP4 и подмешивает approved track только в копию. Source и config не меняются. После прослушивания проверить уровни `ai_volume=0.10`, `cat_volume=0.07`, `ducking=true`; затем можно отдельно включить production music.
-
-Music pipeline уже поддерживает deterministic rotation/cooldown, pipeline-specific preferences, per-slot SHA256 audit, MPT BGM muting и YouTube disclosure при реально applied AI music.
-
-## Future YouTube comment feedback
-
-Пользователь хочет позже анализировать комментарии и менять музыку при устойчивом негативе именно про BGM.
-
-Plan: `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
-
-Policy:
-
-- topic classification отдельно от sentiment;
-- считать только music-related feedback для решения о BGM;
-- не реагировать на единичный негатив;
-- учитывать несколько комментариев/Shorts + performance metrics;
-- first stage = report/recommendation only;
-- изменение volume/library/enabled state только с human approval.
-
-## Safety / rules
-
-- OpenAI hard cap = **$10**;
-- no new paid providers without explicit approval;
-- secrets stay local/ignored;
+## Safety
+- `$10` OpenAI hard cap;
+- никаких новых платных providers без explicit approval;
+- secrets runtime-only;
 - source/provenance/audio/geometry/vision gates fail closed;
-- PR #1 stays draft/open/unmerged without explicit merge instruction.
-
-## CI
-
-Workflow `33429860042` для ACE-Step timeout fix: Ubuntu PASS, Windows PASS.
-
-Music-preview code добавлен позже; re-check fresh CI before claiming current HEAD fully green.
+- PR #1 не merge автоматически.
 
 ## Immediate continuation
-
-1. local `git pull`;
-2. promote all 8 approved tracks;
-3. preview one cat Short + one AI Short;
-4. user checks actual mix/ducking;
-5. if approved, enable `[music].enabled=true`;
-6. scheduler drains slots 12–16;
-7. after pending=0 validate slot 17 end-to-end.
-
-TikTok remains out of scope.
+1. дождаться green CI после anti-remake + music enable;
+2. user local `git pull`;
+3. убедиться, что slot 16 не имеет YouTube receipt;
+4. безопасно архивировать старый `runtime/slots/16` + `slot-16-en-animals.mp4` + sidecar;
+5. запустить `vv longrun-next` — он должен снова выбрать slot 16;
+6. проверить `source_reuse_audit.json`, `animal_audio_sources.json`, `music.json` и preview;
+7. после принятия нового slot 16 продолжать backlog-first uploads;
+8. slot 17 не генерировать, пока pending backlog не станет 0.
