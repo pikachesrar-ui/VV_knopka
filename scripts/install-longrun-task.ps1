@@ -53,7 +53,7 @@ Write-Host "Schedule  : daily at $($TimeStrings -join ', ')"
 Write-Host "Triggers  : $($TimeStrings.Count) per day"
 Write-Host "Runner    : $Runner"
 Write-Host "Project   : $ProjectRoot"
-Write-Host "Behavior  : one review-only longrun-next per trigger; no git pull; no publishing"
+Write-Host "Behavior  : verify previous uploads; drain one pending upload first; otherwise render + publish one new long-run slot; no git pull"
 
 if ($DryRun) {
     Write-Host "DRY RUN: scheduled task was not registered."
@@ -97,7 +97,7 @@ $TaskParams = @{
     Trigger = $Triggers
     Settings = $Settings
     Principal = $Principal
-    Description = "Generate one VV_knopka long-run video per configured trigger into ready_for_review. Publishing remains disabled."
+    Description = "Verify previous YouTube publications, drain one pending upload per trigger, or render and publish one new VV_knopka long-run slot when the backlog is empty."
 }
 $Task = New-ScheduledTask @TaskParams
 
