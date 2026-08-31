@@ -1,3 +1,7 @@
+param(
+    [switch]$DryRun
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -5,6 +9,14 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $AceDir = Join-Path $ProjectRoot "ACE-Step-1.5"
 $UvExe = Join-Path $ProjectRoot ".venv\Scripts\uv.exe"
 $AceApiExe = Join-Path $AceDir ".venv\Scripts\acestep-api.exe"
+
+if ($DryRun) {
+    Write-Host "DRY RUN: ACE-Step API launcher"
+    Write-Host "Checkout: $AceDir"
+    Write-Host "URL     : http://127.0.0.1:8001"
+    Write-Host "No process was started."
+    exit 0
+}
 
 if (-not (Test-Path $AceDir)) {
     throw "ACE-Step checkout is missing. Run scripts/setup-acestep-windows.ps1 first."
