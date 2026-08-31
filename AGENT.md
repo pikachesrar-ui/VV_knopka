@@ -10,8 +10,9 @@ Before changing code or giving status claims:
 2. Read `docs/PROJECT_HANDOFF_RU.md`.
 3. Read `docs/PROGRESS_RU.md`.
 4. For music work read `docs/AI_MUSIC_RU.md`.
-5. Check current branch/HEAD/CI and draft PR #1.
-6. Treat GitHub as source of truth for code/history.
+5. For future comment-feedback work read `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
+6. Check current branch/HEAD/CI and draft PR #1.
+7. Treat GitHub as source of truth for code/history.
 
 ## 2. Project goal
 
@@ -124,7 +125,7 @@ PASS promotes to `plan.json`; FAIL means no render/no publish. Cost is included 
 
 ## 10. AI background music
 
-Production flag remains intentionally OFF:
+Production flag remains OFF until a real mixed-video preview is approved:
 
 ```toml
 [music]
@@ -136,9 +137,9 @@ Implemented:
 - local generator target: ACE-Step 1.5;
 - local approved library: `runtime/assets/music/`;
 - candidates: `runtime/assets/music/candidates/`;
-- candidate directory is excluded from production selector;
-- `vv-music status/list/generate-library/approve`;
-- API auto-start + async polling + audio download;
+- `vv-music status/list/generate-library/approve/preview`;
+- API auto-start + async polling + WAV download;
+- transient polling `ReadTimeout` retry until overall deadline;
 - deterministic rotation + cooldown;
 - quiet AI/cat levels + sidechain ducking;
 - per-slot SHA256 audit;
@@ -150,10 +151,9 @@ Implemented:
 On the user's RTX 3060 PC:
 
 - official ACE-Step 1.5 setup succeeded;
-- first real generation exposed `httpx.ReadTimeout` on long `/query_result` polling;
-- client was fixed so polling ReadTimeout retries until the overall task deadline;
-- regression test added;
-- after pull, all 8 candidates generated successfully:
+- real long `/query_result` timeout bug was found and fixed;
+- all 8 candidates generated successfully;
+- user explicitly approved **all eight**:
 
 ```text
 cute_01.wav
@@ -166,17 +166,34 @@ calm_01.wav
 calm_02.wav
 ```
 
-User listened to several and said they like them. **This is not approval of all eight.** Before moving files into production, obtain the exact approved filenames.
-
 Promotion command:
 
 ```powershell
-.\.venv\Scripts\vv-music.exe approve <selected names>
+.\.venv\Scripts\vv-music.exe approve `
+  cute_01.wav cute_02.wav `
+  playful_01.wav playful_02.wav `
+  curious_01.wav curious_02.wav `
+  calm_01.wav calm_02.wav
 ```
 
-Approval does not enable the feature flag automatically.
+Approval does not enable production automatically.
 
-## 11. Cat rules
+`vv-music preview` must be used to listen to the real FFmpeg mix on a copy of a finished Short before switching `music.enabled=true`.
+
+## 11. Future YouTube comment feedback
+
+User wants a later feedback loop that detects sustained negative feedback specifically about BGM and then recommends lowering/changing/disabling music.
+
+Rules are in `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`:
+
+- classify topic separately from sentiment;
+- music policy uses only music-related comments;
+- do not react to one comment;
+- aggregate across multiple comments/videos/time;
+- first stage recommendation-only;
+- no automatic production config mutation without human approval.
+
+## 12. Cat rules
 
 - local FFmpeg renderer;
 - generic cats, no voiceover;
@@ -189,37 +206,27 @@ Approval does not enable the feature flag automatically.
 - frozen pilot all-history reuse protection;
 - long-run previous-5-episodes cooldown.
 
-## 12. Git / CI
+## 13. Git / CI
 
 Development branch: `mvp/pilot-scaffold`.
 Draft PR #1 into `main` must remain draft/open/unmerged without explicit user instruction.
 
-Last fully green checkpoint before runtime timeout fix:
+Workflow `33429860042` for ACE-Step timeout fix: Ubuntu PASS, Windows PASS.
 
-```text
-936bd095... | 147 tests | Ubuntu PASS | Windows PASS
-```
+Music-preview code was added after that workflow; check fresh CI before claiming current HEAD fully green.
 
-Runtime fix commits:
+## 14. Immediate continuation
 
-```text
-795b7f01 — retry ACE-Step polling ReadTimeout
-463f2d5d — regression test
-```
-
-Workflow `33429860042`: Ubuntu PASS; Windows was still running at last observed check. Re-check current CI before claiming current HEAD fully green.
-
-## 13. Immediate continuation
-
-1. get exact approved candidate names from user;
-2. approve only those tracks;
-3. keep `music.enabled=false` until separate activation decision;
-4. scheduler continues draining slots 12–16;
-5. after pending=0 validate slot 17 end-to-end;
-6. later run a controlled music ON vs OFF comparison using `vv-youtube report`.
+1. local `git pull`;
+2. approve all eight tracks;
+3. run safe preview on at least one cat and one AI finished Short;
+4. user listens to actual volume/ducking;
+5. only after approval enable `[music].enabled=true`;
+6. scheduler continues draining slots 12–16;
+7. after pending=0 validate slot 17 end-to-end.
 
 TikTok remains a later block.
 
-## 14. Context persistence
+## 15. Context persistence
 
 After substantive work update `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, and `docs/PROGRESS_RU.md`.
