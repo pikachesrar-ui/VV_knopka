@@ -56,17 +56,24 @@ def test_cat_upload_title_uses_episode_number_and_cc_attribution(tmp_path):
     assert metadata["youtube_title"] == "Cats That Made My Day 😹 #002 #shorts"
     assert metadata["youtube_description"].startswith("A short collection of cute and funny cats.")
     assert "Creator" in metadata["youtube_description"]
+    assert "youtube_tags" not in metadata
     assert metadata["review_required"] is True
     assert metadata["auto_publish"] is False
     assert metadata["publication_allowed_by_conveyor"] is False
 
 
-def test_ai_upload_title_comes_from_specific_plan(tmp_path):
+def test_ai_upload_title_comes_from_specific_plan_and_preserves_pilot_metadata(tmp_path):
     settings = _settings(tmp_path)
     slot_dir = tmp_path / "runtime" / "slots" / "03"
     slot_dir.mkdir(parents=True)
     (slot_dir / "plan.json").write_text(
-        json.dumps({"title": "Why Owls Fly So Quietly", "hook": "Their feathers hide a clever trick."}),
+        json.dumps(
+            {
+                "title": "Why Owls Fly So Quietly",
+                "hook": "Their feathers hide a clever trick.",
+                "hashtags": ["#owls", "#animals"],
+            }
+        ),
         encoding="utf-8",
     )
     output = tmp_path / "runtime" / "ready_for_review" / "slot-03-en-ai.mp4"
@@ -78,9 +85,10 @@ def test_ai_upload_title_comes_from_specific_plan(tmp_path):
     )
     assert metadata["youtube_title"] == "Why Owls Fly So Quietly #shorts"
     assert metadata["youtube_description"] == "Their feathers hide a clever trick."
+    assert "youtube_tags" not in metadata
 
 
-def test_longrun_cat_metadata_continues_numbering_and_varies_description(tmp_path):
+def test_longrun_cat_metadata_continues_numbering_and_adds_discovery_metadata(tmp_path):
     settings = _settings(tmp_path)
     slot16_dir = tmp_path / "runtime" / "slots" / "16"
     slot18_dir = tmp_path / "runtime" / "slots" / "18"
@@ -103,3 +111,71 @@ def test_longrun_cat_metadata_continues_numbering_and_varies_description(tmp_pat
     assert first["youtube_title"] == "Cats That Made My Day 😹 #008 #shorts"
     assert second["youtube_title"] == "Cats That Made My Day 😹 #009 #shorts"
     assert first["youtube_description"] != second["youtube_description"]
+    assert "#cats" in first["youtube_description"]
+    assert "#funnycats" in first["youtube_description"]
+    assert "#shorts" in first["youtube_description"]
+    assert "cats" in first["youtube_tags"]
+    assert first["metadata_version"] == 2
+
+
+def test_longrun_ai_uses_planner_hashtags_and_anchor_as_youtube_tags(tmp_path):
+    settings = _settings(tmp_path)
+    slot_dir = tmp_path / "runtime" / "slots" / "17"
+    slot_dir.mkdir(parents=True)
+    (slot_dir / "plan.json").write_text(
+        json.dumps(
+            {
+                "title": "Why Owls Fly So Quietly",
+                "hook": "Their feathers hide a clever trick.",
+                "visual_anchor": "owl",
+                "hashtags": ["owls", "#AnimalFacts", "#nature", "#owls", "bad tag!"],
+                "ai_disclosure_recommended": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = build_upload_metadata(
+        settings,
+        slot=Slot(17, "ai_short", "en"),
+        output=tmp_path / "runtime" / "ready_for_review" / "slot-17-en-ai.mp4",
+        slot_dir=slot_dir,
+    )
+
+    assert "#owls" in metadata["youtube_description"]
+    assert "#AnimalFacts" in metadata["youtube_description"]
+    assert "#shorts" in metadata["youtube_description"]
+    assert "owl" in metadata["youtube_tags"]
+    assert "animal facts" in metadata["youtube_tags"]
+    assert metadata["contains_synthetic_media"] is False
+
+
+def test_applied_ai_music_enables_synthetic_media_disclosure(tmp_path):
+    settings = _settings(tmp_path)
+    slot_dir = tmp_path / "runtime" / "slots" / "17"
+    slot_dir.mkdir(parents=True)
+    (slot_dir / "plan.json").write_text(
+        json.dumps(
+            {
+                "title": "A Fact",
+                "hook": "Hook",
+                "visual_anchor": "cat",
+                "hashtags": ["#cats"],
+                "ai_disclosure_recommended": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (slot_dir / "music.json").write_text(
+        json.dumps({"ai_generated": True, "applied_to_video": True}),
+        encoding="utf-8",
+    )
+
+    metadata = build_upload_metadata(
+        settings,
+        slot=Slot(17, "ai_short", "en"),
+        output=tmp_path / "runtime" / "ready_for_review" / "slot-17-en-ai.mp4",
+        slot_dir=slot_dir,
+    )
+
+    assert metadata["contains_synthetic_media"] is True
