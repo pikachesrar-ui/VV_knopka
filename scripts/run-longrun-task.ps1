@@ -81,6 +81,25 @@ try {
         throw "vv-youtube status failed with exit code $ExitCode"
     }
 
+    # Verification is intentionally done at the beginning of the NEXT real trigger,
+    # not seconds after an upload. This gives YouTube time to finish processing and
+    # avoids treating normal propagation delay as a missing/failed video. Dry-run CI
+    # has no local OAuth material, so observability calls are skipped there.
+    if (-not $DryRun) {
+        $ExitCode = Invoke-Logged -Prefix "youtube-verify" -Exe $YouTubeExe -Arguments @("verify")
+        if ($ExitCode -ne 0) {
+            Write-TaskLog "FAIL: a previous YouTube publication is failed/missing or verification could not complete. Refusing new generation/upload until inspected."
+            exit $ExitCode
+        }
+
+        # Statistics are useful telemetry, not a publication safety gate. A temporary
+        # analytics/read failure is logged but must not stop a healthy backlog drain.
+        $ExitCode = Invoke-Logged -Prefix "youtube-stats" -Exe $YouTubeExe -Arguments @("stats")
+        if ($ExitCode -ne 0) {
+            Write-TaskLog ("WARN: YouTube statistics collection failed with exit code {0}; continuing publication workflow." -f $ExitCode)
+        }
+    }
+
     # While any ready backlog exists, each trigger spends its single publication
     # opportunity on exactly one old/pending video and does NOT generate another
     # slot. This drains the backlog and keeps scheduled upload pressure <= 3/day.
