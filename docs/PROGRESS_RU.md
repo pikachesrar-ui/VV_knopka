@@ -2,20 +2,20 @@
 
 Последнее обновление: **2026-08-31**. Подробный контекст — `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, `docs/AI_MUSIC_RU.md`.
 
-## Реальный локальный checkpoint пользователя
+## Реальный локальный checkpoint
 
-На вечер 2026-08-31 пользователь подтвердил на своём Windows ПК:
+Подтверждено на Windows ПК пользователя:
 
 ```text
 готово локально: 16 Shorts
 YouTube receipts: 11
 published + VERIFIED_PUBLIC: slots 1–11
-pending: slots 12–16 (5 штук)
+pending: slots 12–16 (5)
 next generation target: slot 17 AI EN
 OpenAI spent: $0.1885 / $10.00
 ```
 
-У всех slots 1–11 `vv-youtube verify` вернул:
+`vv-youtube verify` для slots 1–11:
 
 ```text
 upload=processed
@@ -24,65 +24,34 @@ privacy=public
 publication_state=VERIFIED_PUBLIC
 ```
 
-Реальный YouTube API upload, processing verification и public visibility подтверждены.
+## Windows scheduler — production validation passed
 
-## Windows scheduler — REAL PRODUCTION VALIDATION PASSED
-
-Task Scheduler:
+Task `VV Knopka Long Run` установлен и `Ready`:
 
 ```text
-TaskName: VV Knopka Long Run
-State: Ready
-01:30 +03:00
-03:30 +03:00
-05:30 +03:00
-Timezone: Russian Standard Time (UTC+03:00)
+01:30 MSK
+03:30 MSK
+05:30 MSK
+Russian Standard Time (UTC+03:00)
 ```
 
-Ночной unattended run реально подтвердил backlog-first поведение:
+Реальный unattended run подтвердил backlog-first flow:
 
-1. scheduler самостоятельно опубликовал **slot 11**;
-2. slot 11 после processing стал `VERIFIED_PUBLIC`;
-3. следующая upload opportunity получила YouTube `uploadLimitExceeded`;
-4. новый uploader сохранил cooldown вместо traceback;
-5. локальный status показал:
+1. scheduler сам опубликовал slot 11;
+2. slot 11 стал `VERIFIED_PUBLIC`;
+3. следующая upload opportunity получила `uploadLimitExceeded`;
+4. uploader сохранил cooldown без traceback;
+5. pending уменьшился до 5.
+
+Последний показанный cooldown:
 
 ```text
-pending ready uploads: 5
-upload limit cooldown until: 2026-09-01T00:30:07.333703+00:00
+2026-09-01T00:30:07.333703+00:00
 ```
 
-Это соответствует примерно **03:30 MSK 2026-09-01**. Во время active cooldown scheduler не должен повторно hammer'ить upload endpoint.
+Во время active cooldown upload endpoint не hammer'ится.
 
-PowerShell окна можно закрывать. Для выполнения задачи ПК должен оставаться включённым, Windows user — logged in; сон/hibernation нежелателен.
-
-Текущая policy каждого trigger:
-
-1. `vv status`;
-2. `vv-youtube status`;
-3. при наличии credentials/receipts — `vv-youtube verify`;
-4. best-effort `vv-youtube stats`;
-5. если pending > 0 — upload exactly one oldest pending и exit без generation;
-6. если pending == 0 — `vv longrun-next`;
-7. затем upload только newest rendered video;
-8. upload deferred/failure блокирует дальнейшее накопление backlog.
-
-Максимум: **3 upload opportunities/day**.
-
-## YouTube upload limit — DONE / REAL VALIDATED
-
-Uploader:
-
-- возвращает clean `DEFERRED` вместо traceback;
-- использует exit code 75;
-- пишет ignored `runtime/youtube/upload-limit.json`;
-- держит conservative 24h cooldown;
-- не hammer'ит endpoint во время cooldown;
-- безопасно retry через idempotent receipts.
-
-Это поведение теперь подтверждено не только тестами, но и настоящим ночным scheduler run.
-
-## YouTube metadata v2 — DONE
+## YouTube v2 — DONE
 
 Для новых long-run slots:
 
@@ -90,155 +59,119 @@ Uploader:
 - CTA rotation для cats;
 - planner AI hashtags реально используются;
 - `snippet.tags` передаются через API;
-- tags/hashtags dedupe + caps;
+- normalization/dedupe/caps;
 - `metadata_version=2`;
-- long-run metadata отражает реальный YouTube auto-publish policy;
-- frozen pilot остаётся исторически review-first;
-- `vv status` отдельно показывает `pilot auto_publish (historical)` и `youtube auto_publish`.
+- long-run metadata отражает реальный YouTube auto-publish;
+- frozen pilot остаётся historical review-first;
+- conditional `containsSyntheticMedia`;
+- `vv-youtube verify`, `stats`, `report` работают на реальном канале.
 
-Synthetic-media disclosure включается только когда конкретная metadata требует этого; applied AI-generated music автоматически включает flag.
+Первый real stats snapshot = 11 videos. Sample пока слишком маленький для optimisation decisions.
 
-## YouTube observability + performance report — DONE
-
-Команды:
-
-```powershell
-vv-youtube verify
-vv-youtube stats
-vv-youtube report
-```
-
-`verify` проверяет processing/upload/privacy/failure/rejection для videos из receipts. Failed/missing publication fail-closed для scheduler.
-
-`stats` сохраняет views/likes/comments snapshots и append-only `statistics-history.jsonl`.
-
-`report` строит age-aware comparison:
-
-- views/hour;
-- likes per 1000 views;
-- comments per 1000 views;
-- aggregate AI vs animal_compilation.
-
-Первый реальный snapshot (11 videos) пока слишком маленький для optimisation decisions, но data path работает. На момент проверки лидировал slot 5 (`How Ants Build Invisible Highways`) с 12 views; sample size ещё нельзя считать статистически значимым.
-
-## Long-run AI fact check — DONE
+## Long-run AI fact-check — DONE
 
 ```text
 plan candidate
- -> max 1 bounded web-search tool call
- -> structured claim verdict
- -> actual evidence sources required
- -> PASS => promote to plan.json
- -> FAIL => no render / no publish
+ -> max 1 bounded web-search call
+ -> structured evidence verdict
+ -> PASS => plan.json
+ -> FAIL => no render/no publish
 ```
 
-Config:
-
-```text
-fact_check_enabled = true
-fact_check_model = gpt-5.6-luna
-fact_check_max_tool_calls = 1
-web_search_call_usd = 0.01
-```
-
-Model token cost + web-search fixed fee учитываются в общем `$10` BudgetLedger.
+Model cost + fixed web-search fee идут в общий `$10` BudgetLedger.
 
 ## MoneyPrinterTurbo autonomy — DONE in code
 
-Long-run `MPTProcessManager` умеет сам поднять MPT, дождаться health readiness, выполнить AI render и остановить только процесс, который он запустил.
+`MPTProcessManager` умеет сам поднять локальный MPT, дождаться readiness, выполнить AI render и остановить только процесс, который он сам запустил. Постоянно открытый PowerShell с MPT больше не является целевой зависимостью.
 
-Manual `render-ai` также использует auto-availability helper. Постоянное отдельное PowerShell окно с MPT больше не является целевой зависимостью unattended flow.
+## AI background music — REAL LOCAL GENERATION PASSED
 
-## AI background music — CODE/WORKFLOW DONE, LOCAL CONTENT PENDING
-
-Production music пока намеренно выключена:
+Production music всё ещё намеренно выключена:
 
 ```toml
 [music]
 enabled = false
 ```
 
-Реализовано:
+На реальном RTX 3060 ПК пользователя успешно подтверждено:
 
-- local music library + FFmpeg mixer;
-- target generator **ACE-Step 1.5**;
-- REST client `src/vv_knopka/acestep_client.py`;
-- auto-start `/health` / async task polling / WAV download;
-- CLI `vv-music`;
-- Windows setup/debug helpers;
-- ignored local checkout `ACE-Step-1.5/`;
-- separate `runtime/assets/music/candidates/`;
-- candidate files не участвуют в production rotation;
-- explicit `vv-music approve ...` переносит только выбранные WAV в approved root;
-- approval **не** включает feature flag;
-- initial stable candidate set: `cute_01/02`, `playful_01/02`, `curious_01/02`, `calm_01/02`;
+1. `scripts/setup-acestep-windows.ps1` клонировал официальный `ACE-Step-1.5`;
+2. Python 3.11 / `uv sync` setup прошёл;
+3. локальный ACE-Step API стартует через `vv-music`;
+4. первый реальный run выявил `httpx.ReadTimeout` при `/query_result` polling;
+5. клиент исправлен: polling `ReadTimeout` теперь считается transient и retry'ится до общего deadline;
+6. regression test добавлен;
+7. после `git pull` повторный запуск успешно сгенерировал все **8 WAV candidates**:
+
+```text
+cute_01.wav
+cute_02.wav
+playful_01.wav
+playful_02.wav
+curious_01.wav
+curious_02.wav
+calm_01.wav
+calm_02.wav
+```
+
+Файлы лежат только в:
+
+```text
+runtime/assets/music/candidates/
+```
+
+и не могут попасть в production rotation до explicit `vv-music approve ...`.
+
+Пользователь уже прослушал несколько candidates и сообщил, что музыка нравится. Точный approved subset ещё не выбран.
+
+### Реализованная music infrastructure
+
+- local library + FFmpeg mixer;
+- ACE-Step async REST client;
+- API auto-start/wait/stop;
+- candidate/approved separation;
+- `vv-music status/list/generate-library/approve`;
 - deterministic rotation + cooldown;
-- per-slot SHA256/music audit;
-- quiet volume settings отдельно для AI/cats;
+- SHA256 per-slot audit;
+- separate quiet volumes for AI/cats;
 - sidechain ducking;
-- MPT BGM muting при использовании approved local music;
-- YouTube synthetic-media disclosure при реально applied AI music.
+- MPT BGM muted when approved local music is applied;
+- applied AI-generated music propagates YouTube disclosure.
 
-Документация: `docs/AI_MUSIC_RU.md`.
+## CI
 
-## Финальный CI checkpoint
+Последний полностью зелёный checkpoint до runtime timeout fix:
 
 ```text
 head: 936bd0956ad0c08fb236c1a97aada6ff0464e88d
 workflow: 33419768393
-pytest: 147 passed in 0.90s
+pytest: 147 passed
 Ubuntu: PASS
-Windows bootstrap: PASS
-Windows scheduler dry-run: PASS
-Windows ACE-Step helper dry-run: PASS
+Windows: PASS
 ```
 
-## Следующий локальный checkpoint — ACE-Step
-
-Пользователь уже готов продолжать на реальном RTX 3060 PC.
-
-Setup:
-
-```powershell
-cd D:\KiraS\VV_knopka
-powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
-.\.venv\Scripts\vv-music.exe status
-```
-
-После успешного setup первые candidates:
-
-```powershell
-.\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
-```
-
-Первый ACE-Step launch может скачивать model weights и занять время. Generated WAVs останутся **candidates** и сами не попадут в production.
-
-После прослушивания:
+Runtime timeout fix commits:
 
 ```text
-cute_01/02
-playful_01/02
-curious_01/02
-calm_01/02
+795b7f01 — retry ACE-Step polling read timeouts
+463f2d5d — regression test
 ```
 
-выбранные tracks можно approve отдельно. Даже после approve `[music].enabled=false` остаётся неизменным до отдельного решения.
+Ubuntu job на workflow `33429860042` уже PASS; Windows bootstrap ещё выполнялся при последней проверке. Не называть весь current HEAD fully green, пока Windows не завершён.
 
-Дальше планируется небольшой controlled comparison music ON vs OFF с использованием собственного `vv-youtube report`.
+## Следующий шаг
 
-Когда YouTube backlog станет 0, первый важный unattended generation test — slot 17:
+1. пользователь прослушивает оставшиеся 8 candidates;
+2. сообщает, какие конкретно tracks допускаются в production;
+3. только выбранные файлы promoted через `vv-music approve ...`;
+4. после этого отдельно решаем, включать ли `[music].enabled=true`;
+5. scheduler продолжает draining slots 12–16;
+6. после pending=0 validate slot 17 end-to-end:
 
 ```text
-AI plan
- -> fact-check
- -> MPT auto-start
- -> curated stock
- -> render
- -> metadata v2
- -> YouTube upload
- -> verification/statistics
+plan -> fact-check -> MPT auto-start -> curated stock -> render -> metadata v2 -> YouTube -> verify/stats
 ```
 
-TikTok — отдельный более поздний work block.
+TikTok пока не трогать.
 
 Draft PR #1 остаётся open/draft/unmerged.
