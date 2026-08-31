@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from vv_knopka.music_library import (
+    _pipeline_mix_profile,
     available_tracks,
     music_library_dir,
     select_background_track,
@@ -20,8 +21,10 @@ def _settings(tmp_path: Path, *, enabled: bool = True) -> Settings:
                 "ai_generated": True,
                 "generator": "ACE-Step",
                 "ai_volume": 0.10,
-                "cat_volume": 0.07,
+                "cat_volume": 0.11,
                 "ducking": True,
+                "ai_ducking": True,
+                "cat_ducking": False,
             },
         },
         root=tmp_path,
@@ -65,6 +68,12 @@ def test_pipeline_prefers_matching_track_category(tmp_path):
     assert [p.name for p in available_tracks(settings, pipeline="animal_compilation")][0] == "cute-01.wav"
 
 
+def test_ai_and_cat_mix_profiles_are_separate(tmp_path):
+    settings = _settings(tmp_path)
+    assert _pipeline_mix_profile(settings, "ai_short") == (0.10, True)
+    assert _pipeline_mix_profile(settings, "animal_compilation") == (0.11, False)
+
+
 def test_recent_track_is_avoided_by_cooldown(tmp_path):
     settings = _settings(tmp_path)
     root = music_library_dir(settings)
@@ -85,7 +94,7 @@ def test_recent_track_is_avoided_by_cooldown(tmp_path):
     assert selected == second.resolve()
 
 
-def test_music_audit_records_ai_generation_and_hash(tmp_path):
+def test_music_audit_records_ai_generation_hash_and_applied_mix(tmp_path):
     settings = _settings(tmp_path)
     track = _track(music_library_dir(settings), "playful-01.wav")
     audit = write_music_audit(
@@ -100,4 +109,6 @@ def test_music_audit_records_ai_generation_and_hash(tmp_path):
     assert '"ai_generated": true' in text
     assert '"generator": "ACE-Step"' in text
     assert '"applied_to_video": false' in text
+    assert '"music_volume_applied": 0.11' in text
+    assert '"ducking": false' in text
     assert '"sha256":' in text
