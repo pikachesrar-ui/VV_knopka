@@ -17,6 +17,8 @@ class UsageRecord:
     model: str
     input_tokens: int
     output_tokens: int
+    token_cost_usd: float
+    fixed_cost_usd: float
     cost_usd: float
     purpose: str
 
@@ -56,8 +58,18 @@ class BudgetLedger:
             raise ValueError(f"No local price table for model: {model}")
         return input_tokens / 1_000_000 * input_rate + output_tokens / 1_000_000 * output_rate
 
-    def record(self, model: str, input_tokens: int, output_tokens: int, purpose: str) -> UsageRecord:
-        cost = self.price(model, input_tokens, output_tokens)
+    def record(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        purpose: str,
+        *,
+        fixed_cost_usd: float = 0.0,
+    ) -> UsageRecord:
+        token_cost = self.price(model, input_tokens, output_tokens)
+        fixed_cost = max(float(fixed_cost_usd), 0.0)
+        cost = token_cost + fixed_cost
         if self.spent_usd() + cost > self.settings.budget_usd:
             raise BudgetExceeded("Provider usage would cross the configured pilot budget")
         record = UsageRecord(
@@ -65,6 +77,8 @@ class BudgetLedger:
             model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            token_cost_usd=token_cost,
+            fixed_cost_usd=fixed_cost,
             cost_usd=cost,
             purpose=purpose,
         )
