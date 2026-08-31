@@ -1,144 +1,93 @@
 # VV_knopka — LIVE PROGRESS (RU)
 
-Последнее обновление: **2026-08-31**. Подробный контекст — `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, `docs/AI_MUSIC_RU.md`, `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
+Последнее обновление: **2026-08-31**.
 
-## Реальный локальный checkpoint
-
-Подтверждено на Windows ПК пользователя:
-
+## YouTube / scheduler
 ```text
-готово локально: 16 Shorts
-YouTube receipts: 11
 published + VERIFIED_PUBLIC: slots 1–11
-pending: slots 12–16 (5)
-next generation target: slot 17 AI EN
+pending before slot-16 rebuild: slots 12–16
 OpenAI spent: $0.1885 / $10.00
+scheduler: 01:30 / 03:30 / 05:30 MSK
 ```
 
-`vv-youtube verify` для slots 1–11: `upload=processed`, `processing=succeeded`, `privacy=public`.
+Real unattended validation passed: slot 11 auto-uploaded; later `uploadLimitExceeded` was converted to persisted cooldown/defer without traceback.
 
-## Scheduler — real production validation passed
+## Music — REAL LOCAL APPROVAL COMPLETE
+ACE-Step setup/generation works on user's RTX 3060.
+All 8 tracks are approved locally:
+`cute_01/02`, `playful_01/02`, `curious_01/02`, `calm_01/02`.
 
-Task `VV Knopka Long Run`:
+Real preview feedback:
+- AI: `0.10` + ducking = accepted;
+- cats: initial `0.07` + ducking = far too quiet;
+- cats v2: `0.11` + no cat sidechain ducking = accepted.
 
-```text
-01:30 MSK
-03:30 MSK
-05:30 MSK
-Russian Standard Time (UTC+03:00)
-```
-
-Unattended flow реально подтвердил backlog-first policy:
-
-1. scheduler сам опубликовал slot 11;
-2. slot 11 стал `VERIFIED_PUBLIC`;
-3. следующая попытка получила `uploadLimitExceeded`;
-4. uploader записал cooldown без traceback;
-5. pending уменьшился до 5.
-
-Последний показанный cooldown: `2026-09-01T00:30:07.333703+00:00` (~03:30 MSK).
-
-## YouTube v2 — DONE
-
-- hashtags/CTA/`snippet.tags`;
-- metadata v2 для long-run;
-- real auto-publish semantics;
-- conditional `containsSyntheticMedia`;
-- graceful daily-limit cooldown;
-- `vv-youtube verify`;
-- `vv-youtube stats` + history;
-- `vv-youtube report` with age-aware metrics.
-
-Первый real stats sample = 11 videos; sample пока слишком мал для optimisation decisions.
-
-## AI fact-check — DONE
-
-```text
-plan candidate
- -> bounded web-search evidence check
- -> PASS => plan.json
- -> FAIL => no render / no publish
-```
-
-Стоимость включена в общий `$10` BudgetLedger.
-
-## MoneyPrinterTurbo autonomy — DONE in code
-
-`MPTProcessManager` умеет auto-start/wait/stop локальный MPT. Постоянно открытый PowerShell с MPT не является целевой зависимостью.
-
-## AI background music — REAL GENERATION PASSED / ALL 8 APPROVED
-
-На RTX 3060 пользователя:
-
-- ACE-Step 1.5 setup прошёл;
-- local API auto-start работает;
-- реальный `httpx.ReadTimeout` на long `/query_result` polling найден и исправлен;
-- timeout теперь retry'ится до общего task deadline;
-- regression test добавлен;
-- успешно сгенерированы все 8 WAV candidates;
-- пользователь **явно одобрил все 8**:
-
-```text
-cute_01.wav
-cute_02.wav
-playful_01.wav
-playful_02.wav
-curious_01.wav
-curious_02.wav
-calm_01.wav
-calm_02.wav
-```
-
-Production flag пока всё ещё OFF:
-
+Production config now:
 ```toml
 [music]
-enabled = false
-```
-
-Следующий локальный шаг — promote все 8 через `vv-music approve`, затем safe mixed-video preview. Для этого добавлен `vv-music preview`: он копирует готовый MP4, подмешивает approved track в копию и не меняет source/video config.
-
-После прослушивания preview можно решить, достаточно ли текущих уровней:
-
-```toml
+enabled = true
 ai_volume = 0.10
-cat_volume = 0.07
-ducking = true
+cat_volume = 0.11
+ai_ducking = true
+cat_ducking = false
 ```
 
-Только после этого включать production music.
+Future long-run renders may use deterministic approved music rotation. Applied AI-generated music must set synthetic-media disclosure.
 
-## Future comment feedback loop — PLANNED
-
-Пользователь предложил позже анализировать комментарии и менять BGM, если будет устойчивый негатив именно про музыку.
-
-План зафиксирован в `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`:
-
-- собирать comment history;
-- классифицировать topic отдельно от sentiment;
-- учитывать только music-related feedback для решения о BGM;
-- не реагировать на единичный негатив;
-- сначала recommendation/report, затем human-approved изменение volume/library/enable state.
-
-## CI
-
-Runtime timeout fix workflow `33429860042`:
+## Cat source repetition — REAL BUG FOUND
+User visually noticed cat #008 / slot 16 repeats several cats from #001.
+Audits proved the issue exactly:
 
 ```text
-Ubuntu: PASS
-Windows bootstrap: PASS
+slot 16 unique sources: 6
+reused recent-window sources: 0
+reused cooled-down sources: 5
+all five cooled-down sources came from slot 2 / cat #001
+fresh final source: only 1
+cooled fallback was enabled
 ```
 
-Текущий music-preview code добавлен после этого checkpoint и должен пройти свежий CI перед объявлением final green HEAD.
+Old fallback seeded old local stock oldest-first and had no total/per-history-episode cooled reuse cap. Therefore it could legally make most of a new Short from one old episode.
 
-## Следующий шаг
+### FIXED POLICY
+```toml
+cat_source_cooldown_episodes = 5
+cat_cooled_reuse_max_sources = 2
+cat_cooled_reuse_max_per_history_episode = 1
+```
 
-1. локально `git pull`;
-2. approve все 8 tracks;
-3. сделать safe preview на одном готовом cat Short и одном AI Short;
-4. прослушать громкость/ducking;
-5. если всё хорошо — включить `[music].enabled=true`;
-6. scheduler продолжает draining slots 12–16;
-7. после pending=0 validate slot 17 end-to-end.
+Implementation now:
+- fresh stock first;
+- recent five cat episodes protected;
+- max 2 cooled clips total;
+- max 1 from one old episode;
+- newest-cooled episode first;
+- fail closed if source minimum cannot be reached under these limits;
+- `source_reuse_audit.json` reports cooled reuse by history slot and rejects concentration.
 
-TikTok пока не трогать. Draft PR #1 остаётся open/draft/unmerged.
+Regression suite on anti-remake HEAD: **155 passed in 0.99s** on Ubuntu. Windows CI still needed/was running at the time of this documentation update.
+
+## Slot 16 action
+Current slot 16 is **not published** and should not be allowed to reach YouTube in its current form.
+Do not touch frozen slots 1–15.
+
+Next local procedure after green CI:
+1. `git pull`;
+2. verify no YouTube receipt for slot 16;
+3. archive existing `runtime/slots/16`, ready MP4 and upload sidecar (no destructive delete);
+4. run `vv longrun-next` so deterministic next missing slot is again 16;
+5. this full conveyor render will use strict cat-source policy + approved music + final metadata;
+6. inspect new source audits/music audit and preview output;
+7. only then leave slot 16 in pending upload queue.
+
+## Other completed blocks
+- YouTube metadata v2 / tags / hashtags / CTA;
+- upload-limit cooldown;
+- verify/stats/history/report;
+- fail-closed AI fact-check;
+- MPT auto lifecycle;
+- ACE-Step timeout retry;
+- future comment-music feedback plan in `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
+
+TikTok remains out of scope.
+Draft PR #1 remains open/draft/unmerged.
