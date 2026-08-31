@@ -79,21 +79,13 @@ class MoneyPrinterTurboClient:
                     shutil.copy2(source, destination)
                     return configured
 
-        # Non-Windows/test fallback: leave MPT on one of its bundled fonts.
         return "MicrosoftYaHeiBold.ttc"
 
     def _ffmpeg_binary(self) -> str:
         return os.getenv("IMAGEIO_FFMPEG_EXE", "").strip() or shutil.which("ffmpeg") or "ffmpeg"
 
     def _prepare_vertical_materials(self, materials: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Replace landscape local footage with 9:16 blur-fill derivatives.
-
-        MPT preserves mismatched aspect ratios by putting the source over a black
-        canvas. For Shorts that creates large black bars. We pre-render only the
-        landscape sources into portrait files: a blurred full-frame background
-        fills 9:16 while the complete original frame remains sharp in the center.
-        Portrait stock is left untouched.
-        """
+        """Replace landscape local footage with 9:16 blur-fill derivatives."""
         local_dir = self._local_videos_dir()
         local_dir.mkdir(parents=True, exist_ok=True)
         prepared: list[dict[str, Any]] = []
@@ -167,6 +159,7 @@ class MoneyPrinterTurboClient:
     ) -> str:
         video_cfg = self.settings.raw["video"]
         audio_cfg = self.settings.raw["audio"]
+        music_enabled = bool(self.settings.raw.get("music", {}).get("enabled", False))
         voice = audio_cfg["edge_voice_ru"] if language == "ru" else audio_cfg["edge_voice_en"]
         use_curated_materials = bool(materials)
         prepared_materials = self._prepare_vertical_materials(materials or []) if use_curated_materials else None
@@ -179,8 +172,6 @@ class MoneyPrinterTurboClient:
             "video_script": plan["script"],
             "video_terms": plan["search_terms"],
             "video_aspect": video_cfg["aspect"],
-            # Random mode prioritizes one segment per unique approved source and
-            # then uses later non-overlapping pieces from long sources as fallback.
             "video_concat_mode": "random" if use_curated_materials else "sequential",
             "video_transition_mode": normalize_transition(video_cfg.get("visual_transition")),
             "video_clip_duration": int(video_cfg["clip_seconds"]),
@@ -191,8 +182,11 @@ class MoneyPrinterTurboClient:
             "voice_name": voice,
             "voice_volume": 1.0,
             "voice_rate": 1.0,
+            # MPT keeps its existing random BGM while our approved library is disabled.
+            # Once [music].enabled=true, MPT's own BGM is muted and the final FFmpeg
+            # stage applies exactly one reviewed local track with our own ducking/audit.
             "bgm_type": "random",
-            "bgm_volume": float(video_cfg["bgm_volume"]),
+            "bgm_volume": 0.0 if music_enabled else float(video_cfg["bgm_volume"]),
             "subtitle_enabled": bool(video_cfg["subtitle_enabled"]),
             "subtitle_position": str(video_cfg.get("subtitle_position", "custom")),
             "custom_position": float(video_cfg.get("subtitle_custom_position", 74.0)),
