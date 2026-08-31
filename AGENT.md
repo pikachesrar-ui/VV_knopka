@@ -177,6 +177,30 @@ Implemented and real-channel validated:
 
 Do not optimize content strategy from the first tiny sample.
 
+## Published metadata backfill
+User explicitly approved adding discovery metadata to already-published pilot videos.
+Implemented safe commands:
+```powershell
+vv-youtube backfill-metadata --slots 1-11
+vv-youtube auth-metadata
+vv-youtube backfill-metadata --slots 1-11 --apply
+```
+
+Safety rules:
+- default backfill is dry-run;
+- only videos with local YouTube receipts are eligible;
+- remote current snippet is read before changes;
+- preserve remote title, category, language and all existing tags;
+- append only missing hashtags to the existing description;
+- merge hidden tags instead of replacing them;
+- never touch privacy/status, video bytes, URL, views or upload receipt;
+- `--apply` requires separate `youtube.force-ssl` OAuth permission;
+- `auth-metadata` upgrades the existing local token only after verifying it is still the same bound channel; wrong-channel auth restores the previous token and fails closed;
+- latest dry-run/apply audit is written to `runtime/youtube/metadata-backfill-latest.json`.
+
+The existing uploader/verify automation keeps its original scopes/behavior and does not require the metadata-edit scope to continue operating.
+Backfill code is awaiting/under fresh CI at this documentation checkpoint; do not call slots 1–11 updated on YouTube until the user runs the real `--apply` command and shares success output.
+
 ## AI fact-check
 Long-run AI planning is fail-closed before render:
 `candidate -> bounded web-search evidence check -> PASS/FAIL`.
@@ -194,10 +218,14 @@ See `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
 Music-related negative comments should be topic-classified separately, aggregated across multiple comments/videos, and initially produce recommendations only.
 
 ## Immediate continuation
-1. corrected slot 16 is accepted by source/music/metadata audits and remains in pending queue;
-2. scheduler continues draining slots 12–16 oldest-first;
-3. do not generate slot 17 until pending reaches zero;
-4. after backlog drains, validate slot 17 AI EN end-to-end;
-5. later optimize cat audio-first discovery so fewer Luna vision reviews are spent per accepted audible fresh clip.
+1. run/check fresh CI for YouTube metadata backfill;
+2. user local `git pull`;
+3. dry-run `vv-youtube backfill-metadata --slots 1-11` and inspect exact added tags/hashtags;
+4. if dry-run is good, run `vv-youtube auth-metadata` once and confirm bound channel;
+5. run `vv-youtube backfill-metadata --slots 1-11 --apply`, then rerun dry-run expecting `UNCHANGED`;
+6. scheduler continues draining slots 12–16 oldest-first;
+7. do not generate slot 17 until pending reaches zero;
+8. after backlog drains, validate slot 17 AI EN end-to-end;
+9. later optimize cat audio-first discovery so fewer Luna vision reviews are spent per accepted audible fresh clip.
 
 After substantive work update this file plus `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md`.
