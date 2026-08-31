@@ -2,231 +2,144 @@
 
 This file is the mandatory entry point for any new ChatGPT/Codex/agent session working on this repository.
 
-## 1. Read order
-
-Before changing code or giving status claims:
-
-1. Read this file completely.
+## Read order
+1. Read this file.
 2. Read `docs/PROJECT_HANDOFF_RU.md`.
 3. Read `docs/PROGRESS_RU.md`.
-4. For music work read `docs/AI_MUSIC_RU.md`.
-5. For future comment-feedback work read `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
-6. Check current branch/HEAD/CI and draft PR #1.
-7. Treat GitHub as source of truth for code/history.
+4. For music read `docs/AI_MUSIC_RU.md`.
+5. For future comment feedback read `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
+6. Check branch/HEAD/CI and Draft PR #1.
 
-## 2. Project goal
+GitHub is source of truth. Development branch: `mvp/pilot-scaffold`.
+Draft PR #1 must remain **open/draft/unmerged** until the user explicitly decides to merge.
 
-Automated short-form animal/nature pipeline with:
-
-- `ai_short`: original fact/story Short through MoneyPrinterTurbo;
+## Product
+Automated animal/nature Shorts pipeline:
+- `ai_short`: original animal/nature fact Short via MoneyPrinterTurbo;
 - `animal_compilation`: cat compilation via local FFmpeg.
 
-Current phase: unattended long-run generation + user-authorized YouTube publishing + verification/statistics + curated local AI music. TikTok is out of the current block.
+TikTok is out of the current block.
 
-## 3. Frozen pilot
-
-- 15 Shorts total: 8 AI + 7 cats.
+## Frozen pilot
+- 15 Shorts total, visually accepted.
 - slot 1 RU AI, slot 2 RU cats, slots 3–15 EN.
-- all 15 generated and visually accepted.
-- frozen pilot stays immutable/review-first (`pilot.auto_publish=false`).
-- do not rebuild pilot just for newer metadata.
+- frozen pilot is immutable and remains historical review-first (`pilot.auto_publish=false`).
+- do not rebuild slots 1–15 for later metadata/music/source-policy changes.
 
-## 4. Real local checkpoint — 2026-08-31
-
-Confirmed on the user's Windows PC:
-
-- ready local Shorts: **16**;
-- YouTube receipts: **11**, slots 1–11;
+## Real YouTube checkpoint — 2026-08-31
+Confirmed locally:
+- ready before slot-16 rebuild: 16 Shorts;
+- YouTube receipts: 11;
 - slots 1–11 = `VERIFIED_PUBLIC`;
-- pending uploads: **5**, slots 12–16;
-- next generation target: **slot 17 AI EN**, blocked until pending=0;
-- OpenAI ledger: **$0.1885/$10**;
-- Task Scheduler `VV Knopka Long Run` installed and Ready;
-- triggers: 01:30 / 03:30 / 05:30 MSK.
+- pending queue before rebuild: slots 12–16;
+- OpenAI ledger: `$0.1885/$10`;
+- scheduler `VV Knopka Long Run` installed, Ready, triggers 01:30/03:30/05:30 MSK.
 
-Real scheduler validation passed: slot 11 was automatically published, then next upload hit `uploadLimitExceeded`, which was converted to clean cooldown/defer behavior.
+Real unattended validation passed: scheduler auto-uploaded slot 11, then gracefully handled `uploadLimitExceeded` with persisted cooldown/defer behavior.
 
-## 5. Authorization / safety
-
-User explicitly authorized:
-
-- automatic future YouTube publishing;
-- uploading current ready backlog;
-- YouTube metadata/discovery improvements;
-- fail-closed AI fact checking;
-- preparation/use of a curated rotating AI-generated music library after track approval.
-
-Current YouTube config intentionally:
-
-```toml
-[youtube]
-enabled = true
-auto_publish = true
-privacy_status = "public"
-```
-
-Mandatory constraints:
-
-- OpenAI hard cap = **$10**;
-- no new paid provider or raised cap without explicit approval;
-- secrets/tokens stay local/ignored;
-- source/provenance/audio/geometry/vision gates remain fail-closed;
-- channel binding and upload receipts remain idempotency/safety requirements;
-- draft PR #1 stays **open/draft/unmerged** until explicit user decision.
-
-## 6. Long-run schedule
-
+## Long-run generation
 Starts at slot 16:
-
 - cycle cats, AI, cats, AI...;
 - AI EN;
 - cat languages `en,en,en,en,ru`;
-- AI subject cooldown 6;
-- cat source cooldown 5 episodes.
+- AI subject cooldown 6.
 
-Each scheduler trigger is backlog-first:
-
+Backlog-first scheduler:
 1. status;
-2. verify existing receipts;
+2. verify receipts;
 3. best-effort stats;
-4. if pending > 0: upload exactly one oldest and stop;
-5. if pending == 0: generate one next slot;
-6. upload only that newest video;
-7. deferred/failure blocks backlog growth.
+4. pending > 0 => upload exactly one oldest and stop;
+5. pending == 0 => generate one next long-run slot;
+6. upload only newest generated video;
+7. deferred/failure prevents backlog growth.
 
-## 7. YouTube v2
+## Cat source reuse policy — IMPORTANT
+The user inspected real slot 16 / cat episode #008 and found heavy repetition from episode #001.
+Audit proved:
+- 6 final sources;
+- 5 were cooled-down Pexels sources from slot 2 / cat #001;
+- fresh search contributed only one source;
+- old policy passed because it bounded only recent-window reuse, not cooled-history concentration.
 
-Implemented and real-channel validated:
+This is now treated as a product bug.
 
-- hashtags + CTA + normalized `snippet.tags`;
-- metadata v2 for long-run;
-- real auto-publish semantics;
-- conditional `containsSyntheticMedia`;
-- graceful daily upload cooldown (`DEFERRED`, exit 75);
-- `vv-youtube verify`;
-- `vv-youtube stats` + history;
-- `vv-youtube report` age-aware metrics.
-
-Do not optimize from the first tiny 11-video stats sample.
-
-## 8. AI fact-check
-
-Long-run AI plan fail-closed before render:
-
-```text
-candidate plan -> bounded web-search evidence check -> PASS/FAIL
+Current policy:
+```toml
+cat_source_cooldown_episodes = 5
+cat_cooled_reuse_max_sources = 2
+cat_cooled_reuse_max_per_history_episode = 1
 ```
 
-PASS promotes to `plan.json`; FAIL means no render/no publish. Cost is included in project-side `$10` ledger.
+Rules:
+- fresh stock always first;
+- recent 5 cat episodes stay protected;
+- cooled history may contribute max 2 clips total;
+- max 1 clip from any one older episode;
+- fallback iterates newest-cooled episode first, not oldest-first;
+- if fresh + bounded cooled history cannot reach the minimum quality/source count, fail closed rather than build a near-remake of an older compilation;
+- `source_reuse_audit.json` records cooled reuse by history slot and fails on concentration/total-limit violations.
 
-## 9. MoneyPrinterTurbo
+Existing bad slot 16 is not published and should be archived/rebuilt before its upload turn. Do not regenerate slot 17 while backlog remains.
 
-`MPTProcessManager` can start/wait/stop local MPT automatically. A permanently open MPT PowerShell window is not a product requirement.
+## AI music — production approved
+ACE-Step 1.5 local setup/generation works on user's RTX 3060.
+All 8 tracks were generated, listened to and explicitly approved:
+- `cute_01.wav`, `cute_02.wav`;
+- `playful_01.wav`, `playful_02.wav`;
+- `curious_01.wav`, `curious_02.wav`;
+- `calm_01.wav`, `calm_02.wav`.
 
-## 10. AI background music
+Real mixed-video previews were accepted:
+- AI mix: good at `ai_volume=0.10` with ducking;
+- cat first preview was too quiet;
+- cat v2 accepted at `cat_volume=0.11` with `cat_ducking=false`.
 
-Production flag remains OFF until a real mixed-video preview is approved:
-
+Current config intentionally enables reviewed music for future long-run renders:
 ```toml
 [music]
-enabled = false
+enabled = true
+ai_volume = 0.10
+cat_volume = 0.11
+ai_ducking = true
+cat_ducking = false
 ```
 
-Implemented:
+Approved local library is runtime-only and not committed. Applied AI music must propagate YouTube synthetic-media disclosure.
 
-- local generator target: ACE-Step 1.5;
-- local approved library: `runtime/assets/music/`;
-- candidates: `runtime/assets/music/candidates/`;
-- `vv-music status/list/generate-library/approve/preview`;
-- API auto-start + async polling + WAV download;
-- transient polling `ReadTimeout` retry until overall deadline;
-- deterministic rotation + cooldown;
-- quiet AI/cat levels + sidechain ducking;
-- per-slot SHA256 audit;
-- MPT BGM muted when local music is applied;
-- applied AI music can set YouTube synthetic-media disclosure.
+## YouTube v2 / observability
+Implemented and real-channel validated:
+- metadata v2, hashtags, CTA, tags;
+- conditional synthetic-media flag;
+- upload limit cooldown;
+- `vv-youtube verify`;
+- `vv-youtube stats` + append-only history;
+- `vv-youtube report` age-aware metrics.
 
-### Real local ACE-Step validation
+Do not optimize from the first tiny sample.
 
-On the user's RTX 3060 PC:
+## AI fact-check
+Long-run AI planning is fail-closed before render:
+`candidate -> bounded web-search evidence check -> PASS/FAIL`.
+FAIL means no render/no publish. Costs remain inside the project-side `$10` ledger.
 
-- official ACE-Step 1.5 setup succeeded;
-- real long `/query_result` timeout bug was found and fixed;
-- all 8 candidates generated successfully;
-- user explicitly approved **all eight**:
+## Safety
+- OpenAI hard cap `$10`;
+- no new paid providers without explicit approval;
+- secrets/tokens stay ignored/local;
+- provenance/commercial-use/audio/geometry/vision gates remain fail-closed;
+- Draft PR #1 stays open/draft/unmerged.
 
-```text
-cute_01.wav
-cute_02.wav
-playful_01.wav
-playful_02.wav
-curious_01.wav
-curious_02.wav
-calm_01.wav
-calm_02.wav
-```
+## Future comment feedback
+See `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`.
+Music-related negative comments should be topic-classified separately, aggregated across multiple comments/videos, and initially produce recommendations only. Never mutate production policy because of one negative comment.
 
-Promotion command:
+## Immediate continuation
+1. wait for current CI after cat anti-remake + music activation;
+2. local `git pull`;
+3. archive existing unuploaded slot 16 artifacts;
+4. rebuild slot 16 through `vv longrun-next` so it uses strict source policy + approved production music + final metadata;
+5. inspect new source audits and preview slot 16;
+6. keep scheduler draining slots 12–16;
+7. only after pending reaches zero allow slot 17 AI EN.
 
-```powershell
-.\.venv\Scripts\vv-music.exe approve `
-  cute_01.wav cute_02.wav `
-  playful_01.wav playful_02.wav `
-  curious_01.wav curious_02.wav `
-  calm_01.wav calm_02.wav
-```
-
-Approval does not enable production automatically.
-
-`vv-music preview` must be used to listen to the real FFmpeg mix on a copy of a finished Short before switching `music.enabled=true`.
-
-## 11. Future YouTube comment feedback
-
-User wants a later feedback loop that detects sustained negative feedback specifically about BGM and then recommends lowering/changing/disabling music.
-
-Rules are in `docs/YOUTUBE_COMMENT_FEEDBACK_RU.md`:
-
-- classify topic separately from sentiment;
-- music policy uses only music-related comments;
-- do not react to one comment;
-- aggregate across multiple comments/videos/time;
-- first stage recommendation-only;
-- no automatic production config mutation without human approval.
-
-## 12. Cat rules
-
-- local FFmpeg renderer;
-- generic cats, no voiceover;
-- original source audio primary;
-- real meow on cards;
-- no bass/drop/impact/boom SFX;
-- commercial-use provenance + audible audio + near-9:16 fail-closed;
-- minimum 5 unique usable clips;
-- Pexels/Pixabay normal automated sources;
-- frozen pilot all-history reuse protection;
-- long-run previous-5-episodes cooldown.
-
-## 13. Git / CI
-
-Development branch: `mvp/pilot-scaffold`.
-Draft PR #1 into `main` must remain draft/open/unmerged without explicit user instruction.
-
-Workflow `33429860042` for ACE-Step timeout fix: Ubuntu PASS, Windows PASS.
-
-Music-preview code was added after that workflow; check fresh CI before claiming current HEAD fully green.
-
-## 14. Immediate continuation
-
-1. local `git pull`;
-2. approve all eight tracks;
-3. run safe preview on at least one cat and one AI finished Short;
-4. user listens to actual volume/ducking;
-5. only after approval enable `[music].enabled=true`;
-6. scheduler continues draining slots 12–16;
-7. after pending=0 validate slot 17 end-to-end.
-
-TikTok remains a later block.
-
-## 15. Context persistence
-
-After substantive work update `AGENT.md`, `docs/PROJECT_HANDOFF_RU.md`, and `docs/PROGRESS_RU.md`.
+After substantive work update this file plus `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md`.
