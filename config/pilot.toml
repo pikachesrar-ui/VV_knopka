@@ -107,17 +107,21 @@ meow_volume = 0.90
 transition_sfx = "soft_meow"
 
 [music]
-# Infrastructure is ready, but production mixing remains off until the initial
-# locally generated ACE-Step tracks are listened to and approved.
+# Infrastructure is ready, but production mixing remains off until the final
+# local preview is accepted. All 8 ACE-Step tracks have been approved by the user.
 enabled = false
 library_dir = "runtime/assets/music"
 cooldown_shorts = 5
 ai_generated = true
 generator = "ACE-Step"
-# Existing voice/source audio remains primary. These are intentionally quiet.
+# AI narration benefits from sidechain ducking. Cat compilations carry nearly
+# continuous source audio, so cat BGM uses a slightly higher fixed background level
+# without sidechain compression; original cat/source audio still remains at full level.
 ai_volume = 0.10
-cat_volume = 0.07
+cat_volume = 0.11
 ducking = true
+ai_ducking = true
+cat_ducking = false
 
 [materials]
 ai_material_count = 8
