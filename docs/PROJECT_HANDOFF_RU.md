@@ -18,14 +18,16 @@ GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft 
 - slot 16 EN cats / #008 готов локально;
 - всего ready локально: **16**;
 - YouTube OAuth и channel binding работают;
-- slots **1–10** реально опубликованы через API;
-- для показанных receipts `requested_privacy=public`, `actual_privacy=public`;
-- pending queue = **6**, slots 11–16;
-- следующий generation target = slot 17 AI EN, но backlog-first policy блокирует его до pending=0.
+- slots **1–11** реально опубликованы через API;
+- `vv-youtube verify`: slots 1–11 = **VERIFIED_PUBLIC**;
+- для всех 1–11: `upload=processed`, `processing=succeeded`, `privacy=public`;
+- pending queue = **5**, slots 12–16;
+- следующий generation target = slot 17 AI EN, но backlog-first policy блокирует его до pending=0;
+- текущий local OpenAI ledger = **$0.1885 / $10.00**.
 
 Реальный канал: `Knopka322`.
 
-## Windows scheduler
+## Windows scheduler — реальная production-проверка пройдена
 
 Task `VV Knopka Long Run` реально установлен и `Ready`.
 
@@ -37,6 +39,21 @@ Timezone: Russian Standard Time (UTC+03:00)
 ```
 
 PowerShell не нужно держать открытым. ПК должен быть включён, Windows user logged in; sleep/hibernation могут помешать.
+
+Ночной run подтвердил настоящий unattended flow:
+
+1. scheduler самостоятельно upload'нул **slot 11**;
+2. slot 11 после YouTube processing стал `VERIFIED_PUBLIC`;
+3. следующая попытка получила `uploadLimitExceeded`;
+4. graceful uploader сохранил cooldown без traceback;
+5. status показал:
+
+```text
+pending ready uploads: 5
+upload limit cooldown until: 2026-09-01T00:30:07.333703+00:00
+```
+
+Это примерно **03:30 MSK 2026-09-01**. До этого времени uploader не должен повторно обращаться к upload endpoint.
 
 Каждый trigger:
 
@@ -53,13 +70,6 @@ PowerShell не нужно держать открытым. ПК должен б
 
 ## YouTube daily limit
 
-Первая ручная bulk upload успела успешно отправить slots 1–10, затем YouTube вернул:
-
-```text
-400 uploadLimitExceeded
-The user has exceeded the number of videos they may upload.
-```
-
 Это channel-level YouTube daily limit, не Google Cloud quota.
 
 Текущий uploader:
@@ -71,6 +81,8 @@ The user has exceeded the number of videos they may upload.
 - conservative retry-not-before +24h;
 - не hammer'ит upload endpoint во время cooldown;
 - использует receipts как idempotency source of truth.
+
+Graceful-limit path теперь подтверждён на реальном scheduler.
 
 ## YouTube metadata v2
 
@@ -91,13 +103,14 @@ Conditional disclosure:
 - applied AI-generated music автоматически делает disclosure recommended/true;
 - blanket marking любого AI assistance запрещён как продуктовая policy.
 
-## Post-upload verification + stats
+## Post-upload verification + stats + report
 
 Commands:
 
 ```powershell
 .\.venv\Scripts\vv-youtube.exe verify
 .\.venv\Scripts\vv-youtube.exe stats
+.\.venv\Scripts\vv-youtube.exe report
 ```
 
 `verify` проверяет:
@@ -110,7 +123,16 @@ Commands:
 
 Failed/missing публикация fail-closed для scheduler.
 
-`stats` сохраняет views/likes/comments snapshots. Это observational data; failure stats collection сам по себе не блокирует publication.
+`stats` сохраняет views/likes/comments snapshots и append-only local history.
+
+`report` считает age-aware metrics:
+
+- views/hour;
+- likes per 1000 views;
+- comments per 1000 views;
+- AI vs animal_compilation aggregates.
+
+Первый real snapshot = 11 videos, sample пока очень маленький; использовать его для серьёзной оптимизации рано. На момент проверки slot 5 `How Ants Build Invisible Highways` имел 12 views и был top by age-adjusted views/hour.
 
 ## AI fact-check gate
 
@@ -184,10 +206,17 @@ enabled = false
 
 Guide: `docs/AI_MUSIC_RU.md`.
 
-Local bootstrap later:
+Local bootstrap now:
 
 ```powershell
+cd D:\KiraS\VV_knopka
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
+.\.venv\Scripts\vv-music.exe status
+```
+
+Then first candidate generation:
+
+```powershell
 .\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
 ```
 
@@ -212,56 +241,34 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
 ## Budget/safety
 
 - OpenAI hard cap **$10** unchanged;
-- last explicitly shown real local ledger before this block ~`$0.1885/$10`;
+- current local ledger explicitly confirmed `$0.1885/$10`;
 - no new paid providers without explicit approval;
 - secrets under `.env`/`runtime/`, never commit;
 - ACE-Step generated audio must still be reviewed for quality/originality; do not make blanket copyright guarantees.
 
-## CI — final code checkpoint
-
-After implementing YouTube v2, fact-check, MPT lifecycle improvements and safe ACE-Step candidate workflow:
+## CI — latest green code checkpoint
 
 ```text
-head: 6def0e462c17eb5f6b536d7d3446daee21ebecf8
-workflow: 33419061821
-pytest: 146 passed in 0.93s
+head: 936bd0956ad0c08fb236c1a97aada6ff0464e88d
+workflow: 33419768393
+pytest: 147 passed in 0.90s
 Ubuntu: PASS
 Windows bootstrap: PASS
 Windows scheduler dry-run: PASS
 Windows ACE-Step setup/start dry-run: PASS
 ```
 
-One earlier run caught only a test-fixture `FileExistsError`; after fixing the redundant mkdir, fresh full CI is green.
+Operational documentation commits after this checkpoint move branch HEAD.
 
-Documentation commits after this code checkpoint move branch HEAD, so final docs HEAD should also be observed before claiming all-current HEAD green.
+## Следующий meaningful checkpoint
 
-## Следующий meaningful checkpoint требует локального ПК
-
-Fresh code first:
-
-```powershell
-cd D:\KiraS\VV_knopka
-git pull
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-```
-
-Then real YouTube check:
-
-```powershell
-.\.venv\Scripts\vv-youtube.exe verify
-.\.venv\Scripts\vv-youtube.exe stats
-```
-
-Then optional/next music checkpoint:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1
-.\.venv\Scripts\vv-music.exe generate-library --count 8 --duration 45
-```
-
-Пользователь должен прослушать candidates и выбрать хорошие. До этого `music.enabled=false`.
-
-После pending=0 первый unattended slot 17 должен пройти:
+1. scheduler продолжает draining slots 12–16 under cooldown/backlog-first policy;
+2. пользователь локально устанавливает/запускает ACE-Step;
+3. генерируются 8 candidate WAVs;
+4. пользователь прослушивает и выбирает хорошие;
+5. selected tracks approve, но `music.enabled=false` остаётся до отдельного решения;
+6. затем controlled music ON vs OFF comparison;
+7. после pending=0 первый unattended slot 17 должен пройти:
 
 `plan -> fact-check -> MPT auto-start -> curated stock -> render -> metadata v2 -> YouTube -> verify/stats`.
 
