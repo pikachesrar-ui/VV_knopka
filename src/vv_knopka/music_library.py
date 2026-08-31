@@ -214,9 +214,13 @@ def prepare_music_for_slot(
     video: Path | None = None,
 ) -> Path | None:
     """Select/audit a track; optionally apply it when a final video is supplied."""
+    if not music_enabled(settings):
+        return None
     track = select_background_track(settings, slot=slot, pipeline=pipeline)
     if track is None:
-        return None
+        raise RuntimeError(
+            f"Background music is enabled but no approved audio tracks were found in {music_library_dir(settings)}."
+        )
     applied = video is not None
     if video is not None:
         mix_background_music(settings, video=video, track=track, pipeline=pipeline)
