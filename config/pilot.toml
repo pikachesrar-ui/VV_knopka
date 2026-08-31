@@ -99,6 +99,10 @@ card_wrap_chars = 18
 require_source_audio = true
 min_source_mean_volume_db = -55.0
 source_audio_volume = 1.0
+# Remote stock is now measured for actual audio level before it can consume a Luna
+# visual-review call. A small unknown tail remains for CDN/probe failures only.
+remote_audio_probe_seconds = 6.0
+remote_audio_unknown_max_candidates = 12
 # Cat source footage must already be vertical and close to 9:16. Width/height ratio
 # may differ by at most 0.08 from 9/16; landscape and visibly-wide portrait clips fail closed.
 source_aspect_tolerance = 0.08
