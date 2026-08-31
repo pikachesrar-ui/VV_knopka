@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .settings import load_settings
-from .youtube_observability import collect_statistics, verify_receipts
+from .youtube_observability import build_performance_report, collect_statistics, verify_receipts
 from .youtube_uploader import (
     active_upload_limit,
     authorize_and_bind,
@@ -29,6 +29,8 @@ def main() -> None:
     sub.add_parser("pending-count")
     sub.add_parser("verify", help="Verify processing/privacy state of uploaded receipt videos")
     sub.add_parser("stats", help="Collect current views/likes/comments for uploaded receipt videos")
+    report = sub.add_parser("report", help="Rank latest YouTube stats using age-aware performance metrics")
+    report.add_argument("--limit", type=int, default=10)
 
     upload = sub.add_parser("upload-ready")
     upload.add_argument("--limit", type=int, default=None)
@@ -93,6 +95,33 @@ def main() -> None:
             print(
                 f"slot {item['slot']}: {item['views']} views | "
                 f"{item['likes']} likes | {item['comments']} comments | {item.get('title')}"
+            )
+        return
+
+    if args.command == "report":
+        performance = build_performance_report(settings)
+        videos = performance.get("videos") or []
+        pipelines = performance.get("pipelines") or {}
+        if not videos:
+            print("No local YouTube statistics snapshot yet. Run `vv-youtube stats` first.")
+            return
+        print(
+            f"YouTube performance report | stats={performance.get('statistics_collected_at')} | "
+            f"{performance.get('channel_title', '')}"
+        )
+        for name, item in sorted(pipelines.items()):
+            print(
+                f"{name}: {item['videos']} videos | avg views={item['average_views']:.1f} | "
+                f"avg views/hour={item['average_views_per_hour']:.2f} | "
+                f"likes/1k={item['average_likes_per_1000_views']:.2f} | "
+                f"comments/1k={item['average_comments_per_1000_views']:.2f}"
+            )
+        print("Top by age-adjusted views/hour:")
+        for item in videos[: max(int(args.limit), 0)]:
+            print(
+                f"slot {item['slot']}: {item['views']} views | {item['views_per_hour']:.2f}/h | "
+                f"likes/1k={item['likes_per_1000_views']:.2f} | age={item['age_hours']:.1f}h | "
+                f"{item.get('title')}"
             )
         return
 
