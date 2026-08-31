@@ -72,14 +72,14 @@ def test_ensure_mpt_autostarts_only_when_endpoint_is_offline(monkeypatch):
         lambda settings: starts.append(settings) or FakeProcess(),
     )
 
+    settings = DummySettings()
     mpt_health.ensure_mpt_available(
-        DummySettings(),
+        settings,
         startup_timeout_seconds=1,
         poll_seconds=0.01,
     )
 
-    assert starts == [pytest.approx(starts[0])] if False else starts
-    assert len(starts) == 1
+    assert starts == [settings]
 
 
 def test_ensure_mpt_does_not_start_second_server_on_http_5xx(monkeypatch):
