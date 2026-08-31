@@ -5,21 +5,23 @@
 ## YouTube / scheduler
 ```text
 published + VERIFIED_PUBLIC: slots 1–11
-active ready backlog after archiving bad slot 16: slots 12–15
-replacement long-run target: slot 16 cats EN
+ready local: 16
+active pending: slots 12–16 (5)
+next generation after pending=0: slot 17 AI EN
 OpenAI spent last shown: $0.1885 / $10.00
 scheduler: 01:30 / 03:30 / 05:30 MSK
 ```
 
 Real unattended validation passed: slot 11 auto-uploaded; later `uploadLimitExceeded` was converted to persisted cooldown/defer without traceback.
 
-Bad unuploaded slot 16 is safely archived at:
+Bad first slot 16 is safely archived at:
 `runtime/backups/slot-16-before-rebuild-20260831-231504`.
+Corrected replacement slot 16 is now active in ready queue.
 
-## Music — REAL LOCAL APPROVAL COMPLETE
-ACE-Step setup/generation works on user's RTX 3060. All 8 tracks are approved locally.
+## Music — REAL LOCAL APPROVAL + APPLICATION COMPLETE
+ACE-Step works on user's RTX 3060. All 8 tracks are approved locally.
 
-Accepted real preview profiles:
+Accepted profiles:
 ```toml
 [music]
 enabled = true
@@ -29,10 +31,22 @@ ai_ducking = true
 cat_ducking = false
 ```
 
-Future long-run renders use deterministic approved rotation; applied AI-generated music propagates synthetic-media disclosure.
+Replacement slot 16 real audit:
+```text
+track: curious_02.wav
+applied_to_video: true
+music volume: 0.11
+ducking: false
+```
 
-## Cat source repetition — fixed anti-remake policy
-Original slot 16 / cat #008 had 5/6 clips reused from cat #001.
+Upload metadata correctly contains:
+```text
+metadata_version: 2
+contains_synthetic_media: true
+```
+
+## Cat source repetition — FIXED AND REAL-VALIDATED
+Original #008 had 5/6 clips reused from #001.
 
 Current limits:
 ```toml
@@ -41,62 +55,66 @@ cat_cooled_reuse_max_sources = 2
 cat_cooled_reuse_max_per_history_episode = 1
 ```
 
-## Replacement attempt — fail-closed worked correctly
-After archiving old slot 16, real `vv longrun-next` stopped instead of making another remake:
-
+Corrected replacement slot 16 succeeded with:
 ```text
-first pass: 1/5 usable
-with bounded cooled fallback: 3/5 usable
-no replacement MP4 produced
+6 unique clips
+4 fresh
+2 cooled total
+1 cooled from slot 2
+1 cooled from slot 4
+0 protected-window repeats
+recent_reuse_passed: true
+cooled_reuse_passed: true
+passed: true
 ```
 
-Detailed source audit:
+Fresh Pexels IDs:
+`4427731`, `10467051`, `14326398`, `14927525`.
+
+Cooled IDs:
+`10358235` (slot 2), `5335581` (slot 4).
+
+## Cat source v6 — AUDIO-FIRST WORKING
+Current `vv` uses `animal_audio_sources_v6`.
+
+Real replacement audit:
 ```text
-Pexels candidates: 59
-vision reviewed: 59
-vision approved: 56
-audio accepted from those new candidates: 0
-rejection reason: 56 × downloaded file is missing audible audio
-selected after fallback: 3
+remote audibility gate: enabled
+audio-before-vision: true
+PEXELS_API_KEY present: true
+PIXABAY_API_KEY present: true
+reused_audio_sources: 3
+Pexels candidates: 54
+vision reviewed: 54
+vision approved: 51
+new Pexels audio accepted: 3
 Pixabay candidates: 0
 ```
 
-Conclusion: Luna/visual relevance and 9:16 geometry were not the bottleneck. The dominant problem is silent stock footage.
+Pexels alone completed the target before Pixabay fallback was required.
 
-## Cat source v6 — IMPLEMENTED, CI validation in progress
-Current `vv` path now uses `animal_audio_sources_v6`.
+The run proves correctness of:
+- audio-first gate;
+- anti-remake fallback limits;
+- retry-safe cooled reuse;
+- music final mix;
+- metadata v2 synthetic disclosure.
 
-Changes:
-- actual audibility check happens before Luna vision review;
-- FFmpeg measures remote mean volume only after audio stream is confirmed;
-- confirmed-silent files never consume Luna review calls;
-- remote probe failures are capped to 12 unknown fresh candidates/provider;
-- remote cooled-history candidates are excluded; cooled reuse remains only bounded local fallback;
-- retry cannot stack a second cooled batch on top of an existing cooled fallback;
-- failure audits now include deep-search/audibility diagnostics;
-- `provider_availability` records only boolean Pexels/Pixabay key presence.
+Remaining non-blocking optimization: `vision_reviewed=54` is still high relative to 3 newly accepted audible clips. Later improve source/cache/audio prefilter efficiency without weakening audio, geometry, provenance or anti-repeat gates.
 
-Config:
-```toml
-remote_audio_probe_seconds = 6.0
-remote_audio_unknown_max_candidates = 12
+Latest green code checkpoint for v6:
+```text
+6e94b5d54309955a10ae2c499bd36e3db91f4320
+Ubuntu: PASS
+Windows bootstrap: PASS
+160 tests passed
 ```
 
-Regression tests for v6 were added. Await final Ubuntu + Windows CI on the latest code/docs HEAD before declaring the checkpoint fully green.
-
-## Next local step after green CI
-```powershell
-git pull
-.\.venv\Scripts\vv.exe longrun-next
-```
-
-Before/after the run, check provider availability without printing secrets. If the run fails again, inspect:
-- `remote_audibility_gate`;
-- `provider_availability`;
-- Pexels/Pixabay stats;
-- rejection reasons.
-
-Do not loosen anti-repeat, audible-audio or 9:16 gates merely to force a render.
+## Next operational step
+No more manual slot-16 rebuild is needed.
+Scheduler should continue backlog-first uploads of slots 12–16.
+Do **not** generate slot 17 while pending > 0.
+After backlog reaches zero, validate slot 17 AI EN end-to-end.
 
 ## Other completed blocks
 - YouTube metadata v2 / tags / hashtags / CTA;
