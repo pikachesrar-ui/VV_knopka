@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - mvp/pilot-scaffold
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Test
+        run: pytest -q
+      - name: Verify safety lock and long-run schedule
+        run: |
+          vv status
+          vv longrun-next --dry-run
+
+  windows-bootstrap:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Put Python 3.10 on PATH to reproduce the reported machine state
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.6"
+      - name: Install uv fallback
+        uses: astral-sh/setup-uv@v6
+      - name: Run Windows bootstrap
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
+      - name: Verify venv Python, safety lock and long-run schedule
+        shell: powershell
+        run: |
+          .\.venv\Scripts\python.exe -c "import sys; assert sys.version_info >= (3,11); print(sys.version)"
+          .\.venv\Scripts\vv.exe status
+          .\.venv\Scripts\vv.exe longrun-next --dry-run
+          .\.venv\Scripts\vv-music.exe status
+      - name: Verify Windows scheduler and ACE-Step helpers in dry-run mode
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\scripts\run-longrun-task.ps1 -DryRun
+          powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -DryRun
+          powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "12:00" -DryRun
+          powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1 -DryRun
+          powershell -ExecutionPolicy Bypass -File .\scripts\start-acestep-api.ps1 -DryRun
