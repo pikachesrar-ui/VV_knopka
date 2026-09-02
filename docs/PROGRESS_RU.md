@@ -4,40 +4,48 @@
 
 ## Current YouTube state
 ```text
-published + VERIFIED_PUBLIC: slots 1–11
-published metadata backfill: slots 1–11 DONE and final dry-run UNCHANGED
-pending metadata upgrade: slots 12–15 DONE locally before first upload
-ready local: through slot 16
-pending now: slots 12–16 (5 uploads)
+published: slots 1–12
+VERIFIED_PUBLIC confirmed before latest upload: slots 1–11
+slot 12 real scheduler upload: public/public
+pending now: slots 13–16 (4 uploads)
 next generation after pending=0: slot 17 AI EN
 OpenAI spent last shown: $0.2024 / $10.00
 scheduler: 01:30 / 03:30 / 05:30 MSK
 ```
 
-Scheduler is backlog-first: one oldest upload per trigger; only when pending reaches zero does it generate one next slot and upload it.
+Slot 12 URL:
+`https://www.youtube.com/watch?v=nrGanPLeVps`
 
-## Scheduler incident 2026-09-02 — FIXED IN BRANCH, LOCAL PULL REQUIRED
-Real unattended logs showed:
-- 2026-08-31 01:30: slot 11 uploaded successfully;
-- 2026-08-31 03:30: slot 12 correctly deferred by YouTube `uploadLimitExceeded` and a persisted cooldown was written;
-- after the cooldown expired, triggers on 2026-09-01 and 2026-09-02 verified slots 1–11 as `VERIFIED_PUBLIC` but then terminated immediately after verification with `ERROR: Traceback (most recent call last):`;
-- pending remained exactly 5, so slots 12–16 were not uploaded and slot 17 was not generated.
+Scheduler remains backlog-first: one oldest upload per trigger; only when pending reaches zero does it generate one next slot and upload it.
 
-Manual `vv-youtube stats` on 2026-09-02 succeeded and wrote a fresh `runtime/youtube/statistics.json`. The snapshot contained Cyrillic and emoji titles (for example cat titles with `😹`). This isolates the unattended failure to Windows Task Scheduler/native-output handling rather than the YouTube statistics API itself.
+## Scheduler incident 2026-09-02 — REAL RECOVERY VALIDATED
+Earlier unattended runs were blocked after successful `verify` because Windows Task Scheduler/native output handling terminated the runner before backlog upload. Manual `vv-youtube stats` proved the API/statistics path itself was healthy.
 
 Fix in `scripts/run-longrun-task.ps1`:
-- force `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` for scheduled `vv`/`vv-youtube` processes;
-- set PowerShell output encoding to UTF-8 where the host permits it;
-- capture native stderr with temporary `ErrorActionPreference=Continue`, then make fail-closed decisions from the real process exit code;
-- preserve `stats` as best-effort: a stats/output failure logs `WARN` and must not block backlog publication;
-- `verify`, pending-count, generation and upload failures remain blocking exactly as before.
+- `PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1`;
+- UTF-8 PowerShell output where supported;
+- native stderr captured without letting `ErrorActionPreference=Stop` kill the runner before `$LASTEXITCODE` is inspected;
+- stats remains best-effort;
+- verify/pending/upload/generation remain fail-closed.
 
-Regression coverage: `tests/test_scheduler_runner.py` checks the UTF-8/best-effort invariants.
+Regression coverage: `tests/test_scheduler_runner.py`.
 
-Because the installed scheduled task explicitly does **no git pull**, the Windows checkout must pull the latest `mvp/pilot-scaffold` before the fixed runner is used locally.
+Real Windows run after pull:
+```text
+03:34:54 START
+verify slots 1–11: VERIFIED_PUBLIC
+stats: SUCCESS, 11 videos
+pending before: 5
+03:35:32 UPLOADED slot 12 requested=public actual=public
+pending after: 4
+BACKLOG: handled one pending upload; 4 remain
+```
+Therefore the scheduler fix is operationally validated, not just CI-tested.
+
+One emoji in slot 10 title rendered as `�` in the scheduler text log. This is cosmetic only: stats completed and the upload continued successfully.
 
 ## First real statistics sample — do not optimize yet
-Manual snapshot on 2026-09-02:
+Snapshot immediately before slot 12 upload:
 ```text
 slot 1: 0 views
 slot 2: 6
@@ -54,33 +62,12 @@ slot 11: 8
 This sample is still too small/young for content-strategy conclusions.
 
 ## Published metadata backfill — REAL COMPLETE
-User ran real apply for slots 1–11.
-Initial result: 11/11 UPDATED.
-Second validation:
-- slots 1–6, 8–11 immediately UNCHANGED;
-- slot 7 briefly re-reported missing hidden tags due to YouTube propagation;
-- subsequent apply/dry-run for slot 7 returned UNCHANGED;
-- final state: all slots 1–11 require no further tags/hashtags changes.
+Slots 1–11 already have hidden tags + hashtags remotely; final dry-run was UNCHANGED for all.
 
-No reuploads occurred. URL/views/privacy/status/video bytes remained untouched.
-
-## Pending slots 12–15 discovery metadata — REAL COMPLETE
-User ran the sidecar-only upgrade before any of these four videos had a YouTube receipt.
-
-```text
-APPLY summary: 4 pending sidecars | changed=4 | applied=4
-```
-
-A subsequent published backfill attempt for slots 12–15 returned:
-```text
-No uploaded receipt videos matched the requested slots.
-```
-So none of 12–15 had been published before the sidecar upgrade. Their first normal scheduler uploads will include metadata v2 hidden tags + hashtags directly.
+## Pending legacy metadata upgrade — REAL COMPLETE
+Slots 12–15 were upgraded locally to metadata v2 before first upload. Slot 12 has now been published successfully from that upgraded sidecar. Slots 13–15 remain pending; slot 16 was generated natively under metadata v2.
 
 ## Slot 16 — fixed and accepted
-Bad first #008 archived at:
-`runtime/backups/slot-16-before-rebuild-20260831-231504`.
-
 Corrected replacement:
 ```text
 6 unique clips
@@ -104,7 +91,6 @@ cat_cooled_reuse_max_per_history_episode = 1
 ```
 
 Current source pipeline uses audio-first gating and fails closed instead of creating near-remakes.
-Later non-blocking optimization: reduce Luna reviews per accepted fresh audible clip.
 
 ## Music
 All 8 ACE-Step tracks approved and production-enabled.
@@ -118,16 +104,17 @@ cat_ducking = false
 ```
 
 ## Autonomous continuation
-After the local checkout receives the scheduler fix:
-- scheduler should resume draining pending slots 12–16 oldest-first;
-- when pending becomes zero, it generates slot 17 AI EN;
+Current expected sequence:
+- next trigger uploads slot 13;
+- then 14;
+- then 15;
+- then 16;
+- when pending becomes zero, scheduler generates slot 17 AI EN automatically;
 - AI uses fact-check + automatic MoneyPrinterTurbo lifecycle;
 - cats use local FFmpeg + source gates;
 - both get approved ACE-Step music and metadata v2 tags/hashtags;
-- upload/verify/stats continue automatically;
-- process repeats until a safety/failure gate stops it or OpenAI ledger reaches `$10`.
+- upload/verify/stats continue automatically until a safety/failure gate stops it or OpenAI ledger reaches `$10`.
 
-Already-ready backlog can still upload after generation budget is exhausted because backlog handling occurs before new generation.
-
+Do not manually generate slot 17 while pending > 0.
 TikTok remains out of scope.
 Draft PR #1 remains open/draft/unmerged.
