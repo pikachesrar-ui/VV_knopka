@@ -9,38 +9,54 @@ TikTok пока не трогать.
 
 ## Реальный checkpoint — 2026-09-02
 - frozen pilot slots 1–15 визуально принят; MP4 slots 1–15 не ререндерить;
-- slots 1–11 опубликованы и `VERIFIED_PUBLIC`;
+- slots 1–12 опубликованы; slots 1–11 были `VERIFIED_PUBLIC` до последнего upload, slot 12 успешно загружен `public` в реальном scheduler run 2026-09-02 03:35 MSK;
 - slots 1–11 metadata backfill завершён и финальный dry-run был UNCHANGED;
 - slots 12–15 были upgraded locally to metadata v2 before first upload;
 - replacement slot 16 прошёл source/music/metadata audits;
-- pending сейчас: slots 12–16, ровно 5 uploads;
+- pending после успешного recovery run: slots 13–16, ровно 4 uploads;
 - slot 17 ещё не создан, что корректно при backlog-first;
 - next generation after pending=0: slot 17 AI EN;
 - OpenAI ledger последний показанный `$0.2024/$10`;
 - scheduler `VV Knopka Long Run`: 01:30/03:30/05:30 MSK.
 
-## Scheduler incident — 2026-09-02
+Slot 12 real upload after fix:
+`https://www.youtube.com/watch?v=nrGanPLeVps`
+requested=`public`, actual=`public`.
+
+## Scheduler incident — 2026-09-02 — REAL FIX VALIDATED
 Реальные Windows логи показали:
 - 2026-08-31 01:30 slot 11 успешно uploaded public;
 - 2026-08-31 03:30 slot 12 получил ожидаемый `uploadLimitExceeded`, был создан persisted cooldown;
-- после истечения cooldown все последующие unattended triggers успешно делали `verify` slots 1–11, затем падали сразу после verify с первой строкой Python traceback;
-- backlog не менялся: slots 12–16 остались pending, slot 17 не генерировался.
+- после истечения cooldown unattended triggers успешно делали `verify` slots 1–11, затем падали сразу после verify с первой строкой Python traceback;
+- backlog не менялся: slots 12–16 оставались pending, slot 17 не генерировался.
 
-Manual `vv-youtube stats` 2026-09-02 успешно получил и сохранил статистику для 11 videos. Snapshot содержит Unicode titles с кириллицей и emoji (`😹`). Следовательно API/statistics path исправен; проблема локализована в Windows Task Scheduler/native stdout-stderr encoding/PowerShell pipeline handling.
+Manual `vv-youtube stats` 2026-09-02 успешно получил и сохранил статистику для 11 videos. Snapshot содержал Unicode titles с кириллицей и emoji (`😹`). Проблема была локализована в Windows Task Scheduler/native stdout-stderr encoding/PowerShell pipeline handling.
 
 Исправление в ветке:
-- `scripts/run-longrun-task.ps1` теперь force-ит `PYTHONIOENCODING=utf-8` и `PYTHONUTF8=1`;
+- `scripts/run-longrun-task.ps1` force-ит `PYTHONIOENCODING=utf-8` и `PYTHONUTF8=1`;
 - PowerShell output encoding выставляется UTF-8 where possible;
 - redirected native stderr собирается при временном `ErrorActionPreference=Continue`, после чего решение принимается по реальному `$LASTEXITCODE`;
 - stats остаётся best-effort: даже если stats/output упал, scheduler пишет WARN и продолжает backlog publication;
 - verify/pending/upload/generation gates остаются fail-closed.
 
-Добавлен regression test `tests/test_scheduler_runner.py`.
+Regression test: `tests/test_scheduler_runner.py`.
 
-ВАЖНО: installed Windows task делает **no git pull**. Поэтому перед следующей локальной проверкой пользователь должен получить latest `mvp/pilot-scaffold` через `git pull --ff-only`. Никакого reinstall task не требуется: task указывает на тот же `scripts/run-longrun-task.ps1`, поэтому после pull автоматически использует исправленный файл.
+Реальная валидация после локального `git pull --ff-only`:
+```text
+2026-09-02 03:34:54 START
+verify slots 1–11: VERIFIED_PUBLIC
+stats: SUCCESS, 11 videos
+pending before: 5
+youtube-backlog: UPLOADED slot 12 ... requested=public actual=public
+pending after: 4
+BACKLOG: handled one pending upload; 4 remain
+```
+То есть incident закрыт: scheduler снова проходит observability и реально drains backlog oldest-first.
+
+В одном scheduler-log title slot 10 emoji отобразился как replacement glyph (`�`), но это cosmetic log rendering only: процесс не упал, stats snapshot и upload продолжились. Не считать это publication blocker.
 
 ## First real stats sample — only telemetry
-Manual snapshot 2026-09-02:
+Snapshot 2026-09-02 перед slot 12 upload:
 ```text
 slot 1: 0 views
 slot 2: 6
@@ -67,7 +83,7 @@ Do not optimize content strategy from this tiny/young sample.
 
 Backfill не меняет video bytes, URL, views, privacy/status или title.
 
-### Ещё не опубликованные slots 12–15 — DONE
+### Legacy pending slots 12–15 — metadata upgrade DONE
 Пользователь выполнил:
 ```powershell
 vv-youtube upgrade-pending-metadata --slots 12-15 --apply
@@ -78,15 +94,7 @@ vv-youtube upgrade-pending-metadata --slots 12-15 --apply
 APPLY summary: 4 pending sidecars | changed=4 | applied=4
 ```
 
-Команда:
-- работает только с ready `.upload.json` без YouTube receipt;
-- добавляет/merge-ит hidden `youtube_tags`;
-- дописывает отсутствующие hashtags в `youtube_description`;
-- записывает `youtube_hashtags` и `metadata_version=2`;
-- сохраняет all unrelated sidecar fields;
-- не трогает MP4;
-- делает backup исходного sidecar в `runtime/youtube/pending-metadata-backups/`;
-- published slots автоматически пропускает.
+Команда изменила только sidecars, сохранила MP4 bytes и подготовила metadata v2 до первой публикации. Slot 12 уже был успешно опубликован scheduler после этого upgrade; slots 13–15 остаются в pending queue вместе со slot 16.
 
 ## Autonomous scheduler behavior
 Каждый trigger:
@@ -98,7 +106,8 @@ APPLY summary: 4 pending sidecars | changed=4 | applied=4
 6. render одного следующего slot;
 7. upload только нового newest slot.
 
-Таким образом backlog не растёт. Когда текущие готовые ролики закончатся, pipeline сам начнёт генерировать новые.
+Текущий ожидаемый drain после recovery:
+`13 -> 14 -> 15 -> 16`, затем pending=0 и automatic slot 17 AI EN.
 
 AI slots:
 - план + fact-check;
@@ -172,9 +181,8 @@ Replacement slot 16 used `curious_02.wav`, volume 0.11, ducking false.
 - TikTok out of current scope.
 
 ## Immediate continuation
-1. pull latest `mvp/pilot-scaffold` locally so the installed scheduler sees the UTF-8 fix;
-2. verify one real scheduler run reaches `youtube-stats`, then `youtube-pending`, then uploads oldest pending slot 12;
-3. leave scheduler autonomous after that;
-4. it drains 12–16 oldest-first;
-5. after pending=0 generates slot 17 AI EN automatically;
-6. do not manually generate slot 17 while backlog remains.
+1. не делать manual upload/generation без новой ошибки;
+2. оставить scheduler автономно drains slots 13–16 oldest-first;
+3. после pending=0 он должен автоматически создать slot 17 AI EN и затем загрузить его;
+4. через несколько triggers проверить receipts/logs/OpenAI ledger/stats;
+5. не merge Draft PR #1 без явной команды пользователя.
