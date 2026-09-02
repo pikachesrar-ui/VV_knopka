@@ -5,6 +5,21 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Task Scheduler can launch Windows PowerShell/Python without an interactive UTF-8
+# console. YouTube titles may contain Cyrillic and emoji, so force UTF-8 for Python
+# native-command output before anything is piped into the scheduler log.
+$env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = $Utf8NoBom
+try {
+    [Console]::OutputEncoding = $Utf8NoBom
+}
+catch {
+    # A scheduled/background PowerShell host may not expose a normal console handle.
+    # PYTHONIOENCODING/PYTHONUTF8 above are the important guarantees for vv executables.
+}
+
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $SchedulerDir = Join-Path $ProjectRoot "runtime\scheduler"
 $LogPath = Join-Path $SchedulerDir "longrun-task.log"
@@ -27,13 +42,35 @@ function Invoke-Logged {
         [Parameter(Mandatory = $true)][string]$Exe,
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
-    & $Exe @Arguments 2>&1 | ForEach-Object { Write-TaskLog ("{0}: {1}" -f $Prefix, $_) }
-    return $LASTEXITCODE
+
+    # Windows PowerShell may surface redirected native stderr as ErrorRecord objects.
+    # Do not let global ErrorActionPreference=Stop terminate the runner before we can
+    # inspect the native process exit code. Fail-closed decisions remain below.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $Output = @(& $Exe @Arguments 2>&1)
+        $ExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+
+    $Output | ForEach-Object { Write-TaskLog ("{0}: {1}" -f $Prefix, $_) }
+    return $ExitCode
 }
 
 function Get-PendingUploadCount {
-    $Output = & $YouTubeExe "pending-count" 2>&1
-    $ExitCode = $LASTEXITCODE
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $Output = @(& $YouTubeExe "pending-count" 2>&1)
+        $ExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+
     if ($ExitCode -ne 0) {
         $Output | ForEach-Object { Write-TaskLog ("youtube-pending: {0}" -f $_) }
         throw "vv-youtube pending-count failed with exit code $ExitCode"
@@ -93,7 +130,7 @@ try {
         }
 
         # Statistics are useful telemetry, not a publication safety gate. A temporary
-        # analytics/read failure is logged but must not stop a healthy backlog drain.
+        # analytics/read/output failure is logged but must not stop a healthy backlog drain.
         $ExitCode = Invoke-Logged -Prefix "youtube-stats" -Exe $YouTubeExe -Arguments @("stats")
         if ($ExitCode -ne 0) {
             Write-TaskLog ("WARN: YouTube statistics collection failed with exit code {0}; continuing publication workflow." -f $ExitCode)
