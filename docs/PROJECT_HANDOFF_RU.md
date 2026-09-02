@@ -7,22 +7,54 @@ GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft 
 `идея/факт -> validation -> render -> metadata -> YouTube upload -> verification -> statistics`.
 TikTok пока не трогать.
 
-## Реальный checkpoint — 2026-09-01
+## Реальный checkpoint — 2026-09-02
 - frozen pilot slots 1–15 визуально принят; MP4 slots 1–15 не ререндерить;
 - slots 1–11 опубликованы и `VERIFIED_PUBLIC`;
-- пользователь реально применил metadata backfill к slots 1–11;
-- финальная проверка backfill: **все 1–11 UNCHANGED**, tags/hashtags уже присутствуют;
-- slots 12–15 на момент upgrade ещё не были опубликованы;
-- user real-run `upgrade-pending-metadata --slots 12-15 --apply`: **4/4 pending sidecars UPDATED**;
-- сразу после этого `backfill-metadata --slots 12-15 --apply` вернул `No uploaded receipt videos matched`, подтверждая, что 12–15 всё ещё pending и уйдут на YouTube уже с новой metadata с первой загрузки;
-- replacement slot 16 успешно пересобран и прошёл source/music/metadata audits;
-- active pending queue на этом checkpoint: slots 12–16;
+- slots 1–11 metadata backfill завершён и финальный dry-run был UNCHANGED;
+- slots 12–15 были upgraded locally to metadata v2 before first upload;
+- replacement slot 16 прошёл source/music/metadata audits;
+- pending сейчас: slots 12–16, ровно 5 uploads;
+- slot 17 ещё не создан, что корректно при backlog-first;
 - next generation after pending=0: slot 17 AI EN;
-- OpenAI ledger последний показанный `$0.1885/$10`;
-- scheduler `VV Knopka Long Run`: 01:30/03:30/05:30 MSK, backlog-first.
+- OpenAI ledger последний показанный `$0.2024/$10`;
+- scheduler `VV Knopka Long Run`: 01:30/03:30/05:30 MSK.
 
-Плохой первый slot 16 безопасно архивирован в:
-`runtime/backups/slot-16-before-rebuild-20260831-231504`.
+## Scheduler incident — 2026-09-02
+Реальные Windows логи показали:
+- 2026-08-31 01:30 slot 11 успешно uploaded public;
+- 2026-08-31 03:30 slot 12 получил ожидаемый `uploadLimitExceeded`, был создан persisted cooldown;
+- после истечения cooldown все последующие unattended triggers успешно делали `verify` slots 1–11, затем падали сразу после verify с первой строкой Python traceback;
+- backlog не менялся: slots 12–16 остались pending, slot 17 не генерировался.
+
+Manual `vv-youtube stats` 2026-09-02 успешно получил и сохранил статистику для 11 videos. Snapshot содержит Unicode titles с кириллицей и emoji (`😹`). Следовательно API/statistics path исправен; проблема локализована в Windows Task Scheduler/native stdout-stderr encoding/PowerShell pipeline handling.
+
+Исправление в ветке:
+- `scripts/run-longrun-task.ps1` теперь force-ит `PYTHONIOENCODING=utf-8` и `PYTHONUTF8=1`;
+- PowerShell output encoding выставляется UTF-8 where possible;
+- redirected native stderr собирается при временном `ErrorActionPreference=Continue`, после чего решение принимается по реальному `$LASTEXITCODE`;
+- stats остаётся best-effort: даже если stats/output упал, scheduler пишет WARN и продолжает backlog publication;
+- verify/pending/upload/generation gates остаются fail-closed.
+
+Добавлен regression test `tests/test_scheduler_runner.py`.
+
+ВАЖНО: installed Windows task делает **no git pull**. Поэтому перед следующей локальной проверкой пользователь должен получить latest `mvp/pilot-scaffold` через `git pull --ff-only`. Никакого reinstall task не требуется: task указывает на тот же `scripts/run-longrun-task.ps1`, поэтому после pull автоматически использует исправленный файл.
+
+## First real stats sample — only telemetry
+Manual snapshot 2026-09-02:
+```text
+slot 1: 0 views
+slot 2: 6
+slot 3: 2
+slot 4: 1
+slot 5: 18
+slot 6: 2
+slot 7: 1
+slot 8: 1
+slot 9: 1
+slot 10: 3
+slot 11: 8
+```
+Do not optimize content strategy from this tiny/young sample.
 
 ## YouTube discovery metadata
 ### Уже опубликованные slots 1–11 — DONE
@@ -36,13 +68,7 @@ TikTok пока не трогать.
 Backfill не меняет video bytes, URL, views, privacy/status или title.
 
 ### Ещё не опубликованные slots 12–15 — DONE
-Пользователь сначала проверил dry-run. Предложенный diff был нормальным:
-- slot 12 cats: cat discovery tags/hashtags;
-- slot 13 dog: Dogs/DogFacts/AnimalCuriosities/NatureFacts/shorts + generic animal tags;
-- slot 14 cats: cat discovery tags/hashtags;
-- slot 15 elephants: Elephants/AnimalFacts/NatureCuriosities/Wildlife/AnimalBehavior + generic animal tags.
-
-Затем пользователь выполнил:
+Пользователь выполнил:
 ```powershell
 vv-youtube upgrade-pending-metadata --slots 12-15 --apply
 ```
@@ -58,12 +84,9 @@ APPLY summary: 4 pending sidecars | changed=4 | applied=4
 - дописывает отсутствующие hashtags в `youtube_description`;
 - записывает `youtube_hashtags` и `metadata_version=2`;
 - сохраняет all unrelated sidecar fields;
-- вообще не трогает MP4;
+- не трогает MP4;
 - делает backup исходного sidecar в `runtime/youtube/pending-metadata-backups/`;
-- пишет audit `runtime/youtube/pending-metadata-upgrade-latest.json`;
 - published slots автоматически пропускает.
-
-Сразу после apply пользователь также выполнил `backfill-metadata --slots 12-15 --apply`; receipts не нашлись. Значит ни один из 12–15 не успел опубликоваться до upgrade.
 
 ## Autonomous scheduler behavior
 Каждый trigger:
@@ -149,9 +172,9 @@ Replacement slot 16 used `curious_02.wav`, volume 0.11, ducking false.
 - TikTok out of current scope.
 
 ## Immediate continuation
-1. metadata cleanup block закрыт: published 1–11 и pending 12–15 готовы;
-2. оставить scheduler автономно работать несколько дней;
-3. он drains 12–16 oldest-first;
-4. после pending=0 сам генерирует slot 17 AI EN;
-5. далее long-run продолжается автоматически до safety/failure gate или исчерпания `$10` generation budget;
-6. не делать manual slot17 пока backlog не обнулится.
+1. pull latest `mvp/pilot-scaffold` locally so the installed scheduler sees the UTF-8 fix;
+2. verify one real scheduler run reaches `youtube-stats`, then `youtube-pending`, then uploads oldest pending slot 12;
+3. leave scheduler autonomous after that;
+4. it drains 12–16 oldest-first;
+5. after pending=0 generates slot 17 AI EN automatically;
+6. do not manually generate slot 17 while backlog remains.
