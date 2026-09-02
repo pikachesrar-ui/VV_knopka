@@ -26,22 +26,40 @@ TikTok is explicitly out of the current block.
 - video bytes for slots 1–15 are immutable: do not rerender them for later metadata/music/source-policy changes.
 - user explicitly approved metadata-only discovery upgrades (tags/hashtags) for already-rendered pilot videos.
 
-## Real YouTube checkpoint — 2026-09-01
+## Real YouTube checkpoint — 2026-09-02
 Confirmed locally:
-- ready Shorts: 16;
-- slots 1–11 published and VERIFIED_PUBLIC;
-- slots 1–11 have discovery hidden tags + hashtags after real `backfill-metadata --apply`;
-- final verification dry-run for slots 1–11 returned UNCHANGED for every slot;
-- slots 12–15 were still unpublished when upgraded locally and now have metadata-v2 sidecars with hidden tags + hashtags;
-- real `backfill-metadata --slots 12-15 --apply` immediately after the local upgrade found no receipts, confirming none of 12–15 had been uploaded yet;
-- active pending queue was therefore slots 12–16 at that checkpoint;
+- slots 1–11 published and `VERIFIED_PUBLIC`;
+- slots 1–11 discovery metadata backfill is complete and final dry-run was UNCHANGED;
+- slots 12–15 were upgraded locally to metadata v2 before first upload;
+- corrected replacement slot 16 passed source/music/metadata audits;
+- pending ready uploads now: exactly 5 => slots 12–16;
+- slot 17 has NOT been generated, which is correct under backlog-first behavior;
 - next generation target after pending=0 is slot 17 AI EN;
-- OpenAI ledger last shown: `$0.1885/$10`;
-- scheduler `VV Knopka Long Run` installed, Ready, triggers 01:30/03:30/05:30 MSK.
+- OpenAI ledger last shown: `$0.2024/$10`;
+- scheduler `VV Knopka Long Run` is installed with triggers 01:30/03:30/05:30 MSK.
 
-The first bad unuploaded slot 16 was archived to:
+The first bad unuploaded slot 16 remains archived at:
 `runtime/backups/slot-16-before-rebuild-20260831-231504`.
-The corrected replacement slot 16 is active and passed source/music/metadata audits.
+
+## Scheduler incident — 2026-09-02
+Real unattended behavior:
+- 2026-08-31 01:30 slot 11 uploaded successfully;
+- 2026-08-31 03:30 slot 12 hit YouTube `uploadLimitExceeded`; persisted cooldown worked as intended;
+- after cooldown expiry, triggers on 2026-09-01 and 2026-09-02 successfully verified slots 1–11, then died immediately after verify with only `ERROR: Traceback (most recent call last):` in scheduler log;
+- because the failure happened before pending upload handling, slots 12–16 remained untouched and slot 17 was not generated.
+
+Manual `vv-youtube stats` on 2026-09-02 succeeded and wrote a fresh statistics snapshot containing Cyrillic/emoji titles (including `😹`). This isolated the problem to Windows Task Scheduler/native output encoding and PowerShell stderr handling, not the YouTube stats API.
+
+Fix now present in branch:
+- scheduled Python output forced to UTF-8 via `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1`;
+- PowerShell output encoding set to UTF-8 where supported;
+- native stderr is captured with temporary `ErrorActionPreference=Continue`, then real process exit codes drive decisions;
+- `stats` is truly best-effort: stats/output failure logs WARN and does not block healthy backlog publication;
+- verify/pending/upload/generation safety gates remain fail-closed.
+
+Regression test: `tests/test_scheduler_runner.py`.
+
+IMPORTANT: the installed Windows scheduler intentionally performs **no git pull**. A local checkout must pull latest `mvp/pilot-scaffold` before the scheduler uses this fix. Reinstalling the task is not required because the task points to the same `scripts/run-longrun-task.ps1` path.
 
 ## Scheduler / autonomy
 Backlog-first scheduler:
@@ -59,20 +77,29 @@ For AI slots the conveyor can auto-start MoneyPrinterTurbo, wait for readiness, 
 
 The OpenAI project-side hard cap is `$10`. New generation stops fail-closed when the ledger reaches the cap. Existing ready backlog can still be uploaded because backlog handling runs before new generation.
 
-## Pending pilot metadata upgrade — slots 12–15 REAL COMPLETE
-Slots 12–15 were rendered before long-run metadata v2. User explicitly asked to upgrade them before leaving the conveyor unattended.
+## First real stats sample — telemetry only
+Manual snapshot on 2026-09-02:
+```text
+slot 1: 0 views
+slot 2: 6
+slot 3: 2
+slot 4: 1
+slot 5: 18
+slot 6: 2
+slot 7: 1
+slot 8: 1
+slot 9: 1
+slot 10: 3
+slot 11: 8
+```
+Do not optimize content strategy from this tiny/young sample.
 
-Implemented and real-run command:
+## Pending pilot metadata upgrade — slots 12–15 REAL COMPLETE
+User ran:
 ```powershell
 vv-youtube upgrade-pending-metadata --slots 12-15
 vv-youtube upgrade-pending-metadata --slots 12-15 --apply
 ```
-
-Real dry-run proposed:
-- slot 12 cats tags/hashtags;
-- slot 13 dog discovery tags/hashtags;
-- slot 14 cats tags/hashtags;
-- slot 15 elephant discovery tags/hashtags.
 
 Real apply result:
 ```text
@@ -81,19 +108,16 @@ changed=4
 applied=4
 ```
 
-Immediately after apply, `backfill-metadata --slots 12-15 --apply` returned `No uploaded receipt videos matched the requested slots`, so these four remained pending and will be uploaded for the first time with the upgraded metadata.
-
 Behavior:
 - default is dry-run;
 - only ready sidecars without a `.youtube.json` receipt are eligible;
 - adds/merges `youtube_tags`;
 - appends only missing hashtags to `youtube_description`;
 - records `youtube_hashtags` and `metadata_version=2`;
-- preserves title, review/publication flags and every unrelated sidecar field;
+- preserves title, review/publication flags and unrelated sidecar fields;
 - never changes MP4 bytes;
 - creates one-time original backups under `runtime/youtube/pending-metadata-backups/`;
-- skips already-published slots automatically;
-- writes audit `runtime/youtube/pending-metadata-upgrade-latest.json`.
+- skips already-published slots automatically.
 
 ## Published metadata backfill — REAL VALIDATED
 User authorized and ran:
@@ -102,16 +126,10 @@ vv-youtube auth-metadata
 vv-youtube backfill-metadata --slots 1-11 --apply
 ```
 
-Real result:
-- 11/11 initially updated;
-- slots 1–6 and 8–11 immediately became idempotent;
-- slot 7 briefly showed a YouTube read-after-write consistency delay, then also returned UNCHANGED;
-- final dry-run: all slots 1–11 UNCHANGED.
-
-Backfill preserves remote title/category/language/existing tags, only appends missing hashtags/tags, and never touches privacy/status/video URL/views/video bytes.
+Final result: all slots 1–11 UNCHANGED on dry-run; hidden tags/hashtags are already present remotely.
 
 ## Cat source reuse policy
-The original slot 16 / cat #008 had 5/6 cooled clips reused from cat #001. Fixed policy:
+Current policy:
 ```toml
 cat_source_cooldown_episodes = 5
 cat_cooled_reuse_max_sources = 2
@@ -180,8 +198,6 @@ Implemented and real-channel validated:
 - published metadata backfill for legacy videos;
 - unpublished sidecar metadata upgrade for pending legacy videos.
 
-Do not optimize content strategy from the first tiny statistics sample.
-
 ## AI fact-check
 Long-run AI planning is fail-closed before render:
 `candidate -> bounded web-search evidence check -> PASS/FAIL`.
@@ -191,15 +207,16 @@ FAIL means no render/no publish. Costs remain inside the project-side `$10` ledg
 - OpenAI hard cap `$10`;
 - no new paid providers without explicit approval;
 - secrets/tokens stay ignored/local;
-- provenance/commercial-use/audio/geometry/vision gates remain fail-closed;
-- Draft PR #1 stays open/draft/unmerged.
+- provenance/commercial-use/audio/geometry/vision/fact-check gates remain fail-closed;
+- Draft PR #1 stays open/draft/unmerged;
+- TikTok remains out of scope.
 
 ## Immediate continuation
-1. metadata cleanup is complete for published 1–11 and pending 12–15;
-2. leave scheduler alone for a few days under normal healthy operation;
-3. it should drain slots 12–16 oldest-first;
-4. once pending reaches zero it should generate slot 17 AI EN automatically, using MPT lifecycle/fact-check/music/metadata v2;
-5. continue alternating long-run slots until a safety/failure gate or the `$10` generation budget stops new generation;
-6. later optimize cat audio-first discovery cost if desired.
+1. pull latest `mvp/pilot-scaffold` on the Windows machine so the scheduler receives the UTF-8 fix;
+2. verify a real task run reaches `youtube-stats`, then `youtube-pending`, then handles oldest pending slot 12;
+3. if successful, leave scheduler autonomous again;
+4. it should drain slots 12–16 oldest-first;
+5. once pending reaches zero it should generate slot 17 AI EN automatically with MPT lifecycle/fact-check/music/metadata v2;
+6. do not manually generate slot 17 while pending > 0.
 
 After substantive work update this file plus `docs/PROJECT_HANDOFF_RU.md` and `docs/PROGRESS_RU.md`.
