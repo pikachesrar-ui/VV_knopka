@@ -13,6 +13,7 @@ from .animal_v3 import render_cat_v3
 from .budget import BudgetLedger
 from .cat_compilation import build_generic_cat_plan
 from .fact_check import FactChecker
+from .editorial import PROFILE, build_cat_edit, enabled_for_slot
 from .gates import publication_gate
 from .long_run_conveyor import run_longrun_batch
 from .manifest import longrun_start_slot, resolve_slot, write_manifest
@@ -177,6 +178,11 @@ def main() -> None:
         return
 
     slot = _slot(settings, args.slot)
+    if args.command in {"plan", "render-ai", "render-animal"}:
+        suffix = "ai" if slot.pipeline == "ai_short" else "animals"
+        existing = settings.runtime_dir / "ready_for_review" / f"slot-{slot.slot:02d}-{slot.language}-{suffix}.mp4"
+        if existing.exists() and existing.stat().st_size > 0:
+            raise SystemExit(f"Slot {slot.slot} already has a rendered video; preserve it: {existing}")
     slot_dir = settings.runtime_dir / "slots" / f"{slot.slot:02d}"
     slot_dir.mkdir(parents=True, exist_ok=True)
 
@@ -256,6 +262,8 @@ def main() -> None:
             raise SystemExit("render-animal can only be used on animal_compilation slots")
 
         content = build_generic_cat_plan(slot.language)
+        if enabled_for_slot(settings, slot.slot):
+            content["editorial_profile"] = PROFILE
         effective_plan = slot_dir / "effective-plan.json"
         effective_plan.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
         print(
@@ -292,6 +300,10 @@ def main() -> None:
             clip_seconds=float(animal_cfg.get("clip_seconds", 5)),
         )
         print(f"Highlight edit: {highlight_manifest}")
+
+        if enabled_for_slot(settings, slot.slot):
+            highlight_manifest = build_cat_edit(settings, highlight_manifest)
+            print(f"Selected editorial cut: {highlight_manifest}")
 
         episode_manifest = build_episode_metadata(
             settings,

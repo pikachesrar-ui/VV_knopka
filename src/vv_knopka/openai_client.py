@@ -8,6 +8,7 @@ import httpx
 
 from .budget import BudgetLedger
 from .settings import Settings
+from .editorial import PROFILE, enabled_for_slot
 
 
 SHORT_PLAN_SCHEMA: dict[str, Any] = {
@@ -154,6 +155,20 @@ class OpenAIPlanner:
             )
 
         pilot_total = int(self.settings.raw.get("pilot", {}).get("total_shorts", 15))
+        direct = pipeline == "ai_short" and enabled_for_slot(self.settings, slot)
+        if direct:
+            task = task.replace("25-45 second", "20-30 second")
+            task += (
+                " For this new format, aim for 20-30 seconds, about 45-65 English words "
+                "(adapt naturally for Russian). The hook must be one short, specific question "
+                "or surprising established fact, at most 12 words, and must be the exact opening "
+                "of script. No generic setup, greetings, subscribe outro, or 'did you know'. "
+                "Give the main answer in the next sentence, then explain one mechanism. "
+                "Choose a behavior that ordinary licensed footage can actually show. "
+                "Put the most concrete opening-scene stock query first in search_terms, "
+                "then queries for the explanation. Do not pretend illustrative stock proves "
+                "an invisible process. Include every factual claim, including the hook, in fact_check_items."
+            )
         slot_label = f"Pilot slot: {slot}/{pilot_total}." if slot <= pilot_total else f"Long-run sequence slot: {slot}."
         prompt = f"""You are the editor of a review-first Shorts pipeline.
 Niche: Animals / Nature Curiosities.
@@ -181,6 +196,7 @@ Return only the requested structured object."""
                 "verbosity": "low",
             },
             "store": False,
+            "max_output_tokens": 1800,
         }
         with httpx.Client(timeout=120) as client:
             response = client.post(
@@ -191,8 +207,6 @@ Return only the requested structured object."""
             response.raise_for_status()
             data = response.json()
 
-        text = data.get("output_text") or _extract_output_text(data)
-        plan = json.loads(text)
         usage = data.get("usage") or {}
         self.ledger.record(
             model=model,
@@ -200,6 +214,14 @@ Return only the requested structured object."""
             output_tokens=int(usage.get("output_tokens", 0)),
             purpose=f"slot-{slot}:{pipeline}:{language}",
         )
+        text = data.get("output_text") or _extract_output_text(data)
+        plan = json.loads(text)
+        if direct:
+            hook = " ".join(str(plan.get("hook") or "").split())
+            script = " ".join(str(plan.get("script") or "").split())
+            if not hook or len(hook.split()) > 12 or not script.startswith(hook):
+                raise RuntimeError("Editorial AI gate: script must open with the exact short hook")
+            plan["editorial_profile"] = PROFILE
         return plan
 
 

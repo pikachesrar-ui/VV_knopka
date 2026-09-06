@@ -1,6 +1,11 @@
 # VV_knopka
 
-Review-first AI-assisted short-form video studio for a small YouTube Shorts experiment.
+Automated animal/nature Shorts pipeline with YouTube publishing and a $10 OpenAI budget.
+
+Current checkpoint and Windows update instructions: [PROJECT_HANDOFF_RU.md](docs/PROJECT_HANDOFF_RU.md).
+New-slot editorial format and validation: [EDITORIAL_RU.md](docs/EDITORIAL_RU.md).
+The pilot walkthrough below describes the historical review-first setup; current long-run
+YouTube publishing is enabled, MPT starts automatically, and approved background music is active.
 
 ## Continue in a new chat / agent session
 

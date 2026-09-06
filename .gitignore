@@ -9,3 +9,4 @@ ready_for_review/
 MoneyPrinterTurbo/
 ACE-Step-1.5/
 *.log
+*.egg-info/

@@ -6,6 +6,7 @@ from typing import Any
 
 from .manifest import animal_episode_number_for_slot
 from .settings import Settings
+from .editorial import PROFILE, enabled_for_slot
 
 
 _FORBIDDEN_SERIES_PHRASES = (
@@ -82,6 +83,18 @@ def build_episode_metadata(
         "end_text": "Спасибо за просмотр" if language == "ru" else "Thanks for watching",
         "forbidden_series_phrases": list(_FORBIDDEN_SERIES_PHRASES),
     }
+    if enabled_for_slot(settings, slot) and highlights.get("editorial_profile") == PROFILE:
+        first = selections[order[0]]
+        caption = " ".join(str(first.get("caption") or "").split())[:70]
+        if not caption:
+            raise ValueError("Editorial cat cut needs a caption describing the opening moment")
+        payload.update({
+            "editorial_profile": PROFILE,
+            "youtube_title": ("Котики: " if language == "ru" else "Cats: ") + caption,
+            "youtube_description": " ".join(str(selections[i].get("description") or "").strip() for i in order),
+            "transition_cards": [],
+            "end_text": "",
+        })
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return output

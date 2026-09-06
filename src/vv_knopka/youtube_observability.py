@@ -201,11 +201,18 @@ def collect_statistics(settings: Settings) -> dict[str, Any]:
         status = dict(item.get("status") or {})
         snippet = dict(item.get("snippet") or {})
         pipeline, language = _receipt_identity(receipt_path, payload)
+        upload_path = receipt_path.with_name(receipt_path.name.replace(".youtube.json", ".upload.json"))
+        try:
+            upload_metadata = json.loads(upload_path.read_text(encoding="utf-8"))
+            profile = str(upload_metadata.get("editorial_profile") or "legacy")
+        except (OSError, ValueError, AttributeError):
+            profile = "unknown"
         entry = {
             "slot": int(payload.get("slot") or 0),
             "video_id": video_id,
             "youtube_url": payload.get("youtube_url"),
             "pipeline": pipeline,
+            "editorial_profile": profile,
             "language": language,
             "title": snippet.get("title") or payload.get("title"),
             "published_at": snippet.get("publishedAt") or payload.get("uploaded_at"),

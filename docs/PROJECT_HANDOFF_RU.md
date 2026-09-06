@@ -1,188 +1,61 @@
-# VV_knopka — PROJECT HANDOFF (RU)
+# VV_knopka — PROJECT HANDOFF
 
-GitHub = source of truth. Рабочая ветка `mvp/pilot-scaffold`. Draft PR #1 остаётся **open/draft/unmerged** до явного решения пользователя.
+GitHub — source of truth. Ветка mvp/pilot-scaffold. PR #1 open/draft/unmerged,
+merge только по явной команде пользователя. TikTok не трогать.
 
-## Цель
-Автономный long-run pipeline:
-`идея/факт -> validation -> render -> metadata -> YouTube upload -> verification -> statistics`.
-TikTok пока не трогать.
+## Реальный checkpoint пользователя от 2026-09-05
 
-## Реальный checkpoint — 2026-09-02
-- frozen pilot slots 1–15 визуально принят; MP4 slots 1–15 не ререндерить;
-- slots 1–12 опубликованы; slots 1–11 были `VERIFIED_PUBLIC` до последнего upload, slot 12 успешно загружен `public` в реальном scheduler run 2026-09-02 03:35 MSK;
-- slots 1–11 metadata backfill завершён и финальный dry-run был UNCHANGED;
-- slots 12–15 были upgraded locally to metadata v2 before first upload;
-- replacement slot 16 прошёл source/music/metadata audits;
-- pending после успешного recovery run: slots 13–16, ровно 4 uploads;
-- slot 17 ещё не создан, что корректно при backlog-first;
-- next generation after pending=0: slot 17 AI EN;
-- OpenAI ledger последний показанный `$0.2024/$10`;
-- scheduler `VV Knopka Long Run`: 01:30/03:30/05:30 MSK.
+- statistics.json: 20 видео, все public, суммарно 66 просмотров;
+- pending=0; slots 17–20 уже созданы и опубликованы;
+- последний slot 20 опубликован 2026-09-05 02:56:29 UTC;
+- следующий ожидаемый на момент снимка: slot 21 AI EN;
+- актуальный расход OpenAI не прислан; исторические $0.2024 не считать текущим остатком;
+- полноценный verify processing после этого снимка ещё не предъявлен.
 
-Slot 12 real upload after fix:
-`https://www.youtube.com/watch?v=nrGanPLeVps`
-requested=`public`, actual=`public`.
+Канал не имел значительной старой аудитории: один подписчик — второй канал пользователя.
+Ссылками на новые ролики пользователь не делился. Studio: 69 просмотров всего,
+включая старые VTuber-видео; лента Shorts около 7 просмотров, не показов.
+Объём слишком мал для выбора победителя или диагноза о причинах ограничения охвата.
 
-## Scheduler incident — 2026-09-02 — REAL FIX VALIDATED
-Реальные Windows логи показали:
-- 2026-08-31 01:30 slot 11 успешно uploaded public;
-- 2026-08-31 03:30 slot 12 получил ожидаемый `uploadLimitExceeded`, был создан persisted cooldown;
-- после истечения cooldown unattended triggers успешно делали `verify` slots 1–11, затем падали сразу после verify с первой строкой Python traceback;
-- backlog не менялся: slots 12–16 оставались pending, slot 17 не генерировался.
+## Сделано 2026-09-06 — подача новых роликов
 
-Manual `vv-youtube stats` 2026-09-02 успешно получил и сохранил статистику для 11 videos. Snapshot содержал Unicode titles с кириллицей и emoji (`😹`). Проблема была локализована в Windows Task Scheduler/native stdout-stderr encoding/PowerShell pipeline handling.
+По разрешению пользователя: direct_v1 для новых renders начиная со slot 21.
+Подробности и команды применения: [EDITORIAL_RU.md](EDITORIAL_RU.md).
 
-Исправление в ветке:
-- `scripts/run-longrun-task.ps1` force-ит `PYTHONIOENCODING=utf-8` и `PYTHONUTF8=1`;
-- PowerShell output encoding выставляется UTF-8 where possible;
-- redirected native stderr собирается при временном `ErrorActionPreference=Continue`, после чего решение принимается по реальному `$LASTEXITCODE`;
-- stats остаётся best-effort: даже если stats/output упал, scheduler пишет WARN и продолжает backlog publication;
-- verify/pending/upload/generation gates остаются fail-closed.
+Cats: source pool и gates сохраняются, финальный монтаж 3–4 сильных клипа,
+без чёрных карточек, подписи поверх кадра, второй сильнейший момент в конце,
+заголовок/описание по выбранным кадрам. Недостаточно хороших клипов — остановка,
+никакой автоматической платной регенерации оценок.
 
-Regression test: `tests/test_scheduler_runner.py`.
+AI: короткий hook в начале самого script, ответ раньше, конкретные stock queries;
+порядок одобренных материалов детерминирован, начальный кадр выбирается по metadata,
+затем MPT sequential / 4 seconds. Полное выравнивание сцен с текстом не реализовано.
+Fact-check gate сохранён. Дополнительных платных запросов нет.
 
-Реальная валидация после локального `git pull --ff-only`:
-```text
-2026-09-02 03:34:54 START
-verify slots 1–11: VERIFIED_PUBLIC
-stats: SUCCESS, 11 videos
-pending before: 5
-youtube-backlog: UPLOADED slot 12 ... requested=public actual=public
-pending after: 4
-BACKLOG: handled one pending upload; 4 remain
-```
-То есть incident закрыт: scheduler снова проходит observability и реально drains backlog oldest-first.
+В upload sidecar и stats появился editorial_profile. Старые MP4 не меняются.
+Пилот 1–15 остаётся frozen; slots 16–20 тоже не перерендерить ради нового оформления.
 
-В одном scheduler-log title slot 10 emoji отобразился как replacement glyph (`�`), но это cosmetic log rendering only: процесс не упал, stats snapshot и upload продолжились. Не считать это publication blocker.
+## Существующая инфраструктура
 
-## First real stats sample — only telemetry
-Snapshot 2026-09-02 перед slot 12 upload:
-```text
-slot 1: 0 views
-slot 2: 6
-slot 3: 2
-slot 4: 1
-slot 5: 18
-slot 6: 2
-slot 7: 1
-slot 8: 1
-slot 9: 1
-slot 10: 3
-slot 11: 8
-```
-Do not optimize content strategy from this tiny/young sample.
+Scheduler backlog-first: status / verify / best-effort stats, затем один oldest pending
+upload либо (только при pending=0) одна generation + upload. Триггеры 01:30/03:30/05:30 MSK.
+ПК должен быть включён. MPT запускается автоматически по необходимости.
+24h upload-limit cooldown сохранён. UTF-8/PowerShell scheduler incident исправлен
+и реально проверен 2 сентября на публикации slot 12.
 
-## YouTube discovery metadata
-### Уже опубликованные slots 1–11 — DONE
-Пользователь выполнил `auth-metadata` и `backfill-metadata --slots 1-11 --apply`.
+Source v6: audio-first; cooldown последних 5 cat episodes; cooled reuse максимум 2
+источника, максимум 1 из одного исторического эпизода. Safety gates fail closed.
+8 треков ACE-Step одобрены и включены: AI .10 с ducking, cats .11 без ducking.
+Metadata v2, attribution, synthetic-media disclosure, receipts/idempotence работают.
+Комментарий-feedback planned; пока не расширять из-за отсутствия выборки.
 
-Реальный итог:
-- 11/11 обновлены;
-- slot 7 имел краткую read-after-write задержку YouTube, затем тоже стал UNCHANGED;
-- final dry-run по каждому slot 1–11: tags none, hashtags none to add.
+## Валидация и следующий шаг
 
-Backfill не меняет video bytes, URL, views, privacy/status или title.
+178 локальных тестов PASS, локальный FFmpeg render smoke PASS. Production MPT/Windows
+render новой версии и свежие API responses здесь не запускались. Платных запросов
+в разработке не было, текущий ledger на ПК не сбрасывать. Лимит остаётся $10.
 
-### Legacy pending slots 12–15 — metadata upgrade DONE
-Пользователь выполнил:
-```powershell
-vv-youtube upgrade-pending-metadata --slots 12-15 --apply
-```
-
-Реальный результат:
-```text
-APPLY summary: 4 pending sidecars | changed=4 | applied=4
-```
-
-Команда изменила только sidecars, сохранила MP4 bytes и подготовила metadata v2 до первой публикации. Slot 12 уже был успешно опубликован scheduler после этого upgrade; slots 13–15 остаются в pending queue вместе со slot 16.
-
-## Autonomous scheduler behavior
-Каждый trigger:
-1. status;
-2. verify receipts;
-3. best-effort stats;
-4. если pending > 0 — upload ровно одного oldest и выход;
-5. если pending == 0 — `longrun-next`;
-6. render одного следующего slot;
-7. upload только нового newest slot.
-
-Текущий ожидаемый drain после recovery:
-`13 -> 14 -> 15 -> 16`, затем pending=0 и automatic slot 17 AI EN.
-
-AI slots:
-- план + fact-check;
-- MPT auto-start/wait/render/stop-own-process;
-- ACE-Step approved music;
-- metadata v2 + tags/hashtags;
-- YouTube upload.
-
-Cat slots:
-- fresh stock first;
-- audio/geometry/provenance/vision gates;
-- anti-repeat policy;
-- FFmpeg render;
-- ACE-Step approved music;
-- metadata v2 + tags/hashtags;
-- YouTube upload.
-
-OpenAI generation hard cap = `$10`; при достижении cap новые generation attempts fail closed. Existing pending uploads могут продолжить выгружаться, потому что backlog обрабатывается до generation.
-
-## Cat slot 16 incident — fixed
-Original #008: 5/6 clips reused from #001.
-Current policy:
-```toml
-cat_source_cooldown_episodes = 5
-cat_cooled_reuse_max_sources = 2
-cat_cooled_reuse_max_per_history_episode = 1
-```
-
-Replacement #008:
-```text
-6 unique
-4 fresh
-2 cooled total
-1 from slot 2
-1 from slot 4
-protected-window overlap: 0
-source reuse audit: PASS
-```
-
-## Cat source v6
-Audio-first / fail-closed source pipeline is active.
-Real replacement run:
-```text
-Pexels candidates: 54
-vision reviewed: 54
-vision approved: 51
-new Pexels audio accepted: 3
-Pixabay candidates: 0
-```
-Later optimization target: reduce Luna reviews per accepted fresh audible clip without weakening gates.
-
-## Music
-All 8 local ACE-Step tracks approved.
-Production:
-```toml
-[music]
-enabled = true
-ai_volume = 0.10
-cat_volume = 0.11
-ai_ducking = true
-cat_ducking = false
-```
-Replacement slot 16 used `curious_02.wav`, volume 0.11, ducking false.
-
-## Safety
-- `$10` OpenAI hard cap;
-- no new paid providers without explicit approval;
-- secrets runtime-only;
-- source/provenance/audio/geometry/vision/fact-check gates fail closed;
-- Draft PR #1 не merge автоматически;
-- TikTok out of current scope.
-
-## Immediate continuation
-1. не делать manual upload/generation без новой ошибки;
-2. оставить scheduler автономно drains slots 13–16 oldest-first;
-3. после pending=0 он должен автоматически создать slot 17 AI EN и затем загрузить его;
-4. через несколько triggers проверить receipts/logs/OpenAI ledger/stats;
-5. не merge Draft PR #1 без явной команды пользователя.
+Пользователь обновляет ветку на ПК по EDITORIAL_RU.md между scheduler triggers,
+после этого проверяем первый новый AI/cat output и профиль sidecar, расходы и логи.
+При ошибке source/editorial gate не ослаблять требования, сначала анализировать audit.
+Исторические подробности прежних checkpoints сохранены в git history.

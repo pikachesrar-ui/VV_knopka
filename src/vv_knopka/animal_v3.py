@@ -18,6 +18,7 @@ from .animal_compilation import (
     load_sources,
 )
 from .settings import Settings
+from .editorial import PROFILE
 
 
 _MEOW_SUFFIXES = (".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus")
@@ -293,6 +294,8 @@ def _render_highlight_clip(
     lufs: float,
     peak: float,
     require_audio: bool,
+    caption: str = "",
+    caption_font: Path | None = None,
 ) -> Path:
     video_graph = (
         "[0:v]split=2[bg][fg];"
@@ -301,6 +304,16 @@ def _render_highlight_clip(
         "[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fgv];"
         "[bgv][fgv]overlay=(W-w)/2:(H-h)/2,format=yuv420p[v]"
     )
+    if caption and caption_font:
+        # textfile + expansion=none keeps punctuation and %{...} literal.
+        text_file = output.with_suffix(".caption.txt")
+        text_file.write_text(_wrap_card_text(caption, width=24), encoding="utf-8")
+        video_graph = video_graph.removesuffix("[v]") + (
+            f",drawtext=fontfile='{_escape_filter_path(caption_font)}':"
+            f"textfile='{_escape_filter_path(text_file)}':expansion=none:"
+            "fontsize=58:fontcolor=white:borderw=3:bordercolor=black:"
+            "x=(w-text_w)/2:y=h*0.70[v]"
+        )
     has_audio = _ffprobe_has_audio(source)
     if require_audio and not has_audio:
         raise RuntimeError(f"Cat source unexpectedly has no audio stream: {source}")
@@ -376,6 +389,7 @@ def render_cat_v3(
     clips = load_sources(source_manifest)
     highlights = json.loads(highlight_manifest.read_text(encoding="utf-8"))
     episode = json.loads(episode_manifest.read_text(encoding="utf-8"))
+    direct = episode.get("editorial_profile") == PROFILE
     selections = {
         int(item["clip_index"]): item
         for item in highlights.get("selections", [])
@@ -408,17 +422,17 @@ def render_cat_v3(
 
     work = settings.runtime_dir / "tmp" / (output.stem + "-v5")
     work.mkdir(parents=True, exist_ok=True)
-    meow, fallback_meow = _resolve_meow(settings, work)
+    meow, fallback_meow = (work / "unused.wav", False) if direct else _resolve_meow(settings, work)
     if fallback_meow:
         print(
             "Real cat meow asset not found; using procedural fallback. "
             "Put any meow-named audio file in runtime/assets or set CAT_MEOW_FILE."
         )
-    else:
+    elif not direct:
         print(f"Cat meow asset: {meow}")
 
     display_title = str(episode.get("display_title") or "#001 — Cat Chaos")
-    sequence: list[Path] = [
+    sequence: list[Path] = [] if direct else [
         _render_black_card(
             output=work / "000-intro.mp4",
             text=display_title,
@@ -434,7 +448,7 @@ def render_cat_v3(
     for position, clip_index in enumerate(order, start=1):
         selection = selections[clip_index]
         clip = clips[clip_index - 1]
-        if position > 1:
+        if position > 1 and not direct:
             sequence.append(
                 _render_black_card(
                     output=work / f"{position:03d}-card.mp4",
@@ -457,21 +471,24 @@ def render_cat_v3(
                 lufs=lufs,
                 peak=peak,
                 require_audio=require_audio,
+                caption=str(selection.get("caption") or "") if direct else "",
+                caption_font=font if direct else None,
             )
         )
 
-    sequence.append(
-        _render_black_card(
-            output=work / "999-end.mp4",
-            text=str(episode.get("end_text") or ("Спасибо за просмотр" if language == "ru" else "Thanks for watching")),
-            duration=end_seconds,
-            font=font,
-            font_size=end_font_size,
-            meow=meow,
-            meow_volume=meow_volume,
-            wrap_chars=wrap_chars,
+    if not direct:
+        sequence.append(
+            _render_black_card(
+                output=work / "999-end.mp4",
+                text=str(episode.get("end_text") or ("Спасибо за просмотр" if language == "ru" else "Thanks for watching")),
+                duration=end_seconds,
+                font=font,
+                font_size=end_font_size,
+                meow=meow,
+                meow_volume=meow_volume,
+                wrap_chars=wrap_chars,
+            )
         )
-    )
 
     concat_file = work / "concat.txt"
     concat_file.write_text(

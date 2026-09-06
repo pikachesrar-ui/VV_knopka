@@ -13,6 +13,7 @@ import httpx
 
 from .budget import BudgetLedger
 from .settings import Settings
+from .editorial import PROFILE
 
 
 def candidate_starts(duration: float, segment_seconds: float, count: int = 4) -> list[float]:
@@ -138,10 +139,12 @@ def _response_error_detail(response: httpx.Response) -> str:
     return json.dumps(body, ensure_ascii=False)[:900]
 
 
-def _manifest_signature(source_manifest: Path, clip_seconds: float) -> str:
+def _manifest_signature(source_manifest: Path, clip_seconds: float, profile: str = "") -> str:
     digest = hashlib.sha256()
     digest.update(source_manifest.read_bytes())
     digest.update(f"|clip_seconds={clip_seconds:.3f}|highlight-v3".encode("utf-8"))
+    if profile:
+        digest.update(profile.encode("utf-8"))
     return digest.hexdigest()
 
 
@@ -185,6 +188,8 @@ def _single_clip_fallback(
                 "text": (
                     "Choose the most engaging 5-second candidate from this cute-cat source clip. "
                     "Prefer visible action, reaction, play, surprise, or an especially cute moment over idle setup. "
+                    "Score interest honestly: 0-3 idle, 4-5 mild interest, 6-7 engaging action or expression, "
+                    "8-10 outstanding moment. Weak clips may be excluded; do not fill a quota. "
                     f"Write one playful on-screen caption in {language_name}, maximum 5 words, no emojis, "
                     "and describe only what is visibly happening. "
                     f"Editorial concept: title={editorial_plan.get('title')!r}; "
@@ -279,7 +284,7 @@ def select_highlights(
 ) -> Path:
     """Pick engaging time windows, captions and ordering using low-cost vision."""
     output = slot_dir / "highlights.json"
-    signature = _manifest_signature(source_manifest, clip_seconds)
+    signature = _manifest_signature(source_manifest, clip_seconds, str(editorial_plan.get("editorial_profile") or ""))
     if output.exists():
         try:
             cached = json.loads(output.read_text(encoding="utf-8"))
@@ -310,6 +315,14 @@ def select_highlights(
         f"Editorial concept: title={editorial_plan.get('title')!r}; hook={editorial_plan.get('hook')!r}; "
         f"editorial_value={editorial_plan.get('editorial_value')!r}."
     )
+    if editorial_plan.get("editorial_profile") == PROFILE:
+        prompt += (
+            " Score editorial interest, not just image quality: 0-3 idle/redundant; "
+            "4-5 mild interest; 6-7 clear engaging action, reaction or expressive moment; "
+            "8-10 especially strong moment. Weak clips may be excluded from the edit. "
+            "Do not inflate scores to fill a quota. The first caption must name the visible "
+            "cat action and also work as a truthful short title; no invented motives."
+        )
     user_content.append({"type": "input_text", "text": prompt})
 
     for clip_index, item in enumerate(clips, 1):

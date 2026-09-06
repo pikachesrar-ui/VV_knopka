@@ -7,6 +7,7 @@ from typing import Any
 
 from .manifest import Slot, animal_episode_number_for_slot, longrun_start_slot
 from .settings import Settings
+from .editorial import PROFILE, enabled_for_slot
 
 
 _CAT_DESCRIPTIONS_EN = (
@@ -158,6 +159,13 @@ def build_upload_metadata(
         else:
             title = f"Cats That Made My Day 😹 #{episode:03d} #shorts"
         description = _cat_description(settings, slot=slot, episode=episode)
+        episode_path = slot_dir / "episode.json"
+        if enabled_for_slot(settings, slot.slot) and episode_path.exists():
+            edit = json.loads(episode_path.read_text(encoding="utf-8"))
+            if edit.get("editorial_profile") == PROFILE:
+                title = _with_shorts(str(edit["youtube_title"]))
+                description = str(edit["youtube_description"])
+                plan["editorial_profile"] = PROFILE
         attributions = _required_attributions(slot_dir)
         if longrun:
             hashtags = _hashtags(
@@ -235,6 +243,8 @@ def build_upload_metadata(
             plan.get("ai_disclosure_recommended", False) or _music_disclosure(slot_dir)
         )
         result["metadata_version"] = 2
+        if plan.get("editorial_profile") == PROFILE:
+            result["editorial_profile"] = PROFILE
     return result
 
 

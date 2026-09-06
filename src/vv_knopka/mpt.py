@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from .settings import Settings
+from .editorial import PROFILE, opening_materials
 
 
 def final_video_candidates(task: dict[str, Any]) -> list[str]:
@@ -162,6 +163,8 @@ class MoneyPrinterTurboClient:
         music_enabled = bool(self.settings.raw.get("music", {}).get("enabled", False))
         voice = audio_cfg["edge_voice_ru"] if language == "ru" else audio_cfg["edge_voice_en"]
         use_curated_materials = bool(materials)
+        direct = plan.get("editorial_profile") == PROFILE
+        materials = opening_materials(plan, materials or [])
         prepared_materials = self._prepare_vertical_materials(materials or []) if use_curated_materials else None
         font_name = self._ensure_windows_cyrillic_font() if language == "ru" else str(
             video_cfg.get("subtitle_font_name_en") or "BeVietnamPro-Bold.ttf"
@@ -172,9 +175,9 @@ class MoneyPrinterTurboClient:
             "video_script": plan["script"],
             "video_terms": plan["search_terms"],
             "video_aspect": video_cfg["aspect"],
-            "video_concat_mode": "random" if use_curated_materials else "sequential",
+            "video_concat_mode": "random" if use_curated_materials and not direct else "sequential",
             "video_transition_mode": normalize_transition(video_cfg.get("visual_transition")),
-            "video_clip_duration": int(video_cfg["clip_seconds"]),
+            "video_clip_duration": int(self.settings.raw.get("editorial", {}).get("ai_clip_seconds", 4)) if direct else int(video_cfg["clip_seconds"]),
             "video_count": 1,
             "video_source": "local" if use_curated_materials else "pexels",
             "video_materials": prepared_materials,
