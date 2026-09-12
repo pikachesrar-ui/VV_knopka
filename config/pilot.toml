@@ -108,6 +108,9 @@ card_wrap_chars = 18
 require_source_audio = true
 min_source_mean_volume_db = -55.0
 source_audio_volume = 1.0
+# Keep new cat clips close to the old transition meow's peak without boosting
+# near-silent footage so much that background noise dominates.
+source_audio_peak_db = -8.0
 # Remote stock is now measured for actual audio level before it can consume a Luna
 # visual-review call. A small unknown tail remains for CDN/probe failures only.
 remote_audio_probe_seconds = 6.0

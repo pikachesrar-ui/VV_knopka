@@ -50,3 +50,15 @@ Conditional synthetic-media disclosure remains enabled. Secrets/tokens local/ign
 Metadata backfill 1–11 and pre-upload upgrade 12–15 were completed historically.
 
 After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.md.
+
+## Audio review — 2026-09-12
+
+User supplied slot 21/22 MP4s. Their local state confirms both were rendered
+2026-09-06 00:35/02:54 UTC, before direct_v1 commit at 09:56 UTC. Neither has
+the editorial marker; slot 22 has no cat-edit.json. Do not interpret these as
+the first direct_v1 outputs or rerender them.
+Measured slot 22: five cat clips around -14.6 to -16 LUFS, one quiet clip
+-21.6 LUFS, cat peaks near -1 dBTP, transition meows near -8 dBTP.
+Future cat sources now use gentle compression, -16 LUFS / -8 dBTP target and
+a final peak limiter before approved background music. Silence stays quiet to
+avoid boosting background noise. No paid API stages; check a future MP4 by ear.

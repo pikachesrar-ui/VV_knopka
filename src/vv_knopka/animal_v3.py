@@ -284,6 +284,19 @@ def _render_black_card(
     return output
 
 
+def _cat_audio_filter(*, lufs: float, peak: float, source_audio_volume: float) -> str:
+    """Tame brief source transients before matching the level of cat clips."""
+    limit = 10 ** (peak / 20)
+    if not 0.0625 <= limit < 1:
+        raise ValueError("Cat source audio peak must be between -24 and 0 dBFS")
+    return (
+        "acompressor=threshold=0.12:ratio=3:attack=8:release=180:makeup=1,"
+        f"loudnorm=I={lufs}:LRA=7:TP={peak},"
+        f"volume={source_audio_volume:.3f},"
+        f"alimiter=limit={limit:.6f}:level=false"
+    )
+
+
 def _render_highlight_clip(
     *,
     source: Path,
@@ -321,8 +334,7 @@ def _render_highlight_clip(
     command = ["ffmpeg", "-y", "-ss", f"{start:.3f}", "-i", str(source)]
     if has_audio:
         audio_filter = (
-            f"loudnorm=I={lufs}:LRA=11:TP={peak},"
-            f"volume={source_audio_volume:.3f},"
+            _cat_audio_filter(lufs=lufs, peak=peak, source_audio_volume=source_audio_volume) + ","
             f"apad=pad_dur={seconds:.3f}[a]"
         )
         command += [
@@ -413,7 +425,7 @@ def render_cat_v3(
     meow_volume = float(animal_cfg.get("meow_volume", 0.9))
     source_audio_volume = float(animal_cfg.get("source_audio_volume", 1.0))
     lufs = float(audio_cfg.get("compilation_lufs", -16.0))
-    peak = float(audio_cfg.get("true_peak_db", -1.5))
+    peak = float(animal_cfg.get("source_audio_peak_db", -8.0))
     title_font_size = int(animal_cfg.get("title_font_size", 84))
     transition_font_size = int(animal_cfg.get("transition_font_size", 78))
     end_font_size = int(animal_cfg.get("end_font_size", 82))
