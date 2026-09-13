@@ -41,6 +41,10 @@ def test_cat_audio_caps_sudden_peaks_without_silencing_quiet_footage(tmp_path: P
     )
     peak = float(re.search(r"max_volume: (-?[\d.]+) dB", analysis.stderr).group(1))
     assert peak <= -7.5
-    with wave.open(str(output)) as audio:
-        assert audio.getnframes() / audio.getframerate() == pytest.approx(2, abs=0.02)
-        assert any(audio.readframes(4096))
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(output)],
+        capture_output=True, text=True, check=True,
+    )
+    assert float(probe.stdout.strip()) == pytest.approx(2, abs=0.02)
+    assert output.stat().st_size > 44

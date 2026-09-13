@@ -62,3 +62,7 @@ Measured slot 22: five cat clips around -14.6 to -16 LUFS, one quiet clip
 Future cat sources now use gentle compression, -16 LUFS / -8 dBTP target and
 a final peak limiter before approved background music. Silence stays quiet to
 avoid boosting background noise. No paid API stages; check a future MP4 by ear.
+Windows Python 3.11 exposed that its stdlib wave reader rejects FFmpeg's
+WAVE_FORMAT_EXTENSIBLE output. The regression test now validates duration with
+ffprobe instead; production audio processing was unaffected. User ledger at
+2026-09-13 checkpoint: $0.3087 / $10, publication gate PASS.
