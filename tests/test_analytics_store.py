@@ -5,6 +5,7 @@ from pathlib import Path
 from vv_knopka.analytics_store import (
     analytics_status,
     database_path,
+    import_statistics_history,
     ingest_statistics_snapshot,
 )
 from vv_knopka.settings import Settings
@@ -123,3 +124,24 @@ def test_shadow_store_failure_does_not_block_json_history(monkeypatch, tmp_path)
     assert latest["analytics_store"]["status"] == "warning"
     assert "database is locked" in latest["analytics_store"]["error"]
     assert len(history) == 1
+
+
+def test_import_existing_jsonl_history_is_idempotent(tmp_path):
+    settings = _settings(tmp_path)
+    history = settings.runtime_dir / "youtube" / "statistics-history.jsonl"
+    history.parent.mkdir(parents=True)
+    older = _snapshot("2026-09-02T01:00:00Z", views=10)
+    newer = _snapshot("2026-09-04T02:00:00Z", views=30)
+    history.write_text(
+        json.dumps(older) + "\n" + "not-json\n" + json.dumps(newer) + "\n",
+        encoding="utf-8",
+    )
+
+    first = import_statistics_history(settings)
+    second = import_statistics_history(settings)
+
+    assert first["lines_seen"] == 3
+    assert first["invalid_lines"] == 1
+    assert first["snapshots_inserted"] == 2
+    assert second["snapshots_inserted"] == 0
+    assert analytics_status(settings)["snapshots"] == 2
