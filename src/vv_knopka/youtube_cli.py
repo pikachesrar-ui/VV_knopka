@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .analytics_store import analytics_status
 from .settings import load_settings
 from .youtube_metadata_backfill import (
     authorize_metadata_edit,
@@ -53,6 +54,7 @@ def main() -> None:
     sub.add_parser("pending-count")
     sub.add_parser("verify", help="Verify processing/privacy state of uploaded receipt videos")
     sub.add_parser("stats", help="Collect current views/likes/comments for uploaded receipt videos")
+    sub.add_parser("analytics-status", help="Show local SQLite analytics storage status")
     report = sub.add_parser("report", help="Rank latest YouTube stats using age-aware performance metrics")
     report.add_argument("--limit", type=int, default=10)
 
@@ -178,6 +180,20 @@ def main() -> None:
             )
         if failed:
             raise SystemExit(74)
+        return
+
+    if args.command == "analytics-status":
+        status = analytics_status(settings)
+        checkpoints = status.get("checkpoints") or {}
+        print(f"analytics database: {status['database']}")
+        print(
+            f"schema={status['schema_version']} | videos={status['videos']} | "
+            f"snapshots={status['snapshots']} | latest={status.get('latest_collected_at') or 'none'}"
+        )
+        print(
+            f"checkpoints: 24h={checkpoints.get('24h', 0)} | "
+            f"72h={checkpoints.get('72h', 0)} | 168h={checkpoints.get('168h', 0)}"
+        )
         return
 
     if args.command == "stats":

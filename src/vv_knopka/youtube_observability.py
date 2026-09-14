@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from .analytics_store import ingest_statistics_snapshot
 from .settings import Settings
 from .youtube_uploader import _require_bound_service
 
@@ -163,6 +164,14 @@ def _statistics_dir(settings: Settings) -> Path:
 
 def _save_statistics_snapshot(settings: Settings, snapshot: dict[str, Any]) -> None:
     root = _statistics_dir(settings)
+    try:
+        snapshot["analytics_store"] = ingest_statistics_snapshot(settings, snapshot)
+    except Exception as exc:
+        # Analytics is shadow telemetry. It must never block a healthy publication flow.
+        snapshot["analytics_store"] = {
+            "status": "warning",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     (root / "statistics.json").write_text(
         json.dumps(snapshot, ensure_ascii=False, indent=2),
         encoding="utf-8",
