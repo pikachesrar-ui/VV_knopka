@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .analytics_store import analytics_status
+from .analytics_store import analytics_status, import_statistics_history
 from .settings import load_settings
 from .youtube_metadata_backfill import (
     authorize_metadata_edit,
@@ -55,6 +55,7 @@ def main() -> None:
     sub.add_parser("verify", help="Verify processing/privacy state of uploaded receipt videos")
     sub.add_parser("stats", help="Collect current views/likes/comments for uploaded receipt videos")
     sub.add_parser("analytics-status", help="Show local SQLite analytics storage status")
+    sub.add_parser("analytics-import-history", help="Import existing statistics-history.jsonl into SQLite")
     report = sub.add_parser("report", help="Rank latest YouTube stats using age-aware performance metrics")
     report.add_argument("--limit", type=int, default=10)
 
@@ -180,6 +181,15 @@ def main() -> None:
             )
         if failed:
             raise SystemExit(74)
+        return
+
+    if args.command == "analytics-import-history":
+        result = import_statistics_history(settings)
+        print(f"history file: {result['history_file']}")
+        print(
+            f"lines={result['lines_seen']} | invalid={result['invalid_lines']} | "
+            f"snapshots inserted={result['snapshots_inserted']}"
+        )
         return
 
     if args.command == "analytics-status":

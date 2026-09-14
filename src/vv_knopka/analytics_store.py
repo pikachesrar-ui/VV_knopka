@@ -275,6 +275,48 @@ def ingest_statistics_snapshot(
     }
 
 
+def import_statistics_history(
+    settings: Settings,
+    history_path: Path | None = None,
+) -> dict[str, Any]:
+    """Idempotently import the existing JSONL history into SQLite."""
+    path = history_path or (settings.runtime_dir / "youtube" / "statistics-history.jsonl")
+    if not path.exists():
+        return {
+            "history_file": str(path),
+            "lines_seen": 0,
+            "invalid_lines": 0,
+            "snapshots_inserted": 0,
+        }
+
+    lines_seen = 0
+    invalid_lines = 0
+    snapshots_inserted = 0
+    with path.open("r", encoding="utf-8-sig") as handle:
+        for line in handle:
+            text = line.strip()
+            if not text:
+                continue
+            lines_seen += 1
+            try:
+                snapshot = json.loads(text)
+            except json.JSONDecodeError:
+                invalid_lines += 1
+                continue
+            if not isinstance(snapshot, dict):
+                invalid_lines += 1
+                continue
+            result = ingest_statistics_snapshot(settings, snapshot)
+            snapshots_inserted += int(result.get("snapshots_inserted") or 0)
+
+    return {
+        "history_file": str(path),
+        "lines_seen": lines_seen,
+        "invalid_lines": invalid_lines,
+        "snapshots_inserted": snapshots_inserted,
+    }
+
+
 def analytics_status(settings: Settings) -> dict[str, Any]:
     path = database_path(settings)
     with _connect(path) as connection:
