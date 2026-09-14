@@ -80,3 +80,13 @@ stdlib `wave` не читает FFmpeg WAV с WAVE_FORMAT_EXTENSIBLE (tag 65534)
 FFmpeg-фильтр и проверка peak прошли. Проверка длительности переведена на ffprobe,
 который уже является обязательной частью проекта. На этом checkpoint расход
 OpenAI $0.3087 / $10, publication gate PASS.
+
+
+## Auto-QA shadow checkpoint (2026-09-14)
+
+`vv-youtube qa-ready` runs local FFmpeg/ffprobe checks and writes a QA sidecar
+next to each matching ready MP4. The Windows scheduler invokes it immediately
+before both backlog and newly-rendered uploads. Mode remains `shadow`: QA errors
+or findings cannot block publication yet. Do not switch the scheduler to
+`--enforce` until the first new direct_v1 reports and MP4s are reviewed.
+No OpenAI/provider call is made by QA. See `docs/AUTO_QA_RU.md`.

@@ -143,6 +143,12 @@ try {
     $PendingBefore = Get-PendingUploadCount
     Write-TaskLog ("youtube-pending: {0} ready uploads before this trigger." -f $PendingBefore)
     if ($PendingBefore -gt 0) {
+        # Shadow QA records evidence before upload but cannot block publication yet.
+        $ExitCode = Invoke-Logged -Prefix "video-qa" -Exe $YouTubeExe -Arguments @("qa-ready", "--limit", "1")
+        if ($ExitCode -ne 0) {
+            Write-TaskLog ("WARN: shadow video QA failed with exit code {0}; continuing publication workflow." -f $ExitCode)
+        }
+
         $BacklogArgs = @("upload-ready", "--limit", "1")
         if ($DryRun) { $BacklogArgs += "--dry-run" }
         $ExitCode = Invoke-Logged -Prefix "youtube-backlog" -Exe $YouTubeExe -Arguments $BacklogArgs
@@ -162,6 +168,13 @@ try {
     if ($ExitCode -ne 0) {
         Write-TaskLog "FAIL: longrun-next failed. Resume will retry the same missing slot on the next run."
         exit $ExitCode
+    }
+
+    # Shadow QA runs after rendering and before the automatic upload. It writes a
+    # report but does not enforce failures until real-video calibration is complete.
+    $ExitCode = Invoke-Logged -Prefix "video-qa" -Exe $YouTubeExe -Arguments @("qa-ready", "--limit", "1", "--newest")
+    if ($ExitCode -ne 0) {
+        Write-TaskLog ("WARN: shadow video QA failed with exit code {0}; continuing publication workflow." -f $ExitCode)
     }
 
     # Dry-run cannot create a new ready file, so this only previews current state.

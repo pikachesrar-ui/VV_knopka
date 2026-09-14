@@ -14,6 +14,7 @@ from .youtube_metadata_backfill import (
 )
 from .youtube_observability import build_performance_report, collect_statistics, verify_receipts
 from .youtube_pending_metadata import upgrade_pending_metadata
+from .video_qa import qa_ready
 from .youtube_uploader import (
     active_upload_limit,
     authorize_and_bind,
@@ -56,6 +57,11 @@ def main() -> None:
     sub.add_parser("stats", help="Collect current views/likes/comments for uploaded receipt videos")
     sub.add_parser("analytics-status", help="Show local SQLite analytics storage status")
     sub.add_parser("analytics-import-history", help="Import existing statistics-history.jsonl into SQLite")
+    qa = sub.add_parser("qa-ready", help="Run local pre-upload video QA and write sidecar reports")
+    qa.add_argument("--limit", type=int, default=None)
+    qa.add_argument("--newest", action="store_true")
+    qa.add_argument("--include-uploaded", action="store_true")
+    qa.add_argument("--enforce", action="store_true")
     report = sub.add_parser("report", help="Rank latest YouTube stats using age-aware performance metrics")
     report.add_argument("--limit", type=int, default=10)
 
@@ -204,6 +210,29 @@ def main() -> None:
             f"checkpoints: 24h={checkpoints.get('24h', 0)} | "
             f"72h={checkpoints.get('72h', 0)} | 168h={checkpoints.get('168h', 0)}"
         )
+        return
+
+    if args.command == "qa-ready":
+        reports = qa_ready(
+            settings,
+            limit=args.limit,
+            newest=bool(args.newest),
+            include_uploaded=bool(args.include_uploaded),
+        )
+        if not reports:
+            print("No matching ready video sidecars to check.")
+            return
+        critical = 0
+        for report in reports:
+            summary = report.get("summary") or {}
+            critical += int(summary.get("critical_failures") or 0)
+            print(
+                f"slot {report.get('slot')}: {summary.get('status')} | "
+                f"critical={summary.get('critical_failures', 0)} | "
+                f"warnings={summary.get('warnings', 0)} | {report.get('report_file')}"
+            )
+        if args.enforce and critical:
+            raise SystemExit(76)
         return
 
     if args.command == "stats":
