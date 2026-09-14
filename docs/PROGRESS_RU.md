@@ -57,3 +57,14 @@ Slots 17–20 созданы/загружены. Следующий ожидае
 - Добавлен идемпотентный `analytics-import-history`: переносит накопленный
   `statistics-history.jsonl` в SQLite, пропускает повреждённые строки и не
   дублирует уже импортированные снимки.
+
+
+## 2026-09-14 — Auto-QA v0
+
+- Локальные FFmpeg/ffprobe-проверки добавлены перед scheduler upload в shadow mode.
+- QA пишет `*.qa.json`, но пока не блокирует уже работающую публикацию.
+- Проверяются stream/resolution/duration, dark borders/opening/tail, loudness/peak,
+  конфигурация voice/music, safe-zone снизу, SRT, outro CTA, pacing и source markers.
+- Правая safe zone, pixel watermark и точный voice/music ratio честно отмечаются
+  как SKIP, пока нет надёжного локального CV/OCR/stem анализа.
+- OpenAI API не используется; стоимость этапа $0.

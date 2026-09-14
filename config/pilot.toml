@@ -68,6 +68,15 @@ fact_check_max_tool_calls = 1
 fact_check_max_estimated_cost_usd = 0.05
 web_search_call_usd = 0.01
 
+[qa]
+enabled = true
+# Shadow mode writes reports and scheduler logs but never blocks upload.
+mode = "shadow"
+recommended_min_seconds = 25
+recommended_max_seconds = 35
+hard_min_seconds = 10
+hard_max_seconds = 60
+
 [video]
 aspect = "9:16"
 target_min_seconds = 25
