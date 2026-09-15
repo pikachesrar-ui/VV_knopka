@@ -12,6 +12,12 @@ from .youtube_metadata_backfill import (
     backfill_published_metadata,
     parse_slot_spec,
 )
+from .youtube_analytics import (
+    authorize_analytics,
+    export_analytics_bundle,
+    import_studio_export,
+    sync_analytics,
+)
 from .youtube_observability import build_performance_report, collect_statistics, verify_receipts
 from .youtube_pending_metadata import upgrade_pending_metadata
 from .video_qa import qa_ready
@@ -38,6 +44,10 @@ def main() -> None:
         "auth-metadata",
         help="Reauthorize the already-bound channel with metadata-edit scope without changing the channel binding",
     )
+    sub.add_parser(
+        "auth-analytics",
+        help="Upgrade the bound-channel token with read-only YouTube Analytics access",
+    )
     backfill = sub.add_parser(
         "backfill-metadata",
         help="Add discovery tags/hashtags to already-uploaded videos; dry-run unless --apply is supplied",
@@ -57,6 +67,14 @@ def main() -> None:
     sub.add_parser("stats", help="Collect current views/likes/comments for uploaded receipt videos")
     sub.add_parser("analytics-status", help="Show local SQLite analytics storage status")
     sub.add_parser("analytics-import-history", help="Import existing statistics-history.jsonl into SQLite")
+    analytics_sync = sub.add_parser("analytics-sync", help="Collect owner-only YouTube Analytics metrics")
+    analytics_sync.add_argument("--deep", action="store_true", help="Also collect traffic sources and retention curves")
+    analytics_sync.add_argument("--slots", default=None, help="Optional slot list/range for a deep/manual sync")
+    analytics_sync.add_argument("--if-due-hours", type=float, default=0)
+    analytics_import = sub.add_parser("analytics-import-studio", help="Import a YouTube Studio Advanced Mode CSV/ZIP")
+    analytics_import.add_argument("path")
+    analytics_export = sub.add_parser("analytics-export", help="Create one shareable analytics ZIP without secrets")
+    analytics_export.add_argument("--output", default=None)
     qa = sub.add_parser("qa-ready", help="Run local pre-upload video QA and write sidecar reports")
     qa.add_argument("--limit", type=int, default=None)
     qa.add_argument("--newest", action="store_true")
@@ -103,6 +121,13 @@ def main() -> None:
         print(f"YouTube metadata-edit authorization ready: {channel['channel_title']} ({channel['channel_id']})")
         print(f"Token upgraded in place: {token_path(settings)}")
         print("Existing upload automation remains bound to the same channel.")
+        return
+
+    if args.command == "auth-analytics":
+        channel = authorize_analytics(settings)
+        print(f"YouTube Analytics authorization ready: {channel['channel_title']} ({channel['channel_id']})")
+        print(f"Token upgraded in place: {token_path(settings)}")
+        print("Upload and metadata automation remain bound to the same channel.")
         return
 
     if args.command == "backfill-metadata":
@@ -198,6 +223,56 @@ def main() -> None:
         )
         return
 
+    if args.command == "analytics-sync":
+        try:
+            slots = parse_slot_spec(args.slots)
+        except ValueError as exc:
+            parser.error(str(exc))
+        result = sync_analytics(
+            settings,
+            deep=bool(args.deep),
+            slots=slots,
+            if_due_hours=max(float(args.if_due_hours), 0),
+        )
+        if result["status"] == "not_due":
+            print(
+                f"analytics sync: NOT DUE | mode={result['mode']} | "
+                f"last={result['last_sync']} | age={result['age_hours']:.1f}h"
+            )
+            return
+        if result["status"] == "no_videos":
+            print("analytics sync: no uploaded receipt videos matched")
+            return
+        print(
+            f"analytics sync: OK | mode={result['mode']} | "
+            f"videos={result['videos_returned']}/{result['videos_requested']} | "
+            f"snapshots={result['snapshots_inserted']} | traffic={result['traffic_rows_inserted']} | "
+            f"retention={result['retention_rows_inserted']}"
+        )
+        for warning in result.get("warnings") or []:
+            print(f"warning: {warning}")
+        return
+
+    if args.command == "analytics-import-studio":
+        result = import_studio_export(settings, Path(args.path))
+        print(f"studio export: {result['export_file']}")
+        print(
+            f"csv={result['csv_files']} | metric tables={result['metric_tables']} | "
+            f"known videos={result['known_videos_imported']} | snapshots inserted={result['snapshots_inserted']}"
+        )
+        return
+
+    if args.command == "analytics-export":
+        output = Path(args.output) if args.output else None
+        result = export_analytics_bundle(settings, output)
+        print(f"analytics bundle: {result['output_file']}")
+        print(
+            f"schema={result['schema_version']} | videos={result['videos']} | "
+            f"snapshots={result['snapshots']} | traffic={result['traffic_sources']} | "
+            f"retention={result['retention_points']}"
+        )
+        return
+
     if args.command == "analytics-status":
         status = analytics_status(settings)
         checkpoints = status.get("checkpoints") or {}
@@ -209,6 +284,11 @@ def main() -> None:
         print(
             f"checkpoints: 24h={checkpoints.get('24h', 0)} | "
             f"72h={checkpoints.get('72h', 0)} | 168h={checkpoints.get('168h', 0)}"
+        )
+        print(
+            f"rich analytics: traffic={status.get('traffic_sources', 0)} | "
+            f"retention={status.get('retention_points', 0)} | "
+            f"latest={status.get('latest_rich_sync') or 'none'}"
         )
         return
 

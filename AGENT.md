@@ -51,6 +51,16 @@ Metadata backfill 1–11 and pre-upload upgrade 12–15 were completed historica
 
 After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.md.
 
+## Rich analytics — 2026-09-15
+
+Owner-only YouTube Analytics is an additive telemetry layer. `auth-analytics`
+keeps upload/edit scopes and verifies the existing channel binding. Scheduler
+runs core `analytics-sync --if-due-hours 20` best-effort; failure never blocks
+generation/upload. Deep traffic/retention collection is manual because it needs
+per-video queries. Russian/English Studio CSV/ZIP can be imported idempotently;
+exact Stayed-to-watch is never inferred. `analytics-export` creates a secret-free
+ZIP for the user to share. No OpenAI calls or paid providers are involved.
+
 ## Audio review — 2026-09-12
 
 User supplied slot 21/22 MP4s. Their local state confirms both were rendered
