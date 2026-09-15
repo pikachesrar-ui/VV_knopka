@@ -9,7 +9,7 @@ from typing import Any
 from .settings import Settings
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 CHECKPOINT_HOURS = (24, 72, 168)
 
 
@@ -101,11 +101,16 @@ def _initialize(connection: sqlite3.Connection) -> None:
             likes INTEGER NOT NULL DEFAULT 0,
             comments INTEGER NOT NULL DEFAULT 0,
             engaged_views INTEGER,
+            estimated_minutes_watched REAL,
             average_view_duration_seconds REAL,
             average_percentage_viewed REAL,
             subscribers_gained INTEGER,
+            subscribers_lost INTEGER,
+            subscribers_net INTEGER,
             shares INTEGER,
             stayed_to_watch_percentage REAL,
+            impressions INTEGER,
+            impressions_ctr_percentage REAL,
             source TEXT NOT NULL DEFAULT 'youtube_data_api',
             raw_json TEXT NOT NULL,
             FOREIGN KEY(video_id) REFERENCES videos(video_id) ON DELETE CASCADE,
@@ -124,8 +129,57 @@ def _initialize(connection: sqlite3.Connection) -> None:
             FOREIGN KEY(snapshot_id) REFERENCES metric_snapshots(id) ON DELETE CASCADE,
             CHECK(checkpoint_hours IN (24, 72, 168))
         );
+
+        CREATE TABLE IF NOT EXISTS traffic_source_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_id TEXT NOT NULL,
+            collected_at TEXT NOT NULL,
+            traffic_source TEXT NOT NULL,
+            views INTEGER,
+            engaged_views INTEGER,
+            estimated_minutes_watched REAL,
+            source TEXT NOT NULL DEFAULT 'youtube_analytics_api',
+            raw_json TEXT NOT NULL,
+            FOREIGN KEY(video_id) REFERENCES videos(video_id) ON DELETE CASCADE,
+            UNIQUE(video_id, collected_at, traffic_source, source)
+        );
+
+        CREATE TABLE IF NOT EXISTS retention_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_id TEXT NOT NULL,
+            collected_at TEXT NOT NULL,
+            elapsed_video_time_ratio REAL NOT NULL,
+            audience_watch_ratio REAL,
+            relative_retention_performance REAL,
+            source TEXT NOT NULL DEFAULT 'youtube_analytics_api',
+            raw_json TEXT NOT NULL,
+            FOREIGN KEY(video_id) REFERENCES videos(video_id) ON DELETE CASCADE,
+            UNIQUE(video_id, collected_at, elapsed_video_time_ratio, source)
+        );
+
+        CREATE TABLE IF NOT EXISTS analytics_sync_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            collected_at TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            status TEXT NOT NULL,
+            details_json TEXT NOT NULL
+        );
         """
     )
+    # Existing user databases are upgraded in place; no destructive rebuild is needed.
+    existing_columns = {
+        str(row[1]) for row in connection.execute("PRAGMA table_info(metric_snapshots)").fetchall()
+    }
+    additions = {
+        "estimated_minutes_watched": "REAL",
+        "subscribers_lost": "INTEGER",
+        "subscribers_net": "INTEGER",
+        "impressions": "INTEGER",
+        "impressions_ctr_percentage": "REAL",
+    }
+    for name, sql_type in additions.items():
+        if name not in existing_columns:
+            connection.execute(f"ALTER TABLE metric_snapshots ADD COLUMN {name} {sql_type}")
     connection.execute(
         """
         INSERT INTO metadata(key, value) VALUES('schema_version', ?)
@@ -196,17 +250,17 @@ def ingest_statistics_snapshot(
                     privacy_status, first_seen_at, last_seen_at
                 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(video_id) DO UPDATE SET
-                    slot = excluded.slot,
-                    channel_id = excluded.channel_id,
-                    channel_title = excluded.channel_title,
-                    youtube_url = excluded.youtube_url,
-                    pipeline = excluded.pipeline,
-                    category = excluded.category,
-                    editorial_profile = excluded.editorial_profile,
-                    language = excluded.language,
-                    title = excluded.title,
-                    published_at = excluded.published_at,
-                    privacy_status = excluded.privacy_status,
+                    slot = CASE WHEN excluded.slot > 0 THEN excluded.slot ELSE videos.slot END,
+                    channel_id = COALESCE(excluded.channel_id, videos.channel_id),
+                    channel_title = COALESCE(excluded.channel_title, videos.channel_title),
+                    youtube_url = COALESCE(excluded.youtube_url, videos.youtube_url),
+                    pipeline = COALESCE(excluded.pipeline, videos.pipeline),
+                    category = CASE WHEN excluded.category != 'unknown' THEN excluded.category ELSE videos.category END,
+                    editorial_profile = COALESCE(excluded.editorial_profile, videos.editorial_profile),
+                    language = COALESCE(excluded.language, videos.language),
+                    title = COALESCE(excluded.title, videos.title),
+                    published_at = COALESCE(excluded.published_at, videos.published_at),
+                    privacy_status = COALESCE(excluded.privacy_status, videos.privacy_status),
                     last_seen_at = excluded.last_seen_at
                 """,
                 (
@@ -230,10 +284,12 @@ def ingest_statistics_snapshot(
                 """
                 INSERT OR IGNORE INTO metric_snapshots(
                     video_id, collected_at, age_hours, views, likes, comments,
-                    engaged_views, average_view_duration_seconds,
-                    average_percentage_viewed, subscribers_gained, shares,
-                    stayed_to_watch_percentage, source, raw_json
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    engaged_views, estimated_minutes_watched,
+                    average_view_duration_seconds, average_percentage_viewed,
+                    subscribers_gained, subscribers_lost, subscribers_net, shares,
+                    stayed_to_watch_percentage, impressions,
+                    impressions_ctr_percentage, source, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     video_id,
@@ -243,11 +299,16 @@ def ingest_statistics_snapshot(
                     _as_int(video.get("likes")),
                     _as_int(video.get("comments")),
                     _as_int(video.get("engaged_views"), optional=True),
+                    video.get("estimated_minutes_watched"),
                     video.get("average_view_duration_seconds"),
                     video.get("average_percentage_viewed"),
                     _as_int(video.get("subscribers_gained"), optional=True),
+                    _as_int(video.get("subscribers_lost"), optional=True),
+                    _as_int(video.get("subscribers_net"), optional=True),
                     _as_int(video.get("shares"), optional=True),
                     video.get("stayed_to_watch_percentage"),
+                    _as_int(video.get("impressions"), optional=True),
+                    video.get("impressions_ctr_percentage"),
                     source,
                     json.dumps(video, ensure_ascii=False, separators=(",", ":")),
                 ),
@@ -273,6 +334,110 @@ def ingest_statistics_snapshot(
         "snapshots_inserted": snapshots_inserted,
         "checkpoints": checkpoint_counts,
     }
+
+
+def ingest_traffic_sources(
+    settings: Settings,
+    rows: list[dict[str, Any]],
+    *,
+    collected_at: str,
+    source: str = "youtube_analytics_api",
+) -> int:
+    path = database_path(settings)
+    inserted = 0
+    with _connect(path) as connection:
+        _initialize(connection)
+        for row in rows:
+            video_id = str(row.get("video_id") or "").strip()
+            traffic_source = str(row.get("traffic_source") or "").strip()
+            if not video_id or not traffic_source:
+                continue
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO traffic_source_snapshots(
+                    video_id, collected_at, traffic_source, views, engaged_views,
+                    estimated_minutes_watched, source, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    video_id,
+                    collected_at,
+                    traffic_source,
+                    _as_int(row.get("views"), optional=True),
+                    _as_int(row.get("engaged_views"), optional=True),
+                    row.get("estimated_minutes_watched"),
+                    source,
+                    json.dumps(row, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+            inserted += max(int(cursor.rowcount), 0)
+    return inserted
+
+
+def ingest_retention(
+    settings: Settings,
+    rows: list[dict[str, Any]],
+    *,
+    collected_at: str,
+    source: str = "youtube_analytics_api",
+) -> int:
+    path = database_path(settings)
+    inserted = 0
+    with _connect(path) as connection:
+        _initialize(connection)
+        for row in rows:
+            video_id = str(row.get("video_id") or "").strip()
+            ratio = row.get("elapsed_video_time_ratio")
+            if not video_id or ratio is None:
+                continue
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO retention_snapshots(
+                    video_id, collected_at, elapsed_video_time_ratio,
+                    audience_watch_ratio, relative_retention_performance,
+                    source, raw_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    video_id,
+                    collected_at,
+                    float(ratio),
+                    row.get("audience_watch_ratio"),
+                    row.get("relative_retention_performance"),
+                    source,
+                    json.dumps(row, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+            inserted += max(int(cursor.rowcount), 0)
+    return inserted
+
+
+def record_sync_run(
+    settings: Settings,
+    *,
+    collected_at: str,
+    mode: str,
+    status: str,
+    details: dict[str, Any],
+) -> None:
+    path = database_path(settings)
+    with _connect(path) as connection:
+        _initialize(connection)
+        connection.execute(
+            "INSERT INTO analytics_sync_runs(collected_at, mode, status, details_json) VALUES(?, ?, ?, ?)",
+            (collected_at, mode, status, json.dumps(details, ensure_ascii=False, separators=(",", ":"))),
+        )
+
+
+def latest_successful_sync(settings: Settings, *, mode: str = "core") -> datetime | None:
+    path = database_path(settings)
+    with _connect(path) as connection:
+        _initialize(connection)
+        value = connection.execute(
+            "SELECT MAX(collected_at) FROM analytics_sync_runs WHERE mode = ? AND status = 'ok'",
+            (mode,),
+        ).fetchone()[0]
+    return _parse_datetime(value)
 
 
 def import_statistics_history(
@@ -333,6 +498,11 @@ def analytics_status(settings: Settings) -> dict[str, Any]:
             )
             for hours in CHECKPOINT_HOURS
         }
+        traffic_sources = int(connection.execute("SELECT COUNT(*) FROM traffic_source_snapshots").fetchone()[0])
+        retention_points = int(connection.execute("SELECT COUNT(*) FROM retention_snapshots").fetchone()[0])
+        latest_rich_sync = connection.execute(
+            "SELECT MAX(collected_at) FROM analytics_sync_runs WHERE status = 'ok'"
+        ).fetchone()[0]
     return {
         "database": str(path),
         "schema_version": SCHEMA_VERSION,
@@ -340,4 +510,7 @@ def analytics_status(settings: Settings) -> dict[str, Any]:
         "snapshots": snapshots,
         "latest_collected_at": latest,
         "checkpoints": checkpoints,
+        "traffic_sources": traffic_sources,
+        "retention_points": retention_points,
+        "latest_rich_sync": latest_rich_sync,
     }

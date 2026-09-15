@@ -90,3 +90,22 @@ before both backlog and newly-rendered uploads. Mode remains `shadow`: QA errors
 or findings cannot block publication yet. Do not switch the scheduler to
 `--enforce` until the first new direct_v1 reports and MP4s are reviewed.
 No OpenAI/provider call is made by QA. See `docs/AUTO_QA_RU.md`.
+
+## Расширенная аналитика (2026-09-15)
+
+Добавлен отдельный owner-only слой YouTube Analytics API. После однократного
+`vv-youtube auth-analytics` scheduler best-effort запускает core sync максимум
+раз в 20 часов. Собираются engaged views, watch time, AVD/APV, likes/comments,
+shares и gained/lost subscribers. Ошибка или отсутствие нового scope не влияет
+на работающую публикацию.
+
+`analytics-sync --deep --slots N` вручную получает traffic sources и retention
+curve; deep не включён в частый scheduler из-за числа YouTube-запросов.
+`analytics-import-studio PATH` локально принимает русский/английский CSV/ZIP,
+включая точный Stayed to watch, если столбец присутствует. Никакая прокси-метрика
+не выдаётся за Stayed to watch. Импорт ограничен bot receipts и идемпотентен.
+
+`analytics-export` создаёт один ZIP без secrets/token с таблицами SQLite,
+checkpoints и локальными hook/script/category/profile. Пользователь может просто
+прислать этот ZIP для следующего анализа. Schema v2 обновляет существующую базу
+in place. OpenAI API cost: $0. Подробности: `docs/ANALYTICS_RU.md`.

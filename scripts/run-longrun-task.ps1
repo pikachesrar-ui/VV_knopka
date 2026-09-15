@@ -135,6 +135,14 @@ try {
         if ($ExitCode -ne 0) {
             Write-TaskLog ("WARN: YouTube statistics collection failed with exit code {0}; continuing publication workflow." -f $ExitCode)
         }
+
+        # Owner-only retention/watch metrics are refreshed at most once per day.
+        # This remains telemetry: missing scope, disabled API or a transient response
+        # must never block the established generation/upload path.
+        $ExitCode = Invoke-Logged -Prefix "youtube-analytics" -Exe $YouTubeExe -Arguments @("analytics-sync", "--if-due-hours", "20")
+        if ($ExitCode -ne 0) {
+            Write-TaskLog ("WARN: rich YouTube analytics sync failed with exit code {0}; continuing publication workflow." -f $ExitCode)
+        }
     }
 
     # While any ready backlog exists, each trigger spends its single publication

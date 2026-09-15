@@ -1,6 +1,6 @@
 # VV_knopka — LIVE PROGRESS
 
-Обновлено 2026-09-12.
+Обновлено 2026-09-15.
 
 ## Подтверждено файлами пользователя 2026-09-05
 
@@ -68,3 +68,14 @@ Slots 17–20 созданы/загружены. Следующий ожидае
 - Правая safe zone, pixel watermark и точный voice/music ratio честно отмечаются
   как SKIP, пока нет надёжного локального CV/OCR/stem анализа.
 - OpenAI API не используется; стоимость этапа $0.
+
+## 2026-09-15 — rich analytics v1
+
+- Добавлен безопасный OAuth upgrade `auth-analytics` с проверкой старого channel binding.
+- Core sync сохраняет engaged views, watch time, AVD/APV, реакции и подписки.
+- Scheduler запускает его best-effort максимум раз в 20 часов; публикация не блокируется.
+- Ручной `--deep` получает источники трафика и точки audience retention.
+- Русские/английские Studio CSV/ZIP импортируются локально и идемпотентно.
+- `analytics-export` собирает один secret-free ZIP для передачи на будущий анализ.
+- SQLite schema v2 обновляется без удаления 465 уже импортированных snapshots.
+- 193 tests PASS; OpenAI API и платные провайдеры не вызываются ($0).
