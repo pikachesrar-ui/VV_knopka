@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,8 +10,9 @@ from typing import Any
 from .settings import Settings
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 CHECKPOINT_HOURS = (24, 72, 168)
+CHECKPOINT_MAX_LAG_HOURS = 24
 
 
 def database_path(settings: Settings) -> Path:
@@ -47,6 +49,11 @@ def infer_category(video: dict[str, Any]) -> str:
     explicit = str(video.get("category") or "").strip().lower()
     if explicit:
         return explicit
+    searchable = " ".join(
+        str(video.get(key) or "") for key in ("title", "topic", "hook", "script")
+    ).casefold()
+    if re.search(r"\b(cats?|kittens?)\b", searchable):
+        return "cats"
     pipeline = str(video.get("pipeline") or "").strip().lower()
     if pipeline == "animal_compilation":
         return "cats"
@@ -83,6 +90,7 @@ def _initialize(connection: sqlite3.Connection) -> None:
             editorial_profile TEXT,
             language TEXT,
             title TEXT,
+            duration_seconds REAL,
             published_at TEXT,
             privacy_status TEXT,
             first_seen_at TEXT NOT NULL,
@@ -180,6 +188,43 @@ def _initialize(connection: sqlite3.Connection) -> None:
     for name, sql_type in additions.items():
         if name not in existing_columns:
             connection.execute(f"ALTER TABLE metric_snapshots ADD COLUMN {name} {sql_type}")
+    video_columns = {
+        str(row[1]) for row in connection.execute("PRAGMA table_info(videos)").fetchall()
+    }
+    if "duration_seconds" not in video_columns:
+        connection.execute("ALTER TABLE videos ADD COLUMN duration_seconds REAL")
+    # Rich analytics v1 used to create a synthetic zero row when Analytics API
+    # had not processed a newly published video yet. Those rows contain none of
+    # the owner-only fields and no analytics_raw payload, so they can be removed
+    # without touching legitimate zero-view reports returned by the API.
+    connection.execute(
+        """
+        DELETE FROM metric_snapshots
+        WHERE source = 'youtube_analytics_api'
+          AND engaged_views IS NULL
+          AND estimated_minutes_watched IS NULL
+          AND average_view_duration_seconds IS NULL
+          AND average_percentage_viewed IS NULL
+          AND subscribers_gained IS NULL
+          AND subscribers_lost IS NULL
+          AND shares IS NULL
+          AND instr(raw_json, '"analytics_raw"') = 0
+        """
+    )
+    # A checkpoint is useful only near its target. A first snapshot collected
+    # days later must not masquerade as a 24h/72h measurement.
+    connection.execute(
+        """
+        DELETE FROM metric_checkpoints
+        WHERE EXISTS (
+            SELECT 1
+            FROM metric_snapshots AS snapshot
+            WHERE snapshot.id = metric_checkpoints.snapshot_id
+              AND snapshot.age_hours > metric_checkpoints.checkpoint_hours + ?
+        )
+        """,
+        (float(CHECKPOINT_MAX_LAG_HOURS),),
+    )
     connection.execute(
         """
         INSERT INTO metadata(key, value) VALUES('schema_version', ?)
@@ -196,13 +241,17 @@ def _refresh_checkpoints(connection: sqlite3.Connection, video_id: str) -> None:
             """
             SELECT id
             FROM metric_snapshots
-            WHERE video_id = ? AND age_hours >= ?
+            WHERE video_id = ? AND age_hours >= ? AND age_hours <= ?
             ORDER BY age_hours ASC, collected_at ASC
             LIMIT 1
             """,
-            (video_id, float(hours)),
+            (video_id, float(hours), float(hours + CHECKPOINT_MAX_LAG_HOURS)),
         ).fetchone()
         if candidate is None:
+            connection.execute(
+                "DELETE FROM metric_checkpoints WHERE video_id = ? AND checkpoint_hours = ?",
+                (video_id, hours),
+            )
             continue
         connection.execute(
             """
@@ -246,9 +295,9 @@ def ingest_statistics_snapshot(
                 """
                 INSERT INTO videos(
                     video_id, slot, channel_id, channel_title, youtube_url, pipeline,
-                    category, editorial_profile, language, title, published_at,
-                    privacy_status, first_seen_at, last_seen_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    category, editorial_profile, language, title, duration_seconds,
+                    published_at, privacy_status, first_seen_at, last_seen_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(video_id) DO UPDATE SET
                     slot = CASE WHEN excluded.slot > 0 THEN excluded.slot ELSE videos.slot END,
                     channel_id = COALESCE(excluded.channel_id, videos.channel_id),
@@ -259,6 +308,7 @@ def ingest_statistics_snapshot(
                     editorial_profile = COALESCE(excluded.editorial_profile, videos.editorial_profile),
                     language = COALESCE(excluded.language, videos.language),
                     title = COALESCE(excluded.title, videos.title),
+                    duration_seconds = COALESCE(excluded.duration_seconds, videos.duration_seconds),
                     published_at = COALESCE(excluded.published_at, videos.published_at),
                     privacy_status = COALESCE(excluded.privacy_status, videos.privacy_status),
                     last_seen_at = excluded.last_seen_at
@@ -274,6 +324,7 @@ def ingest_statistics_snapshot(
                     video.get("editorial_profile"),
                     video.get("language"),
                     video.get("title"),
+                    video.get("duration_seconds"),
                     published_at,
                     video.get("privacy_status"),
                     collected_at,

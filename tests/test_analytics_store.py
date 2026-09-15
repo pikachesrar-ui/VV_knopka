@@ -104,6 +104,45 @@ def test_checkpoints_select_first_snapshot_after_each_target(tmp_path):
     assert category == "other_facts"
 
 
+def test_checkpoint_is_not_fabricated_from_a_snapshot_days_late(tmp_path):
+    settings = _settings(tmp_path)
+    ingest_statistics_snapshot(
+        settings,
+        _snapshot("2026-09-08T12:00:00Z", views=168, category="other_facts"),
+    )
+
+    status = analytics_status(settings)
+
+    assert status["checkpoints"] == {"24h": 0, "72h": 0, "168h": 1}
+
+
+def test_initialize_removes_legacy_synthetic_analytics_zero(tmp_path):
+    settings = _settings(tmp_path)
+    ingest_statistics_snapshot(
+        settings,
+        _snapshot("2026-09-02T01:00:00Z", views=0),
+        source="youtube_analytics_api",
+    )
+
+    status = analytics_status(settings)
+
+    assert status["snapshots"] == 0
+
+
+def test_ai_short_about_cats_is_categorized_as_cats(tmp_path):
+    settings = _settings(tmp_path)
+    snapshot = _snapshot("2026-09-02T01:00:00Z", views=10)
+    snapshot["videos"][0]["title"] = "Why Cats Slow-Blink at You #shorts"
+
+    ingest_statistics_snapshot(settings, snapshot)
+
+    with sqlite3.connect(database_path(settings)) as connection:
+        category = connection.execute(
+            "SELECT category FROM videos WHERE video_id = 'video-23'"
+        ).fetchone()[0]
+    assert category == "cats"
+
+
 def test_shadow_store_failure_does_not_block_json_history(monkeypatch, tmp_path):
     settings = _settings(tmp_path)
     snapshot = _snapshot("2026-09-02T01:00:00Z", views=10)
