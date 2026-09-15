@@ -180,6 +180,39 @@ def test_sync_collects_core_traffic_and_retention(tmp_path):
     assert any(call["dimensions"] == "video" for call in service.report_api.calls)
 
 
+def test_sync_does_not_store_synthetic_zero_when_analytics_has_no_row(tmp_path):
+    settings = _settings(tmp_path)
+    _receipt(settings)
+    service = _Service(
+        {
+            "video": _api_response(
+                [
+                    "video", "views", "engagedViews", "estimatedMinutesWatched",
+                    "averageViewDuration", "averageViewPercentage", "likes", "comments",
+                    "shares", "subscribersGained", "subscribersLost",
+                ],
+                [],
+            ),
+            "insightTrafficSourceType": _api_response(
+                ["insightTrafficSourceType", "views", "engagedViews", "estimatedMinutesWatched"],
+                [],
+            ),
+            "elapsedVideoTimeRatio": _api_response(
+                ["elapsedVideoTimeRatio", "audienceWatchRatio", "relativeRetentionPerformance"],
+                [],
+            ),
+        }
+    )
+
+    result = sync_analytics(settings, deep=True, slots={23}, service=service)
+
+    assert result["videos_returned"] == 0
+    assert result["snapshots_inserted"] == 0
+    assert "no zero snapshot was stored" in result["warnings"][0]
+    with sqlite3.connect(database_path(settings)) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM metric_snapshots").fetchone()[0] == 0
+
+
 def test_if_due_skips_network_service(tmp_path):
     settings = _settings(tmp_path)
     _receipt(settings)
@@ -210,6 +243,7 @@ def _studio_zip(path: Path) -> None:
         [
             "Контент",
             "Название видео",
+            "Продолжительность",
             "Просмотры",
             "Заинтересованные просмотры",
             "Время просмотра (часы)",
@@ -228,6 +262,7 @@ def _studio_zip(path: Path) -> None:
         [
             "video-23",
             "Why Cats Slow-Blink at You #shorts",
+            "0:00:36",
             174,
             90,
             "0,24",
@@ -278,9 +313,12 @@ def test_import_studio_zip_is_local_russian_and_idempotent(tmp_path):
             FROM metric_snapshots WHERE source LIKE 'youtube_studio_csv:%'
             """
         ).fetchone()
-        category = connection.execute("SELECT category FROM videos WHERE video_id = 'video-23'").fetchone()[0]
+        category, duration = connection.execute(
+            "SELECT category, duration_seconds FROM videos WHERE video_id = 'video-23'"
+        ).fetchone()
     assert row == (174, 90, 14.4, 9.0, 40.9, 3, 58.2, 12, 25.0)
     assert category == "cats"
+    assert duration == 36.0
 
 
 def test_export_bundle_contains_shareable_tables_and_local_features(tmp_path):
@@ -352,5 +390,8 @@ def test_schema_v2_upgrades_existing_metric_table(tmp_path):
 
     with sqlite3.connect(path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(metric_snapshots)")}
-    assert status["schema_version"] == 2
+    assert status["schema_version"] == 3
     assert {"estimated_minutes_watched", "subscribers_lost", "subscribers_net", "impressions"} <= columns
+    with sqlite3.connect(database_path(settings)) as connection:
+        video_columns = {row[1] for row in connection.execute("PRAGMA table_info(videos)")}
+    assert "duration_seconds" in video_columns

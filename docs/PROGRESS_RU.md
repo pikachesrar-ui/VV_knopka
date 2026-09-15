@@ -77,5 +77,18 @@ Slots 17–20 созданы/загружены. Следующий ожидае
 - Ручной `--deep` получает источники трафика и точки audience retention.
 - Русские/английские Studio CSV/ZIP импортируются локально и идемпотентно.
 - `analytics-export` собирает один secret-free ZIP для передачи на будущий анализ.
-- SQLite schema v2 обновляется без удаления 465 уже импортированных snapshots.
+- SQLite schema v2 обновляла базу без удаления 465 уже импортированных snapshots.
 - 193 tests PASS; OpenAI API и платные провайдеры не вызываются ($0).
+
+## 2026-09-15 — проверка первого analytics bundle
+
+- Bundle валиден: 23 bot-видео, 557 snapshots; secrets отсутствуют.
+- Slot 23: 174 Studio views к 13.6h и 9 likes; прежний максимум — 22 views.
+- YouTube Analytics API вернул 0 строк для свежего ролика, поэтому AVD/APV,
+  traffic и retention пока честно остаются отсутствующими.
+- Удалена запись ложного zero snapshot при API lag; старые такие строки
+  очищаются автоматически.
+- Checkpoints принимают снимок только в пределах 24h после цели; слишком поздние
+  старые значения очищаются.
+- Schema v3 хранит duration из Studio; cat-fact slot 23 получает category `cats`
+  после повторного импорта/снимка. 198 tests PASS, OpenAI cost $0.

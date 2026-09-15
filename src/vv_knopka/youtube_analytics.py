@@ -223,9 +223,12 @@ def sync_analytics(
 
         returned_ids = {str(entry.get("video_id") or "") for entry in entries}
         api_videos_returned = len(returned_ids)
-        for video_id, target in targets.items():
-            if video_id not in returned_ids:
-                entries.append({**target, "views": 0, "likes": 0, "comments": 0})
+        missing_targets = [target for video_id, target in targets.items() if video_id not in returned_ids]
+        if missing_targets:
+            slots_text = ", ".join(str(item.get("slot") or "?") for item in missing_targets)
+            warnings.append(
+                f"Analytics API has no processed row yet for slot(s): {slots_text}; no zero snapshot was stored."
+            )
 
         snapshot = {"collected_at": collected_at, "videos": entries}
         core_result = ingest_statistics_snapshot(settings, snapshot, source="youtube_analytics_api")
@@ -453,6 +456,9 @@ def import_studio_export(settings: Settings, export_path: Path) -> dict[str, Any
             entry = {
                 **target,
                 "title": raw_row.get(headers.get("title", "")) or target.get("title"),
+                "duration_seconds": _duration_seconds(
+                    raw_row.get(headers.get("duration_seconds", ""))
+                ),
                 "views": int(parsed_views if parsed_views is not None else fallback.get("views", 0)),
                 "likes": int(parsed_likes if parsed_likes is not None else fallback.get("likes", 0)),
                 "comments": int(parsed_comments if parsed_comments is not None else fallback.get("comments", 0)),

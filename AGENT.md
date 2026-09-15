@@ -60,6 +60,9 @@ generation/upload. Deep traffic/retention collection is manual because it needs
 per-video queries. Russian/English Studio CSV/ZIP can be imported idempotently;
 exact Stayed-to-watch is never inferred. `analytics-export` creates a secret-free
 ZIP for the user to share. No OpenAI calls or paid providers are involved.
+Real bundle validation hardened this layer: Analytics API lag no longer creates
+false zero snapshots, checkpoints more than 24h late are omitted, Studio duration
+is persisted, and AI shorts explicitly about cats infer the `cats` category.
 
 ## Audio review — 2026-09-12
 

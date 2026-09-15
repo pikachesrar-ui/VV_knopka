@@ -107,5 +107,12 @@ curve; deep не включён в частый scheduler из-за числа Y
 
 `analytics-export` создаёт один ZIP без secrets/token с таблицами SQLite,
 checkpoints и локальными hook/script/category/profile. Пользователь может просто
-прислать этот ZIP для следующего анализа. Schema v2 обновляет существующую базу
+прислать этот ZIP для следующего анализа. Schema v3 обновляет существующую базу
 in place. OpenAI API cost: $0. Подробности: `docs/ANALYTICS_RU.md`.
+
+Первый реальный export 2026-09-15 подтвердил 23 видео / 557 snapshots и рост
+slot 23 до 174 Studio views за 13.6h (предыдущий максимум 22). Owner-only API
+ещё не обработал новый ролик: traffic/retention/AVD/APV отсутствуют. Hotfix не
+записывает synthetic zero при таком lag, отбрасывает checkpoints более чем на
+24h позже цели, сохраняет Studio duration и распознаёт cat-fact как `cats`.
+Генерация и публикация не затронуты, OpenAI cost $0.
