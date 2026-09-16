@@ -1,5 +1,13 @@
 param(
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    # Manual batch children bypass the completed-batch night suppression, but
+    # still use the same exclusive per-cycle lock as the normal scheduler.
+    [switch]$ManualBatch,
+
+    # ISO-8601 local timestamp. Rendering may happen before this moment, while
+    # the actual upload waits so manual-batch publications stay about one hour apart.
+    [string]$PublishNotBefore = ""
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +32,7 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $SchedulerDir = Join-Path $ProjectRoot "runtime\scheduler"
 $LogPath = Join-Path $SchedulerDir "longrun-task.log"
 $LockPath = Join-Path $SchedulerDir "longrun-task.lock"
+$ManualBatchStatePath = Join-Path $SchedulerDir "manual-batch-state.json"
 $VvExe = Join-Path $ProjectRoot ".venv\Scripts\vv.exe"
 $YouTubeExe = Join-Path $ProjectRoot ".venv\Scripts\vv-youtube.exe"
 
@@ -83,6 +92,65 @@ function Get-PendingUploadCount {
     return $Count
 }
 
+function Get-ManualBatchSuppression {
+    if (-not (Test-Path $ManualBatchStatePath)) {
+        return $null
+    }
+    try {
+        $State = Get-Content -LiteralPath $ManualBatchStatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $Status = [string]$State.status
+        if ($Status -eq "running") {
+            $BatchProcess = Get-Process -Id ([int]$State.pid) -ErrorAction SilentlyContinue
+            if ($null -ne $BatchProcess) {
+                return "manual batch process $($State.pid) is running"
+            }
+            return $null
+        }
+        if ($Status -eq "completed" -and $State.suppress_scheduled_until) {
+            $Until = [DateTimeOffset]::Parse(
+                [string]$State.suppress_scheduled_until,
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [System.Globalization.DateTimeStyles]::RoundtripKind
+            )
+            if ($Until -gt [DateTimeOffset]::Now) {
+                return "manual batch already supplied today's publications until $($Until.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
+            }
+        }
+    }
+    catch {
+        Write-TaskLog ("WARN: could not read manual batch state; ignoring it: {0}" -f $_.Exception.Message)
+    }
+    return $null
+}
+
+function Wait-ForPublicationWindow {
+    if (-not $PublishNotBefore) {
+        return
+    }
+    $Target = [DateTimeOffset]::Parse(
+        $PublishNotBefore,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::RoundtripKind
+    )
+    while ($Target -gt [DateTimeOffset]::Now) {
+        $Remaining = $Target - [DateTimeOffset]::Now
+        if ($Remaining.TotalSeconds -le 1) {
+            break
+        }
+        $SleepSeconds = [Math]::Min([Math]::Ceiling($Remaining.TotalSeconds), 60)
+        Write-TaskLog ("WAIT: manual publication window opens at {0}; {1:N0}s remain." -f $Target.ToString('HH:mm:ss'), $Remaining.TotalSeconds)
+        Start-Sleep -Seconds $SleepSeconds
+    }
+}
+
+if (-not $ManualBatch) {
+    $SuppressionReason = Get-ManualBatchSuppression
+    if ($null -ne $SuppressionReason) {
+        Write-TaskLog ("SKIP: {0}." -f $SuppressionReason)
+        exit 0
+    }
+}
+
 $LockStream = $null
 try {
     try {
@@ -95,6 +163,7 @@ try {
     }
     catch [System.IO.IOException] {
         Write-TaskLog "SKIP: another long-run task already holds the scheduler lock."
+        if ($ManualBatch) { exit 75 }
         exit 0
     }
 
@@ -159,6 +228,7 @@ try {
 
         $BacklogArgs = @("upload-ready", "--limit", "1")
         if ($DryRun) { $BacklogArgs += "--dry-run" }
+        if (-not $DryRun) { Wait-ForPublicationWindow }
         $ExitCode = Invoke-Logged -Prefix "youtube-backlog" -Exe $YouTubeExe -Arguments $BacklogArgs
         if ($ExitCode -ne 0) {
             Write-TaskLog "FAIL: pending YouTube upload is deferred/failed; refusing to generate another slot until publication recovers."
@@ -189,6 +259,7 @@ try {
     # Real runs publish the newly rendered newest ready video.
     $PostUploadArgs = @("upload-ready", "--limit", "1", "--newest")
     if ($DryRun) { $PostUploadArgs += "--dry-run" }
+    if (-not $DryRun) { Wait-ForPublicationWindow }
     $ExitCode = Invoke-Logged -Prefix "youtube-post" -Exe $YouTubeExe -Arguments $PostUploadArgs
     if ($ExitCode -ne 0) {
         Write-TaskLog "FAIL: generation completed but YouTube upload is deferred/failed. The next trigger will drain pending publication first."

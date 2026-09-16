@@ -52,5 +52,7 @@ jobs:
           powershell -ExecutionPolicy Bypass -File .\scripts\run-longrun-task.ps1 -DryRun
           powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -DryRun
           powershell -ExecutionPolicy Bypass -File .\scripts\install-longrun-task.ps1 -At "12:00" -DryRun
+          powershell -ExecutionPolicy Bypass -File .\scripts\start-three-video-batch.ps1 -DryRun
+          powershell -ExecutionPolicy Bypass -File .\scripts\install-manual-batch-shortcut.ps1 -DryRun
           powershell -ExecutionPolicy Bypass -File .\scripts\setup-acestep-windows.ps1 -DryRun
           powershell -ExecutionPolicy Bypass -File .\scripts\start-acestep-api.ps1 -DryRun

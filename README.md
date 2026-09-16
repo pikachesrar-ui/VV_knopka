@@ -4,6 +4,7 @@ Automated animal/nature Shorts pipeline with YouTube publishing and a $10 OpenAI
 
 Current checkpoint and Windows update instructions: [PROJECT_HANDOFF_RU.md](docs/PROJECT_HANDOFF_RU.md).
 New-slot editorial format and validation: [EDITORIAL_RU.md](docs/EDITORIAL_RU.md).
+Optional three-video taskbar batch: [MANUAL_BATCH_RU.md](docs/MANUAL_BATCH_RU.md).
 The pilot walkthrough below describes the historical review-first setup; current long-run
 YouTube publishing is enabled, MPT starts automatically, and approved background music is active.
 

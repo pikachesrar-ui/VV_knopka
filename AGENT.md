@@ -39,7 +39,10 @@ Backlog-first scheduler, 01:30/03:30/05:30 MSK:
 status -> receipt verify -> best-effort stats -> one oldest pending upload and stop;
 only pending=0 -> generate one next slot -> upload that slot.
 Upload-limit cooldown persists; deferred/failure prevents backlog growth.
-Do not manually generate/upload while healthy scheduler is running.
+Do not manually generate/upload with raw CLI commands while healthy scheduler is running.
+The supported exception is `start-three-video-batch.ps1`: it reuses the same
+runner/locks, spaces publications by 60 minutes and suppresses that night's
+regular triggers until 06:30. See docs/MANUAL_BATCH_RU.md.
 MPT auto-start/wait/stop-own-process is available for AI. Cats use local FFmpeg.
 Provenance/commercial-use/audio/geometry/vision/fact-check gates remain fail-closed.
 Cat source cooldown=5 episodes, cooled reuse max=2 total / 1 per history episode.
@@ -63,6 +66,14 @@ ZIP for the user to share. No OpenAI calls or paid providers are involved.
 Real bundle validation hardened this layer: Analytics API lag no longer creates
 false zero snapshots, checkpoints more than 24h late are omitted, Studio duration
 is persisted, and AI shorts explicitly about cats infer the `cats` category.
+
+## Manual three-video batch — 2026-09-16
+
+User may launch three safe generation/publication cycles from a Windows shortcut.
+The manual batch is sequential, uses the normal runner and receipts, targets one
+hour between successful uploads, and cannot overlap itself. While running and
+after successful completion, regular 01:30/03:30/05:30 triggers are suppressed
+until the nearest 06:30. Failure removes suppression so night recovery remains.
 
 ## Audio review — 2026-09-12
 
