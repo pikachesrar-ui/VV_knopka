@@ -49,6 +49,14 @@ Source v6: audio-first; cooldown последних 5 cat episodes; cooled reuse
 Metadata v2, attribution, synthetic-media disclosure, receipts/idempotence работают.
 Комментарий-feedback planned; пока не расширять из-за отсутствия выборки.
 
+Поддерживается ручная серия `start-three-video-batch.ps1`: три тех же безопасных
+цикла с целевым интервалом публикаций 60 минут. Рендер следующего slot может идти
+до открытия окна загрузки. Batch использует отдельный lock/state и общий lock
+runner, поэтому не пересекается с собой или scheduler. После успешной серии
+ночные триггеры подавляются до ближайших 06:30; при ошибке подавление снимается.
+Установщик создаёт ярлыки Desktop/Start Menu; закрепление на taskbar делается
+один раз через контекстное меню Windows. См. `docs/MANUAL_BATCH_RU.md`.
+
 ## Валидация и следующий шаг
 
 178 локальных тестов PASS, локальный FFmpeg render smoke PASS. Production MPT/Windows
@@ -116,3 +124,10 @@ slot 23 до 174 Studio views за 13.6h (предыдущий максимум 
 записывает synthetic zero при таком lag, отбрасывает checkpoints более чем на
 24h позже цели, сохраняет Studio duration и распознаёт cat-fact как `cats`.
 Генерация и публикация не затронуты, OpenAI cost $0.
+
+## Operational checkpoint 2026-09-16
+
+Ночной trigger 01:30 запустился, но slot 24 cat сначала остановился на transient
+Pexels `ReadTimeout`. Ручной повтор штатного runner завершился успешно: slot 24
+опубликован public (`TujKlWJL-Eo`) в 03:45, QA WARN с 0 critical / 6 warnings.
+Slots 1–23 перед этим VERIFIED_PUBLIC. Ledger: $0.3314 / $10.
