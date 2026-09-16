@@ -1,0 +1,133 @@
+# VV_knopka — PROJECT HANDOFF
+
+GitHub — source of truth. Ветка mvp/pilot-scaffold. PR #1 open/draft/unmerged,
+merge только по явной команде пользователя. TikTok не трогать.
+
+## Реальный checkpoint пользователя от 2026-09-05
+
+- statistics.json: 20 видео, все public, суммарно 66 просмотров;
+- pending=0; slots 17–20 уже созданы и опубликованы;
+- последний slot 20 опубликован 2026-09-05 02:56:29 UTC;
+- следующий ожидаемый на момент снимка: slot 21 AI EN;
+- актуальный расход OpenAI не прислан; исторические $0.2024 не считать текущим остатком;
+- полноценный verify processing после этого снимка ещё не предъявлен.
+
+Канал не имел значительной старой аудитории: один подписчик — второй канал пользователя.
+Ссылками на новые ролики пользователь не делился. Studio: 69 просмотров всего,
+включая старые VTuber-видео; лента Shorts около 7 просмотров, не показов.
+Объём слишком мал для выбора победителя или диагноза о причинах ограничения охвата.
+
+## Сделано 2026-09-06 — подача новых роликов
+
+По разрешению пользователя: direct_v1 для новых renders начиная со slot 21.
+Подробности и команды применения: [EDITORIAL_RU.md](EDITORIAL_RU.md).
+
+Cats: source pool и gates сохраняются, финальный монтаж 3–4 сильных клипа,
+без чёрных карточек, подписи поверх кадра, второй сильнейший момент в конце,
+заголовок/описание по выбранным кадрам. Недостаточно хороших клипов — остановка,
+никакой автоматической платной регенерации оценок.
+
+AI: короткий hook в начале самого script, ответ раньше, конкретные stock queries;
+порядок одобренных материалов детерминирован, начальный кадр выбирается по metadata,
+затем MPT sequential / 4 seconds. Полное выравнивание сцен с текстом не реализовано.
+Fact-check gate сохранён. Дополнительных платных запросов нет.
+
+В upload sidecar и stats появился editorial_profile. Старые MP4 не меняются.
+Пилот 1–15 остаётся frozen; slots 16–20 тоже не перерендерить ради нового оформления.
+
+## Существующая инфраструктура
+
+Scheduler backlog-first: status / verify / best-effort stats, затем один oldest pending
+upload либо (только при pending=0) одна generation + upload. Триггеры 01:30/03:30/05:30 MSK.
+ПК должен быть включён. MPT запускается автоматически по необходимости.
+24h upload-limit cooldown сохранён. UTF-8/PowerShell scheduler incident исправлен
+и реально проверен 2 сентября на публикации slot 12.
+
+Source v6: audio-first; cooldown последних 5 cat episodes; cooled reuse максимум 2
+источника, максимум 1 из одного исторического эпизода. Safety gates fail closed.
+8 треков ACE-Step одобрены и включены: AI .10 с ducking, cats .11 без ducking.
+Metadata v2, attribution, synthetic-media disclosure, receipts/idempotence работают.
+Комментарий-feedback planned; пока не расширять из-за отсутствия выборки.
+
+Поддерживается ручная серия `start-three-video-batch.ps1`: три тех же безопасных
+цикла с целевым интервалом публикаций 60 минут. Рендер следующего slot может идти
+до открытия окна загрузки. Batch использует отдельный lock/state и общий lock
+runner, поэтому не пересекается с собой или scheduler. После успешной серии
+ночные триггеры подавляются до ближайших 06:30; при ошибке подавление снимается.
+Установщик создаёт ярлыки Desktop/Start Menu; закрепление на taskbar делается
+один раз через контекстное меню Windows. См. `docs/MANUAL_BATCH_RU.md`.
+
+## Валидация и следующий шаг
+
+178 локальных тестов PASS, локальный FFmpeg render smoke PASS. Production MPT/Windows
+render новой версии и свежие API responses здесь не запускались. Платных запросов
+в разработке не было, текущий ledger на ПК не сбрасывать. Лимит остаётся $10.
+
+Пользователь обновляет ветку на ПК по EDITORIAL_RU.md между scheduler triggers,
+после этого проверяем первый новый AI/cat output и профиль sidecar, расходы и логи.
+При ошибке source/editorial gate не ослаблять требования, сначала анализировать audit.
+Исторические подробности прежних checkpoints сохранены в git history.
+
+## Проверка присланных MP4 и баланс звука — 2026-09-12
+
+Slot 21 закончен 2026-09-06 00:35 UTC, slot 22 — 02:54 UTC. Коммит direct_v1
+создан только в 09:56 UTC; отсутствие editorial_profile у обоих и отсутствие
+cat-edit.json у slot 22 ожидаемо. Их старое оформление не является регрессией
+нового кода. Slot 22: 6 старых клипов, ~5.7 с чёрных карточек из 35.8 с.
+Slot 21: 4 кадра по ~6 с, действительное применение direct_v1 не проверено.
+
+У slot 22 интегральный звук большинства cat clips -14.6…-16 LUFS, одного
+тихого -21.6 LUFS; пики кадров ~-1 dBTP, а у мяуканья карточек ~-8 dBTP.
+Для будущих cats сжимаем резкие пики перед нормализацией до -16 LUFS / -8 dBTP,
+добавлен лимитер пиков; тихий естественный звук не поднимаем агрессивно вместе
+с шумом. Библиотечная музыка и уровни её микширования сохранены. Нужен слуховой
+контроль первого нового выпуска; готовые MP4 не перезаписывать.
+
+Windows-прогон пользователя на Python 3.11 выявил только несовместимость теста:
+stdlib `wave` не читает FFmpeg WAV с WAVE_FORMAT_EXTENSIBLE (tag 65534). Сам
+FFmpeg-фильтр и проверка peak прошли. Проверка длительности переведена на ffprobe,
+который уже является обязательной частью проекта. На этом checkpoint расход
+OpenAI $0.3087 / $10, publication gate PASS.
+
+
+## Auto-QA shadow checkpoint (2026-09-14)
+
+`vv-youtube qa-ready` runs local FFmpeg/ffprobe checks and writes a QA sidecar
+next to each matching ready MP4. The Windows scheduler invokes it immediately
+before both backlog and newly-rendered uploads. Mode remains `shadow`: QA errors
+or findings cannot block publication yet. Do not switch the scheduler to
+`--enforce` until the first new direct_v1 reports and MP4s are reviewed.
+No OpenAI/provider call is made by QA. See `docs/AUTO_QA_RU.md`.
+
+## Расширенная аналитика (2026-09-15)
+
+Добавлен отдельный owner-only слой YouTube Analytics API. После однократного
+`vv-youtube auth-analytics` scheduler best-effort запускает core sync максимум
+раз в 20 часов. Собираются engaged views, watch time, AVD/APV, likes/comments,
+shares и gained/lost subscribers. Ошибка или отсутствие нового scope не влияет
+на работающую публикацию.
+
+`analytics-sync --deep --slots N` вручную получает traffic sources и retention
+curve; deep не включён в частый scheduler из-за числа YouTube-запросов.
+`analytics-import-studio PATH` локально принимает русский/английский CSV/ZIP,
+включая точный Stayed to watch, если столбец присутствует. Никакая прокси-метрика
+не выдаётся за Stayed to watch. Импорт ограничен bot receipts и идемпотентен.
+
+`analytics-export` создаёт один ZIP без secrets/token с таблицами SQLite,
+checkpoints и локальными hook/script/category/profile. Пользователь может просто
+прислать этот ZIP для следующего анализа. Schema v3 обновляет существующую базу
+in place. OpenAI API cost: $0. Подробности: `docs/ANALYTICS_RU.md`.
+
+Первый реальный export 2026-09-15 подтвердил 23 видео / 557 snapshots и рост
+slot 23 до 174 Studio views за 13.6h (предыдущий максимум 22). Owner-only API
+ещё не обработал новый ролик: traffic/retention/AVD/APV отсутствуют. Hotfix не
+записывает synthetic zero при таком lag, отбрасывает checkpoints более чем на
+24h позже цели, сохраняет Studio duration и распознаёт cat-fact как `cats`.
+Генерация и публикация не затронуты, OpenAI cost $0.
+
+## Operational checkpoint 2026-09-16
+
+Ночной trigger 01:30 запустился, но slot 24 cat сначала остановился на transient
+Pexels `ReadTimeout`. Ручной повтор штатного runner завершился успешно: slot 24
+опубликован public (`TujKlWJL-Eo`) в 03:45, QA WARN с 0 critical / 6 warnings.
+Slots 1–23 перед этим VERIFIED_PUBLIC. Ledger: $0.3314 / $10.
