@@ -5,6 +5,12 @@ param(
     [ValidateRange(1, 1440)]
     [int]$IntervalMinutes = 60,
 
+    [ValidateRange(1, 5)]
+    [int]$MaxAttemptsPerPublication = 3,
+
+    [ValidateRange(1, 600)]
+    [int]$RetryDelaySeconds = 30,
+
     [switch]$DryRun
 )
 
@@ -39,12 +45,13 @@ function Write-BatchState {
         [string]$ErrorMessage = ""
     )
     $Payload = [ordered]@{
-        schema_version = 1
+        schema_version = 2
         status = $Status
         pid = $PID
         requested = $Count
         completed = $Completed
         interval_minutes = $IntervalMinutes
+        max_attempts_per_publication = $MaxAttemptsPerPublication
         started_at = $Script:StartedAt.ToString("o")
         updated_at = [DateTimeOffset]::Now.ToString("o")
         suppress_scheduled_until = $Script:SuppressUntil.ToString("o")
@@ -62,6 +69,7 @@ if (-not (Test-Path $Runner)) {
 if ($DryRun) {
     Write-Host "DRY RUN: one click would publish $Count videos, approximately $IntervalMinutes minutes apart."
     Write-Host "Runner   : $Runner"
+    Write-Host "Retries  : up to $MaxAttemptsPerPublication attempts per successful publication."
     Write-Host "Schedule : normal 01:30/03:30/05:30 runs would be suppressed until 06:30 after this batch."
     exit 0
 }
@@ -96,20 +104,44 @@ try {
 
     $PublishNotBefore = ""
     for ($Index = 1; $Index -le $Count; $Index++) {
-        Write-BatchLog ("CYCLE {0}/{1}: starting safe long-run generation/publication." -f $Index, $Count)
-        $Arguments = @(
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", $Runner,
-            "-ManualBatch"
-        )
-        if ($PublishNotBefore) {
-            $Arguments += @("-PublishNotBefore", $PublishNotBefore)
+        $PublicationSucceeded = $false
+        $LastExitCode = 0
+
+        for ($Attempt = 1; $Attempt -le $MaxAttemptsPerPublication; $Attempt++) {
+            Write-BatchLog (
+                "CYCLE {0}/{1}, ATTEMPT {2}/{3}: starting safe long-run generation/publication." -f
+                $Index, $Count, $Attempt, $MaxAttemptsPerPublication
+            )
+            $Arguments = @(
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", $Runner,
+                "-ManualBatch"
+            )
+            if ($PublishNotBefore) {
+                $Arguments += @("-PublishNotBefore", $PublishNotBefore)
+            }
+            & $PowerShellExe @Arguments
+            $LastExitCode = $LASTEXITCODE
+            if ($LastExitCode -eq 0) {
+                $PublicationSucceeded = $true
+                break
+            }
+
+            if ($Attempt -lt $MaxAttemptsPerPublication) {
+                Write-BatchLog (
+                    "RETRY: cycle {0}/{1} attempt {2} exited {3}; retrying the same missing publication in {4}s." -f
+                    $Index, $Count, $Attempt, $LastExitCode, $RetryDelaySeconds
+                )
+                Start-Sleep -Seconds $RetryDelaySeconds
+            }
         }
-        & $PowerShellExe @Arguments
-        $ExitCode = $LASTEXITCODE
-        if ($ExitCode -ne 0) {
-            throw "manual batch cycle $Index failed with exit code $ExitCode"
+
+        if (-not $PublicationSucceeded) {
+            throw (
+                "manual batch cycle {0} did not publish after {1} attempts; last exit code {2}" -f
+                $Index, $MaxAttemptsPerPublication, $LastExitCode
+            )
         }
 
         $Completed++
