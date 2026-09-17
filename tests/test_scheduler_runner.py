@@ -24,16 +24,21 @@ def test_scheduler_runner_respects_manual_batch_and_delayed_publication() -> Non
     assert script.count('Wait-ForPublicationWindow') >= 3
 
 
-def test_manual_batch_uses_three_safe_cycles_and_stops_on_failure() -> None:
+def test_manual_batch_retries_each_publication_but_keeps_gates_fail_closed() -> None:
     script = Path("scripts/start-three-video-batch.ps1").read_text(encoding="utf-8")
 
     assert '[int]$Count = 3' in script
     assert '[int]$IntervalMinutes = 60' in script
+    assert '[int]$MaxAttemptsPerPublication = 3' in script
+    assert '[int]$RetryDelaySeconds = 30' in script
     assert 'manual-batch.lock' in script
     assert 'manual-batch-state.json' in script
     assert '"-ManualBatch"' in script
     assert '"-PublishNotBefore"' in script
-    assert 'if ($ExitCode -ne 0)' in script
+    assert 'for ($Attempt = 1; $Attempt -le $MaxAttemptsPerPublication; $Attempt++)' in script
+    assert 'if ($LastExitCode -eq 0)' in script
+    assert 'retrying the same missing publication' in script
+    assert 'did not publish after {1} attempts' in script
     assert 'Normal night schedule remains available' in script
 
 
