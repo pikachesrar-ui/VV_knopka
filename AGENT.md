@@ -71,9 +71,13 @@ is persisted, and AI shorts explicitly about cats infer the `cats` category.
 
 User may launch three safe generation/publication cycles from a Windows shortcut.
 The manual batch is sequential, uses the normal runner and receipts, targets one
-hour between successful uploads, and cannot overlap itself. While running and
-after successful completion, regular 01:30/03:30/05:30 triggers are suppressed
-until the nearest 06:30. Failure removes suppression so night recovery remains.
+hour between successful uploads, and cannot overlap itself. A failed attempt
+does not count toward the requested three publications: the same missing
+publication is retried at most three times, without bypassing any gate. While
+running and after successful completion, regular 01:30/03:30/05:30 triggers are
+suppressed until the nearest 06:30. Exhausted retries remove suppression so
+night recovery remains. Keep retries bounded because OpenAI planning retries
+can add cost.
 
 ## Audio review — 2026-09-12
 
