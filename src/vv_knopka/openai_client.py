@@ -97,6 +97,7 @@ class OpenAIPlanner:
         pipeline: str,
         language: str,
         topic_hint: str | None = None,
+        excluded_anchors: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         cfg = self.settings.raw["openai"]
         model = cfg["writer_model"]
@@ -139,9 +140,12 @@ class OpenAIPlanner:
         elif pipeline == "ai_short":
             cooldown = int(self.settings.raw.get("long_run", {}).get("fact_subject_cooldown", 6))
             recent = recent_visual_anchors(self.settings, slot, limit=cooldown)
-            available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in set(recent)]
+            excluded = {str(anchor).strip().lower() for anchor in excluded_anchors}
+            available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in set(recent) | excluded]
             if not available:
-                available = list(STOCK_FRIENDLY_AI_ANCHORS)
+                available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in excluded]
+            if not available:
+                raise RuntimeError("All stock-friendly AI subjects were excluded")
             recent_text = ", ".join(recent) if recent else "none"
             topic_instruction = (
                 "\nSTOCK-AVAILABILITY AND SUBJECT-COOLDOWN CONSTRAINT: choose the main subject from "
@@ -152,6 +156,13 @@ class OpenAIPlanner:
                 "The factual story itself must genuinely apply to the chosen broad animal, so do not use generic "
                 "footage to illustrate a claim that is only true of a rare species. "
                 "Prefer a visually demonstrable behavior that can be represented by several distinct licensed stock clips."
+            )
+
+        if excluded_anchors:
+            forbidden = ", ".join(sorted({str(anchor).strip().lower() for anchor in excluded_anchors}))
+            topic_instruction += (
+                f"\nRECOVERY CONSTRAINT: do not choose any of these failed visual_anchor subjects: {forbidden}. "
+                "Choose a different broad, filmable animal from the allowed list."
             )
 
         pilot_total = int(self.settings.raw.get("pilot", {}).get("total_shorts", 15))
@@ -216,6 +227,9 @@ Return only the requested structured object."""
         )
         text = data.get("output_text") or _extract_output_text(data)
         plan = json.loads(text)
+        forbidden_anchors = {str(anchor).strip().lower() for anchor in excluded_anchors}
+        if str(plan.get("visual_anchor") or "").strip().lower() in forbidden_anchors:
+            raise RuntimeError("Recovery planner repeated an excluded visual_anchor")
         if direct:
             hook = " ".join(str(plan.get("hook") or "").split())
             script = " ".join(str(plan.get("script") or "").split())
