@@ -16,6 +16,7 @@ from .fact_check import FactChecker
 from .editorial import PROFILE, build_cat_edit, enabled_for_slot
 from .gates import publication_gate
 from .long_run_conveyor import run_longrun_batch
+from .longrun_recovery import recovery_state, unblock_after_manual_replan
 from .manifest import longrun_start_slot, resolve_slot, write_manifest
 from .material_fallback import CuratedMaterialFallbackError, load_duration_sufficient_materials
 from .mpt import MoneyPrinterTurboClient
@@ -125,6 +126,11 @@ def main() -> None:
     long_batch.add_argument("--count", type=int, default=3)
     long_batch.add_argument("--dry-run", action="store_true")
     plan.add_argument("--topic", default=None, help="Explicit topic/animal requested by the user")
+    plan.add_argument("--avoid-anchor", action="append", default=[], help="Exclude an exhausted visual subject")
+    recovery_status = sub.add_parser("recovery-status", help="Inspect blocked long-run slots")
+    recovery_status.add_argument("--limit", type=int, default=20)
+    recovery_unblock = sub.add_parser("recovery-unblock", help="Resume a blocked slot after a verified new-topic plan")
+    recovery_unblock.add_argument("slot", type=int)
     args = parser.parse_args()
 
     config_path = Path(args.config).resolve()
@@ -146,6 +152,25 @@ def main() -> None:
         print(f"youtube auto_publish: {settings.youtube_auto_publish}")
         print(f"publication gate: {'PASS' if publication_gate(settings).passed else 'FAIL'}")
         print(f"long_run: {bool(settings.raw.get('long_run', {}).get('enabled', False))}")
+        return
+
+    if args.command == "recovery-status":
+        slots_dir = settings.runtime_dir / "slots"
+        entries = []
+        for path in sorted(slots_dir.glob("*/auto-recovery.json")) if slots_dir.exists() else []:
+            number = int(path.parent.name)
+            state = recovery_state(settings, number)
+            if state.get("status") == "blocked":
+                entries.append((number, state.get("reason")))
+        for number, reason in (entries[-args.limit:] if args.limit > 0 else []):
+            print(f"slot {number}: BLOCKED | {reason}")
+        if not entries:
+            print("no blocked long-run slots")
+        return
+
+    if args.command == "recovery-unblock":
+        unblock_after_manual_replan(settings, args.slot)
+        print(f"slot {args.slot}: unblocked after verified replacement plan")
         return
 
     if args.command in {"pilot-next", "pilot-batch"}:
@@ -193,6 +218,7 @@ def main() -> None:
             pipeline=slot.pipeline,
             language=slot.language,
             topic_hint=args.topic,
+            excluded_anchors=tuple(args.avoid_anchor),
         )
         path = slot_dir / "plan.json"
         should_fact_check = (
