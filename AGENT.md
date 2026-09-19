@@ -54,6 +54,20 @@ Metadata backfill 1–11 and pre-upload upgrade 12–15 were completed historica
 
 After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.md.
 
+## Stock exhaustion / topic change — 2026-09-19
+
+User logs: slot 30 is public, but slot 31 stalled: octopus footage had only two
+vision-approved unique sources versus the three-source quality minimum. A later
+cat-box candidate failed fact-check on an unverified paw-gland claim and did not
+replace plan.json. The user backed up slot 31 plan/fact-check/material audit under
+runtime/recovery. Do not treat a failed batch as successful; slots 1–30 verified
+public and pending uploads were zero in the supplied logs.
+When a new plan has a different visual anchor, the old exhausted material audit
+must not suppress the new anchor's Pexels search. This is now fixed and locally
+tested (no paid API calls). Neither the vision gate nor fact-check was relaxed.
+The user must pull this change before retrying a new-topic plan and batch on the
+Windows PC. Do not claim slot 31 is published without new receipts/verification.
+
 ## Rich analytics — 2026-09-15
 
 Owner-only YouTube Analytics is an additive telemetry layer. `auth-analytics`
