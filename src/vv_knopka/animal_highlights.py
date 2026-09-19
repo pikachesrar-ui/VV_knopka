@@ -182,6 +182,7 @@ def _single_clip_fallback(
 
     for entry in clip_candidates:
         clip_index = int(entry["clip_index"])
+        direct = editorial_plan.get("editorial_profile") == PROFILE
         content: list[dict[str, Any]] = [
             {
                 "type": "input_text",
@@ -192,8 +193,14 @@ def _single_clip_fallback(
                     "8-10 outstanding moment. Weak clips may be excluded; do not fill a quota. "
                     f"Write one playful on-screen caption in {language_name}, maximum 5 words, no emojis, "
                     "and describe only what is visibly happening. "
-                    f"Editorial concept: title={editorial_plan.get('title')!r}; "
-                    f"hook={editorial_plan.get('hook')!r}."
+                    + (
+                        "Choose an action visibly supported by the contact sheet; do not guess a later action, "
+                        "animal intent, or any title supplied before footage selection. "
+                        "The caption becomes the public title for the first selected clip."
+                        if direct else
+                        f"Editorial concept: title={editorial_plan.get('title')!r}; "
+                        f"hook={editorial_plan.get('hook')!r}."
+                    )
                 ),
             }
         ]
@@ -304,6 +311,7 @@ def select_highlights(
     clip_candidates: list[dict[str, Any]] = []
     user_content: list[dict[str, Any]] = []
     language_name = "Russian" if language == "ru" else "English"
+    direct = editorial_plan.get("editorial_profile") == PROFILE
     prompt = (
         "You are editing a cute-cat vertical Short. For EACH clip, choose the candidate segment that is "
         "most visually engaging, cute, funny, or action-focused while keeping the cat clearly visible. "
@@ -312,16 +320,22 @@ def select_highlights(
         "and the montage has variety. Write one very short playful on-screen caption per selected clip in "
         f"{language_name}; maximum 5 words, no hashtags, no emojis, no fake claims. "
         "Captions should relate to what is visibly happening, not be generic. "
-        f"Editorial concept: title={editorial_plan.get('title')!r}; hook={editorial_plan.get('hook')!r}; "
-        f"editorial_value={editorial_plan.get('editorial_value')!r}."
     )
-    if editorial_plan.get("editorial_profile") == PROFILE:
+    if direct:
         prompt += (
             " Score editorial interest, not just image quality: 0-3 idle/redundant; "
             "4-5 mild interest; 6-7 clear engaging action, reaction or expressive moment; "
             "8-10 especially strong moment. Weak clips may be excluded from the edit. "
-            "Do not inflate scores to fill a quota. The first caption must name the visible "
-            "cat action and also work as a truthful short title; no invented motives."
+            "Do not inflate scores to fill a quota. Ignore any previously proposed title or hook: "
+            "first choose the visible moment, then independently name its action. "
+            "The first caption will become the public Short title; it must describe what the cat "
+            "actually does in the opening window, without guessing subsequent actions or motives. "
+            "Write each description in the same language as the caption."
+        )
+    else:
+        prompt += (
+            f"Editorial concept: title={editorial_plan.get('title')!r}; hook={editorial_plan.get('hook')!r}; "
+            f"editorial_value={editorial_plan.get('editorial_value')!r}."
         )
     user_content.append({"type": "input_text", "text": prompt})
 
