@@ -506,7 +506,9 @@ def _load_cached_materials(
     except (OSError, json.JSONDecodeError):
         return [], [], {}
     if str(audit.get("visual_anchor") or "").lower() != anchor.lower():
-        return [], [], audit
+        # An exhausted audit for an earlier plan must not exhaust the new
+        # subject's Pexels search or supply its cached clips.
+        return [], [], {}
 
     materials: list[dict[str, Any]] = []
     provenance: list[dict[str, Any]] = []
