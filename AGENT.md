@@ -54,6 +54,28 @@ Metadata backfill 1–11 and pre-upload upgrade 12–15 were completed historica
 
 After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.md.
 
+## Bounded AI subject recovery — 2026-09-19
+
+Long-run AI slots now distinguish a fresh failed fact-check and fully exhausted
+Pexels+Pixabay audit (including insufficient reusable seconds) from transient
+failures. One alternative broad visual anchor is allowed per slot, subject to
+the existing $10 ledger and an estimated $0.55 per-slot reserve ceiling. The
+original plan/audits are archived under `runtime/slots/NN/auto-recovery/`;
+`auto-recovery.json` tracks state. After another terminal failure or insufficient
+budget the slot is marked blocked, and the next runner selects the next slot.
+Unknown/network failures do not qualify for subject skipping. The first
+replacement's temporary failure stays retryable. The existing scheduler,
+backlog-first publication and receipt gates are unchanged. `vv recovery-status`
+lists blocked slots; restoring one requires a different fact-checked plan and
+`vv recovery-unblock NN`. A blocked slot is never silently republished.
+
+For new direct_v1 cat reviews, the model sees the images without the prewritten
+concept title/hook. The public title still comes from the reviewed first
+window's caption, with no additional API call. Existing cached highlights or
+rendered MP4s are not modified. This prompt is not an independent vision QA.
+The user currently has a manual batch running on their Windows checkout: do
+not request an update or claim new slots are public until that batch finishes.
+
 ## Stock exhaustion / topic change — 2026-09-19
 
 User logs: slot 30 is public, but slot 31 stalled: octopus footage had only two
