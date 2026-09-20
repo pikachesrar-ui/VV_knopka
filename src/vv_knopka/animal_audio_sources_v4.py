@@ -22,6 +22,7 @@ from .source_history import (
     cat_source_cooldown_episodes,
     prior_rendered_cat_identities,
 )
+from .stock_network import get_stock
 
 
 _EXTRA_CAT_QUERIES = (
@@ -105,7 +106,7 @@ def _deep_pexels_collector(
 
         for query in _expanded_queries(queries):
             for page in range(1, max(int(pages_per_query), 1) + 1):
-                response = client.get(
+                response = get_stock(client,
                     "https://api.pexels.com/videos/search",
                     headers={"Authorization": api_key},
                     params={
@@ -211,7 +212,7 @@ def _deep_pixabay_collector(
             # episodes have exhausted the same popular results.
             for order in ("popular", "latest"):
                 for page in range(1, max(int(pages_per_query), 1) + 1):
-                    response = client.get(
+                    response = get_stock(client,
                         "https://pixabay.com/api/videos/",
                         params={
                             "key": api_key,
