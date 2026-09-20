@@ -63,9 +63,19 @@ have stopped early, and an earlier 03:32 run failed on OpenAI Responses HTTP
 403 while Analytics DNS failed independently. User says they also pressed the
 shortcut today; obtain that batch's state/log before assigning a cause.
 Deep Analytics query for slots 29-35 returned processed rows for 2/4 and
-none yet for slots 31/32. The exported ZIP exists only on the Windows PC until
-the user attaches it. Do not infer Stayed to watch or retention for recent
-slots from views/likes.
+none yet for slots 31/32. The user later attached the exported ZIP. Do not
+infer Stayed to watch or retention for recent slots from views/likes.
+
+ZIP 2026-09-20 17:31 UTC (32 bot videos): 17 Sep slots 27/28/29 were
+published one hour apart; 18 Sep slot 30, 19 Sep slot 31, 20 Sep slot 32
+(01:33 MSK). Thus the user's observation of one per local day since the 18th
+is correct; previous interpretation of slot 32 as published on the 19th was
+wrong. Latest public views/likes: 27 933/9, 28 1167/18, 29 1028/17,
+30 1409/28, 31 1070/19, 32 1661/38; slot 24 reached 4037/65.
+The 2026-09-20 manual batch requested 3 and ended `failed` with completed=0
+after 3 attempts (04:18-13:43 MSK). No cause is provable from the batch summary;
+require `longrun-task.log` for those exact attempts before changing retry or
+publication logic, or asking the user to rerun it.
 
 Interactive Windows PowerShell `vv-youtube stats | Select-String` crashed on
 cp1251 while printing an emoji title, after successfully collecting a 32-video
