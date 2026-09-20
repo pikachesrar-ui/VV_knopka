@@ -161,11 +161,18 @@ def run_longrun_batch(
 
     state = _load_state(settings)
     outputs: list[Path] = []
+    blocked_skips = 0
+    # A rejected second AI subject has already been explicitly blocked. One
+    # such slot may be skipped within this invocation, so a manual publication
+    # cycle can still use its one upload opportunity. Bound this per invocation:
+    # each new AI subject may incur another planner/fact-check/vision call.
+    max_blocked_skips = max(0, int(settings.raw.get("recovery", {}).get("max_blocked_skips_per_run", 1)))
     mpt = _base.MPTProcessManager(settings)
     original_run_cli = _base._run_cli
     _base._run_cli = _run_current_cli
     try:
-        for slot in todo:
+        while len(outputs) < len(todo):
+            slot = pending_longrun_slots(settings, count=1)[0]
             _base._validate_conveyor_lock(settings)
             attempt = {
                 "slot": slot.slot,
@@ -211,6 +218,17 @@ def run_longrun_batch(
                     attempt["error"] = f"{type(final_error).__name__}: {final_error}"
                     attempt["finished_at"] = datetime.now(timezone.utc).isoformat()
                     _write_state(settings, state)
+                    latest = recovery_state(settings, slot.slot) if slot.pipeline == "ai_short" else {}
+                    # A temporary HTTP failure remains retryable on this same
+                    # slot. A budget guard also must not trigger new planning.
+                    if (
+                        latest.get("status") == "blocked"
+                        and not str(latest.get("reason") or "").startswith("recovery budget guard:")
+                        and blocked_skips < max_blocked_skips
+                    ):
+                        blocked_skips += 1
+                        print(f"RECOVERY: slot {slot.slot} blocked; continuing with next missing slot in this run")
+                        continue
                     raise
             attempt["status"] = "ready_for_review"
             attempt["output"] = str(output.resolve())
