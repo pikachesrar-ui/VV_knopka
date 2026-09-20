@@ -56,6 +56,17 @@ After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.m
 
 ## 2026-09-20 user checkpoint / Windows console
 
+User subsequently confirmed 213 Windows tests pass and `recovery-status`
+shows slot 33 BLOCKED. New code allows at most one definitively blocked AI
+slot to yield its publication opportunity in the SAME `longrun-next` call;
+transient errors and budget-guard failures remain fail-closed. Stock search
+GET and video download retry only transient connection/read errors three
+times with 2s/6s backoff; never retry paid LLM calls, HTTP status errors, or
+uploads. Persistent outages still stop after bounded attempts so the channel
+cannot create an unbounded paid or publishing loop. A full local suite passed
+216 tests with reused Python site-packages; Windows behavior still needs the
+user's post-pull test and next production cycle.
+
 Manual batch 20 Sep has now been diagnosed from the runner log: attempt 1
 exhausted octopus stock for slot 33 and its alternative failed fact-check;
 slot 33 was blocked and the next attempts selected slot 34. Both attempts
