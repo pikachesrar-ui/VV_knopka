@@ -18,6 +18,7 @@ $ErrorActionPreference = "Stop"
 # native-command output before anything is piped into the scheduler log.
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
+$env:PYTHONUNBUFFERED = "1"
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = $Utf8NoBom
 try {
@@ -58,14 +59,16 @@ function Invoke-Logged {
     $PreviousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
-        $Output = @(& $Exe @Arguments 2>&1)
+        # Stream output as it arrives. Source discovery can take a long time;
+        # buffering everything until exit hid both progress and early errors.
+        & $Exe @Arguments 2>&1 | ForEach-Object {
+            Write-TaskLog ("{0}: {1}" -f $Prefix, $_)
+        }
         $ExitCode = $LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $PreviousErrorActionPreference
     }
-
-    $Output | ForEach-Object { Write-TaskLog ("{0}: {1}" -f $Prefix, $_) }
     return $ExitCode
 }
 
