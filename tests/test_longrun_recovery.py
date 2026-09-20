@@ -85,27 +85,55 @@ def test_exhausted_footage_replans_once_and_preserves_audit(monkeypatch, tmp_pat
     assert recovery_state(settings, 31)["status"] == "recovered"
 
 
-def test_second_exhausted_subject_blocks_slot_and_next_cycle_can_continue(monkeypatch, tmp_path):
+def test_second_exhausted_subject_blocks_slot_and_same_cycle_renders_next(monkeypatch, tmp_path):
     settings = _settings(tmp_path)
     _audit(settings, "octopus")
     _runner(monkeypatch)
 
+    output = settings.runtime_dir / "ready_for_review" / "slot-32-en-animals.mp4"
+    visited = []
+
     def render(settings, config_path, slot, mpt):
-        raise RuntimeError("child command failed (1): render-ai 31")
+        visited.append(slot.slot)
+        if slot.slot == 31:
+            raise RuntimeError("child command failed (1): render-ai 31")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"video")
+        return output
 
     monkeypatch.setattr(conveyor._base, "_render_one", render)
     monkeypatch.setattr(conveyor, "_run_current_cli", lambda config, *args: _audit(settings, "cat"))
 
-    with pytest.raises(RuntimeError, match="render-ai 31"):
-        conveyor.run_longrun_batch(settings, config_path=tmp_path / "config" / "pilot.toml", count=1)
+    assert conveyor.run_longrun_batch(settings, config_path=tmp_path / "config" / "pilot.toml", count=1) == [output]
+    assert visited == [31, 31, 32]
 
     state = recovery_state(settings, 31)
     assert state["status"] == "blocked"
     assert state["replans_used"] == 1
     assert state["failed_anchor"] == "cat"
-    assert [(s.slot, s.pipeline) for s in conveyor.pending_longrun_slots(settings, count=1)] == [
-        (32, "animal_compilation")
-    ]
+    assert conveyor.pending_longrun_slots(settings, count=1)[0].slot == 33
+
+
+def test_blocked_ai_does_not_hide_network_failure_of_next_cat(monkeypatch, tmp_path):
+    settings = _settings(tmp_path)
+    _audit(settings, "octopus")
+    _runner(monkeypatch)
+    called = []
+
+    def render(settings, config_path, slot, mpt):
+        called.append(slot.slot)
+        if slot.slot == 31:
+            raise RuntimeError("child command failed (1): render-ai 31")
+        raise RuntimeError("child command failed (1): render-animal 32")
+
+    monkeypatch.setattr(conveyor._base, "_render_one", render)
+    monkeypatch.setattr(conveyor, "_run_current_cli", lambda config, *args: _audit(settings, "cat"))
+
+    with pytest.raises(RuntimeError, match="render-animal 32"):
+        conveyor.run_longrun_batch(settings, config_path=tmp_path / "config" / "pilot.toml", count=1)
+    assert called == [31, 31, 32]
+    assert recovery_state(settings, 31)["status"] == "blocked"
+    assert conveyor.pending_longrun_slots(settings, count=1)[0].slot == 32
 
 
 def test_transient_failure_does_not_replan_or_skip(monkeypatch, tmp_path):
