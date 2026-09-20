@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -33,6 +34,15 @@ from .youtube_uploader import (
 
 
 def main() -> None:
+    # Interactive Windows PowerShell often starts Python with a legacy console
+    # encoding (e.g. cp1251). Preserve Cyrillic while escaping only characters
+    # that console cannot represent, such as cat-title emoji. The scheduler
+    # explicitly uses UTF-8 and continues to print the original characters.
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(errors="backslashreplace")
+        except (OSError, ValueError):
+            pass
     load_dotenv()
     parser = argparse.ArgumentParser(prog="vv-youtube")
     parser.add_argument("--config", default="config/pilot.toml")
