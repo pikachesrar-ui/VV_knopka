@@ -34,9 +34,12 @@ cat_cooled_reuse_max_per_history_episode = 1
 [recovery]
 # When fact-check or both stock providers permanently reject an AI subject,
 # try one new subject. Subsequent terminal failures block only that slot.
-# The next trigger can continue at the next unblocked slot. No gate is relaxed.
+# A definitively blocked AI slot can yield its current publication opportunity
+# to the next missing slot. No gate is relaxed.
 enabled = true
 max_replans_per_slot = 1
+# At most one blocked AI slot can be passed in a single run to bound API spending.
+max_blocked_skips_per_run = 1
 # Reserve ceiling for one planner + fact check + bounded vision batches.
 # The actual charge is recorded by the existing $10 ledger and is usually lower.
 max_estimated_extra_usd = 0.55
