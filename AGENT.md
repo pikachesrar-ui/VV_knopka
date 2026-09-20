@@ -56,6 +56,17 @@ After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.m
 
 ## 2026-09-20 user checkpoint / Windows console
 
+Manual batch 20 Sep has now been diagnosed from the runner log: attempt 1
+exhausted octopus stock for slot 33 and its alternative failed fact-check;
+slot 33 was blocked and the next attempts selected slot 34. Both attempts
+for 34 failed on `httpx.ConnectError`/Windows 10054 during `render-animal`.
+The independent 03:32 OpenAI 403 was the earlier scheduled cycle. The
+YouTube Analytics DNS error was nonblocking. No slot 33/34 publication was
+confirmed; after batch failure, regular night schedule is enabled. Runner
+now streams process output with unbuffered Python so long source searches
+are diagnosable while running. This does not fix an unavailable network or
+change gates/retry counts. Windows runtime must be checked before next batch.
+
 User verified slots 31 and 32 as public; slot 32 had 583 views and 28 likes
 at 03:30 local on 2026-09-20. At 17:31 UTC the Data API snapshot had 32
 receipt videos; no slot 33 publication has been demonstrated. Manual batches
