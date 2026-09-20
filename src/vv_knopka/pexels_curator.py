@@ -4,6 +4,7 @@ import json
 import math
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
@@ -12,6 +13,7 @@ import httpx
 
 from .budget import BudgetLedger
 from .settings import Settings
+from .stock_network import RETRYABLE_STOCK_ERRORS, RETRY_DELAYS_SECONDS
 
 
 _STOPWORDS = {
@@ -177,12 +179,20 @@ def _download(client: httpx.Client, url: str, destination: Path) -> None:
     if destination.exists() and destination.stat().st_size > 0:
         return
     temp = destination.with_suffix(destination.suffix + ".part")
-    with client.stream("GET", url) as response:
-        response.raise_for_status()
-        with temp.open("wb") as fh:
-            for chunk in response.iter_bytes():
-                fh.write(chunk)
-    temp.replace(destination)
+    for attempt in range(3):
+        try:
+            with client.stream("GET", url) as response:
+                response.raise_for_status()
+                with temp.open("wb") as fh:
+                    for chunk in response.iter_bytes():
+                        fh.write(chunk)
+            temp.replace(destination)
+            return
+        except RETRYABLE_STOCK_ERRORS:
+            temp.unlink(missing_ok=True)
+            if attempt == 2:
+                raise
+            time.sleep(RETRY_DELAYS_SECONDS[attempt])
 
 
 def _extract_output_text(data: dict[str, Any]) -> str:
