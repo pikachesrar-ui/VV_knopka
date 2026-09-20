@@ -20,6 +20,7 @@ from .pexels_curator import (
     pexels_page_matches_anchor,
 )
 from .settings import Settings
+from .stock_network import get_stock
 
 
 _PROVIDER_LICENSES = {
@@ -183,7 +184,7 @@ def _collect_pexels_audio_candidates(
     candidates: list[dict[str, Any]] = []
     seen_ids: set[int] = set()
     for query in queries:
-        response = client.get(
+        response = get_stock(client,
             "https://api.pexels.com/videos/search",
             headers={"Authorization": api_key},
             params={"query": query, "orientation": "portrait", "per_page": per_page},
