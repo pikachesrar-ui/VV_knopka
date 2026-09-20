@@ -54,6 +54,25 @@ Metadata backfill 1–11 and pre-upload upgrade 12–15 were completed historica
 
 After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.md.
 
+## 2026-09-20 user checkpoint / Windows console
+
+User verified slots 31 and 32 as public; slot 32 had 583 views and 28 likes
+at 03:30 local on 2026-09-20. At 17:31 UTC the Data API snapshot had 32
+receipt videos; no slot 33 publication has been demonstrated. Manual batches
+have stopped early, and an earlier 03:32 run failed on OpenAI Responses HTTP
+403 while Analytics DNS failed independently. User says they also pressed the
+shortcut today; obtain that batch's state/log before assigning a cause.
+Deep Analytics query for slots 29-35 returned processed rows for 2/4 and
+none yet for slots 31/32. The exported ZIP exists only on the Windows PC until
+the user attaches it. Do not infer Stayed to watch or retention for recent
+slots from views/likes.
+
+Interactive Windows PowerShell `vv-youtube stats | Select-String` crashed on
+cp1251 while printing an emoji title, after successfully collecting a 32-video
+snapshot. `youtube_cli.main()` now uses `backslashreplace` for unsupported
+console characters; Cyrillic remains legible and UTF-8 scheduler output stays
+unchanged. No YouTube or paid API calls were needed to test this fix.
+
 ## Bounded AI subject recovery — 2026-09-19
 
 Long-run AI slots now distinguish a fresh failed fact-check and fully exhausted
@@ -73,8 +92,8 @@ For new direct_v1 cat reviews, the model sees the images without the prewritten
 concept title/hook. The public title still comes from the reviewed first
 window's caption, with no additional API call. Existing cached highlights or
 rendered MP4s are not modified. This prompt is not an independent vision QA.
-The user currently has a manual batch running on their Windows checkout: do
-not request an update or claim new slots are public until that batch finishes.
+Check the latest Windows batch state before recommending an update or further
+publication, and never infer it from stale `running` state alone.
 
 ## Stock exhaustion / topic change — 2026-09-19
 
