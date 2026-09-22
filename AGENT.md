@@ -181,3 +181,15 @@ Windows Python 3.11 exposed that its stdlib wave reader rejects FFmpeg's
 WAVE_FORMAT_EXTENSIBLE output. The regression test now validates duration with
 ffprobe instead; production audio processing was unaffected. User ledger at
 2026-09-13 checkpoint: $0.3087 / $10, publication gate PASS.
+
+## Terminal cat-stock recovery — 2026-09-22
+
+After a fresh, completed Pexels+Pixabay audit proves that an animal slot cannot
+meet the existing minimum of relevant, vertical, audible sources, that slot is
+now marked blocked and the same invocation may continue to the next missing
+slot. This consumes the same single bounded blocked-skip allowance as AI
+recovery; no source-quality threshold is relaxed. Old audits, missing provider
+keys, HTTP failures, and interrupted searches never qualify. Stock search GETs
+retry HTTP 429/500/502/503/504 and transport failures at most three times.
+Raised errors contain provider path/status only and must never contain API keys
+or query values. This recovery adds no OpenAI call by itself.

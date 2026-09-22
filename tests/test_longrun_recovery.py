@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from vv_knopka import long_run_conveyor as conveyor
 from vv_knopka.longrun_recovery import (
     recovery_state,
+    terminal_animal_failure,
     terminal_ai_failure,
     unblock_after_manual_replan,
     write_recovery,
@@ -134,6 +136,64 @@ def test_blocked_ai_does_not_hide_network_failure_of_next_cat(monkeypatch, tmp_p
     assert called == [31, 31, 32]
     assert recovery_state(settings, 31)["status"] == "blocked"
     assert conveyor.pending_longrun_slots(settings, count=1)[0].slot == 32
+
+
+def _animal_audit(settings, slot, *, selected=2, completed_at=None, both_configured=True):
+    directory = settings.runtime_dir / "slots" / f"{slot:02d}"
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "animal_audio_sources.json").write_text(
+        json.dumps(
+            {
+                "search_completed_at": completed_at or datetime.now(timezone.utc).isoformat(),
+                "required_minimum": 5,
+                "selected": selected,
+                "selected_sources": [{}] * selected,
+                "provider_availability": {
+                    "pexels_api_key_present": True,
+                    "pixabay_api_key_present": both_configured,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_completed_cat_shortage_blocks_and_same_cycle_renders_next(monkeypatch, tmp_path):
+    settings = _settings(tmp_path)
+    write_recovery(settings, 31, {"status": "blocked", "reason": "old AI subject"})
+    _runner(monkeypatch)
+    output = settings.runtime_dir / "ready_for_review" / "slot-33-en-ai.mp4"
+    visited = []
+
+    def render(settings, config_path, slot, mpt):
+        visited.append(slot.slot)
+        if slot.slot == 32:
+            _animal_audit(settings, 32)
+            raise RuntimeError("child command failed (1): render-animal 32")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"video")
+        return output
+
+    monkeypatch.setattr(conveyor._base, "_render_one", render)
+    assert conveyor.run_longrun_batch(
+        settings, config_path=tmp_path / "config" / "pilot.toml", count=1
+    ) == [output]
+    assert visited == [32, 33]
+    assert recovery_state(settings, 32)["status"] == "blocked"
+
+
+def test_cat_network_failure_cannot_reuse_old_completed_audit(tmp_path):
+    settings = _settings(tmp_path)
+    _animal_audit(settings, 32, completed_at="2026-01-01T00:00:00+00:00")
+    error = RuntimeError("child command failed (1): render-animal 32")
+    assert terminal_animal_failure(settings, 32, error, not_before=10**11) is None
+
+
+def test_cat_shortage_needs_both_provider_keys(tmp_path):
+    settings = _settings(tmp_path)
+    _animal_audit(settings, 32, both_configured=False)
+    error = RuntimeError("child command failed (1): render-animal 32")
+    assert terminal_animal_failure(settings, 32, error) is None
 
 
 def test_transient_failure_does_not_replan_or_skip(monkeypatch, tmp_path):

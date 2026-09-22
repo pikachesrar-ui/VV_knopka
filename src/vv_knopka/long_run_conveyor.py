@@ -14,6 +14,7 @@ from .longrun_recovery import (
     recovery_state,
     reserve_recovery_budget,
     terminal_ai_failure,
+    terminal_animal_failure,
     write_recovery,
 )
 from .manifest import Slot, longrun_enabled, longrun_slot, longrun_start_slot
@@ -147,31 +148,31 @@ def run_longrun_batch(
 ) -> list[Path]:
     """Render N missing post-pilot slots, preserving review-first safety and resumability."""
     _base._validate_conveyor_lock(settings)
-    todo = pending_longrun_slots(settings, count=count)
+    wanted = max(int(count), 0)
     if dry_run:
+        todo = pending_longrun_slots(settings, count=wanted)
         for slot in todo:
             print(
                 f"slot {slot.slot:02d}: {slot.pipeline} / {slot.language} "
                 f"-> {_base.expected_output(settings, slot)}"
             )
         return []
-    if not todo:
+    if wanted == 0:
         print("Long-run conveyor: count is zero; nothing to render.")
         return []
 
     state = _load_state(settings)
     outputs: list[Path] = []
     blocked_skips = 0
-    # A rejected second AI subject has already been explicitly blocked. One
-    # such slot may be skipped within this invocation, so a manual publication
-    # cycle can still use its one upload opportunity. Bound this per invocation:
-    # each new AI subject may incur another planner/fact-check/vision call.
+    # One newly proven terminal AI or cat slot may be skipped within this
+    # invocation, so a publication cycle can still use its upload opportunity.
+    # Bound this per invocation because later slots can incur paid review calls.
     max_blocked_skips = max(0, int(settings.raw.get("recovery", {}).get("max_blocked_skips_per_run", 1)))
     mpt = _base.MPTProcessManager(settings)
     original_run_cli = _base._run_cli
     _base._run_cli = _run_current_cli
     try:
-        while len(outputs) < len(todo):
+        while len(outputs) < wanted:
             slot = pending_longrun_slots(settings, count=1)[0]
             _base._validate_conveyor_lock(settings)
             attempt = {
@@ -214,11 +215,29 @@ def run_longrun_batch(
                         raise exc
                     output = _recover_ai_slot(settings, config_path, slot, mpt, exc, attempt["started_at"])
                 except Exception as final_error:
+                    if (
+                        slot.pipeline == "animal_compilation"
+                        and settings.raw.get("recovery", {}).get("enabled", False)
+                    ):
+                        started = datetime.fromisoformat(attempt["started_at"]).timestamp()
+                        reason = terminal_animal_failure(
+                            settings, slot.slot, final_error, not_before=started
+                        )
+                        if reason is not None:
+                            write_recovery(
+                                settings,
+                                slot.slot,
+                                {
+                                    "status": "blocked",
+                                    "reason": reason,
+                                    "pipeline": slot.pipeline,
+                                },
+                            )
                     attempt["status"] = "failed"
                     attempt["error"] = f"{type(final_error).__name__}: {final_error}"
                     attempt["finished_at"] = datetime.now(timezone.utc).isoformat()
                     _write_state(settings, state)
-                    latest = recovery_state(settings, slot.slot) if slot.pipeline == "ai_short" else {}
+                    latest = recovery_state(settings, slot.slot)
                     # A temporary HTTP failure remains retryable on this same
                     # slot. A budget guard also must not trigger new planning.
                     if (

@@ -17,10 +17,10 @@ def test_stock_search_retries_only_transport_errors(monkeypatch):
             self.calls += 1
             if self.calls < 3:
                 raise httpx.ConnectError("reset")
-            return "found"
+            return httpx.Response(200, request=httpx.Request("GET", url))
 
     client = Client()
-    assert stock_network.get_stock(client, "https://stock.example/video") == "found"
+    assert stock_network.get_stock(client, "https://stock.example/video").status_code == 200
     assert client.calls == 3
 
     class Forbidden:
@@ -31,9 +31,32 @@ def test_stock_search_retries_only_transport_errors(monkeypatch):
             raise httpx.HTTPStatusError("forbidden", request=httpx.Request("GET", url), response=httpx.Response(403))
 
     forbidden = Forbidden()
-    with pytest.raises(httpx.HTTPStatusError):
-        stock_network.get_stock(forbidden, "https://stock.example/video")
+    with pytest.raises(RuntimeError, match="HTTP 403") as caught:
+        stock_network.get_stock(
+            forbidden, "https://stock.example/video?key=secret", params={"key": "also-secret"}
+        )
     assert forbidden.calls == 1
+    assert "secret" not in str(caught.value)
+
+
+def test_stock_search_retries_temporary_http_status(monkeypatch):
+    monkeypatch.setattr(stock_network.time, "sleep", lambda _: None)
+
+    class Client:
+        calls = 0
+
+        def get(self, url, **kwargs):
+            self.calls += 1
+            status = 503 if self.calls < 3 else 200
+            request = httpx.Request("GET", url, params=kwargs.get("params"))
+            return httpx.Response(status, request=request)
+
+    client = Client()
+    response = stock_network.get_stock(
+        client, "https://stock.example/video", params={"key": "top-secret"}
+    )
+    assert response.status_code == 200
+    assert client.calls == 3
 
 
 def test_stock_download_discards_partial_file_before_retry(monkeypatch, tmp_path: Path):

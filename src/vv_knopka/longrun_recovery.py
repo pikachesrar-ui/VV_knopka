@@ -100,6 +100,36 @@ def terminal_ai_failure(
     return None
 
 
+def terminal_animal_failure(
+    settings: Settings, slot: int, error: Exception, *, not_before: float = 0.0
+) -> str | None:
+    """Return a reason only for a freshly completed, fully audited cat shortage.
+
+    Network failures and old audit files deliberately remain retryable. Both
+    stock providers must be configured; quality gates are never relaxed.
+    """
+    message = str(error)
+    if f"render-animal {slot}" not in message or "child command failed" not in message:
+        return None
+
+    audit = _read_json(settings.runtime_dir / "slots" / f"{slot:02d}" / "animal_audio_sources.json")
+    try:
+        completed = datetime.fromisoformat(str(audit.get("search_completed_at") or "")).timestamp()
+        required = int(audit.get("required_minimum") or 0)
+        selected = int(audit.get("selected") or len(audit.get("selected_sources") or []))
+    except (TypeError, ValueError, AttributeError):
+        return None
+    availability = audit.get("provider_availability") or {}
+    if not isinstance(availability, dict):
+        return None
+    both_configured = bool(availability.get("pexels_api_key_present")) and bool(
+        availability.get("pixabay_api_key_present")
+    )
+    if completed < not_before or not both_configured or required <= 0 or selected >= required:
+        return None
+    return f"audited cat stock exhausted: only {selected}/{required} usable clips"
+
+
 def reserve_recovery_budget(settings: Settings) -> float:
     """Reserve for at most one planner, fact-check, and bounded vision search."""
     cfg = settings.raw.get("recovery", {})

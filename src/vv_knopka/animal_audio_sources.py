@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -578,6 +579,10 @@ def ensure_audio_animal_sources(
     audit = {
         "version": 2,
         "slot": slot,
+        # Written only after both configured provider searches complete. Later
+        # diagnostic enrichers may rewrite this file after an interrupted retry,
+        # so terminal recovery must trust this timestamp instead of file mtime.
+        "search_completed_at": datetime.now(timezone.utc).isoformat(),
         "visual_anchor": anchor,
         "required_minimum": min_unique,
         "target": target_count,
