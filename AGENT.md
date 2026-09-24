@@ -193,3 +193,22 @@ keys, HTTP failures, and interrupted searches never qualify. Stock search GETs
 retry HTTP 429/500/502/503/504 and transport failures at most three times.
 Raised errors contain provider path/status only and must never contain API keys
 or query values. This recovery adds no OpenAI call by itself.
+
+
+## Detached manual batch worker — 2026-09-24
+
+A reported seven-hour gap occurred inside one already-started traceback: the
+interactive PowerShell output path, not useful rendering work, had stopped
+draining. The taskbar shortcut now targets `launch-three-video-batch.ps1`.
+It starts `start-three-video-batch.ps1` as a hidden detached worker with
+stdout/stderr redirected to files. The visible window only polls the existing
+state/log files; selecting text, copying, or closing that monitor cannot pause
+Python/FFmpeg or cancel the batch. A second click attaches to the verified
+existing worker instead of starting another one. The worker passes
+`-NoConsoleOutput` into `run-longrun-task.ps1`, so synchronous `Write-Host`
+is removed from the production child-output path while UTF-8 file logging,
+locks, receipts, three-attempt bounds, one-hour spacing, and night suppression
+remain unchanged. Re-run the shortcut installer after pull because existing
+`.lnk` files still point to the old worker. Static launcher/runner regression
+tests pass locally; full Windows PowerShell and project suite validation remains
+for the user's machine. This change costs $0 in API calls.

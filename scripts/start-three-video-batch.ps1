@@ -11,7 +11,11 @@ param(
     [ValidateRange(1, 600)]
     [int]$RetryDelaySeconds = 30,
 
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    # A detached launcher uses this switch so a stalled/selected console cannot
+    # back-pressure the worker and all of its Python/FFmpeg child processes.
+    [switch]$NoConsoleOutput
 )
 
 Set-StrictMode -Version Latest
@@ -31,11 +35,18 @@ $BatchLockPath = Join-Path $SchedulerDir "manual-batch.lock"
 $BatchLogPath = Join-Path $SchedulerDir "manual-batch.log"
 $PowerShellExe = (Get-Command powershell.exe -ErrorAction Stop).Source
 
+function Write-BatchHost {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message)
+    if (-not $NoConsoleOutput) {
+        Write-Host $Message
+    }
+}
+
 function Write-BatchLog {
     param([Parameter(Mandatory = $true)][string]$Message)
     $Line = "{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
     Add-Content -LiteralPath $BatchLogPath -Value $Line -Encoding UTF8
-    Write-Host $Line
+    Write-BatchHost $Line
 }
 
 function Write-BatchState {
@@ -67,10 +78,10 @@ if (-not (Test-Path $Runner)) {
 }
 
 if ($DryRun) {
-    Write-Host "DRY RUN: one click would publish $Count videos, approximately $IntervalMinutes minutes apart."
-    Write-Host "Runner   : $Runner"
-    Write-Host "Retries  : up to $MaxAttemptsPerPublication attempts per successful publication."
-    Write-Host "Schedule : normal 01:30/03:30/05:30 runs would be suppressed until 06:30 after this batch."
+    Write-BatchHost "DRY RUN: one click would publish $Count videos, approximately $IntervalMinutes minutes apart."
+    Write-BatchHost "Runner   : $Runner"
+    Write-BatchHost "Retries  : up to $MaxAttemptsPerPublication attempts per successful publication."
+    Write-BatchHost "Schedule : normal 01:30/03:30/05:30 runs would be suppressed until 06:30 after this batch."
     exit 0
 }
 
@@ -94,7 +105,7 @@ try {
         )
     }
     catch [System.IO.IOException] {
-        Write-Host "VV Knopka batch is already running. A second batch was not started."
+        Write-BatchHost "VV Knopka batch is already running. A second batch was not started."
         exit 75
     }
 
@@ -118,6 +129,9 @@ try {
                 "-File", $Runner,
                 "-ManualBatch"
             )
+            if ($NoConsoleOutput) {
+                $Arguments += "-NoConsoleOutput"
+            }
             if ($PublishNotBefore) {
                 $Arguments += @("-PublishNotBefore", $PublishNotBefore)
             }
@@ -152,8 +166,8 @@ try {
 
     Write-BatchState -Status "completed" -Completed $Completed
     Write-BatchLog "SUCCESS: manual batch completed all $Completed publications."
-    Write-Host ""
-    Write-Host "All requested VV Knopka publications completed. You may close this window."
+    Write-BatchHost ""
+    Write-BatchHost "All requested VV Knopka publications completed."
 }
 catch {
     $Message = $_.Exception.Message
@@ -161,8 +175,8 @@ catch {
     $Script:SuppressUntil = [DateTimeOffset]::Now
     Write-BatchState -Status "failed" -Completed $Completed -ErrorMessage $Message
     Write-BatchLog ("FAIL: {0}. Normal night schedule remains available." -f $Message)
-    Write-Host ""
-    Write-Host "Batch stopped safely. Existing receipts/backlog prevent duplicate uploads."
+    Write-BatchHost ""
+    Write-BatchHost "Batch stopped safely. Existing receipts/backlog prevent duplicate uploads."
     exit 1
 }
 finally {

@@ -7,7 +7,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$BatchScript = Join-Path $PSScriptRoot "start-three-video-batch.ps1"
+$BatchScript = Join-Path $PSScriptRoot "launch-three-video-batch.ps1"
 $PowerShellExe = (Get-Command powershell.exe -ErrorAction Stop).Source
 $VvExe = Join-Path $ProjectRoot ".venv\Scripts\vv.exe"
 $Desktop = [Environment]::GetFolderPath("Desktop")
@@ -16,7 +16,7 @@ $DesktopShortcut = Join-Path $Desktop "$ShortcutName.lnk"
 $StartMenuShortcut = Join-Path $StartMenu "$ShortcutName.lnk"
 
 if (-not (Test-Path $BatchScript)) {
-    throw "Manual batch script was not found at $BatchScript"
+    throw "Manual batch launcher was not found at $BatchScript"
 }
 
 Write-Host "Shortcut : $ShortcutName"
@@ -38,7 +38,7 @@ foreach ($Path in @($DesktopShortcut, $StartMenuShortcut)) {
     $Shortcut.TargetPath = $PowerShellExe
     $Shortcut.Arguments = $Arguments
     $Shortcut.WorkingDirectory = $ProjectRoot
-    $Shortcut.Description = "Generate and publish three VV Knopka Shorts about one hour apart."
+    $Shortcut.Description = "Run three VV Knopka Shorts in a detached worker and monitor progress."
     if (Test-Path $VvExe) {
         $Shortcut.IconLocation = "$VvExe,0"
     }
@@ -51,3 +51,4 @@ foreach ($Path in @($DesktopShortcut, $StartMenuShortcut)) {
 Write-Host "Created both shortcuts."
 Write-Host "To keep the button on the taskbar: right-click the Start-menu shortcut and choose 'Pin to taskbar'."
 Write-Host "Windows does not provide a reliable supported command for pinning arbitrary shortcuts automatically."
+

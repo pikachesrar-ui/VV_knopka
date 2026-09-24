@@ -7,7 +7,11 @@ param(
 
     # ISO-8601 local timestamp. Rendering may happen before this moment, while
     # the actual upload waits so manual-batch publications stay about one hour apart.
-    [string]$PublishNotBefore = ""
+    [string]$PublishNotBefore = "",
+
+    # Suppress writes to an interactive console when the worker is detached.
+    # File logging remains enabled and is the source for the monitor window.
+    [switch]$NoConsoleOutput
 )
 
 Set-StrictMode -Version Latest
@@ -43,7 +47,9 @@ function Write-TaskLog {
     param([Parameter(Mandatory = $true)][string]$Message)
     $Line = "{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
     Add-Content -Path $LogPath -Value $Line -Encoding UTF8
-    Write-Host $Line
+    if (-not $NoConsoleOutput) {
+        Write-Host $Line
+    }
 }
 
 function Invoke-Logged {
@@ -287,3 +293,4 @@ finally {
         # The OS handle is the actual lock; a leftover empty file is harmless.
     }
 }
+
