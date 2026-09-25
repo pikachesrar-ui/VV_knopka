@@ -3,6 +3,31 @@
 GitHub — source of truth. Ветка mvp/pilot-scaffold. PR #1 open/draft/unmerged,
 merge только по явной команде пользователя. TikTok не трогать.
 
+## 25 сентября: лицензированные fallback-источники котов
+
+По прямому разрешению пользователя source route повышен с v6 до v7. Локальная
+лицензированная библиотека принимается только при `human_approved=true`,
+commercial use и allowlist Public Domain/CC0/CC BY 3.0/4.0. Затем без изменений
+выполняется полный v6 Pexels/Pixabay поиск. После доказанного minimum-count
+failure добавляется Wikimedia Commons: metadata license/size/portrait filter,
+существующий ограниченный Luna relevance review, скачивание и повторные локальные
+FFmpeg gates. Минимум 5 источников, cooldown и reuse audit не снижены.
+
+Если safe sources всё равно не хватает, в slot создаётся один кэшированный
+`source-candidate-queue.json` через существующий YouTube OAuth. CC и обычные
+результаты — только URL/metadata, `auto_download=false`,
+`publication_allowed=false`; обычная лицензия требует документированного
+разрешения. CC импортируется вручную через прежний `vv-cat-youtube cc` и все
+clean-footage gates. Обязательный credit формируется из `sources.json` и уже
+существующим metadata builder попадает в description.
+
+CLI `vv-cat-sources` создаёт local manifest и показывает/обновляет очередь.
+YouTube search расходует бесплатную quota только после полного source failure:
+две search.list + одна videos.list, кэш на slot. OpenAI `$0` для очереди/local;
+Wikimedia vision использует существующий ledger только при крайней необходимости.
+TikTok auto-search/download не добавлен. 228 локальных тестов PASS без внешних
+API вызовов. Документ: `docs/CAT_SOURCE_FALLBACK_RU.md`.
+
 ## 20 сентября: интерактивная статистика и остановившиеся серии
 
 После подтверждения 213 тестов на ПК и `slot 33: BLOCKED` добавлена

@@ -46,7 +46,7 @@ regular triggers until 06:30. See docs/MANUAL_BATCH_RU.md.
 MPT auto-start/wait/stop-own-process is available for AI. Cats use local FFmpeg.
 Provenance/commercial-use/audio/geometry/vision/fact-check gates remain fail-closed.
 Cat source cooldown=5 episodes, cooled reuse max=2 total / 1 per history episode.
-Current source route: animal_audio_sources_v6 (depends on older layers; don't delete blindly).
+Current source route: animal_audio_sources_v7 (depends on v6 and older layers; don't delete blindly).
 Eight ACE-Step tracks were listened to/approved; production enabled:
 ai_volume=.10, cat_volume=.11, ai_ducking=true, cat_ducking=false.
 Conditional synthetic-media disclosure remains enabled. Secrets/tokens local/ignored.
@@ -212,3 +212,21 @@ remain unchanged. Re-run the shortcut installer after pull because existing
 `.lnk` files still point to the old worker. Static launcher/runner regression
 tests pass locally; full Windows PowerShell and project suite validation remains
 for the user's machine. This change costs $0 in API calls.
+
+## Licensed cat-source fallback — 2026-09-25
+
+The user authorized expansion after repeated cat-stock exhaustion. Source v7
+first accepts explicitly human-approved local clips with Public Domain, CC0 or
+CC BY 3.0/4.0 provenance, then preserves the complete v6 Pexels/Pixabay route.
+Only after that route proves insufficient may it query Wikimedia Commons,
+license/format-filter previews, run the existing bounded Luna relevance gate,
+download approved files and recheck duration/geometry/audibility locally.
+The five-source threshold, cooldown and reuse audit are unchanged.
+
+If every licensed automatic source is insufficient, write one cached per-slot
+YouTube Data API queue (CC plus standard-license references). Queue rows are
+metadata/URLs only: auto_download=false and publication_allowed=false. Standard
+license always needs documented permission; CC still needs human review and the
+existing clean-footage gates. Required CC BY credit is added to upload metadata
+from sources.json. TikTok automatic search/download remains out of scope.
+See docs/CAT_SOURCE_FALLBACK_RU.md. Development/tests do not call external APIs.

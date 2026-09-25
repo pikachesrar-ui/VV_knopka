@@ -1,6 +1,23 @@
 # VV_knopka — LIVE PROGRESS
 
-Обновлено 2026-09-24.
+Обновлено 2026-09-25.
+
+## 2026-09-25 — лицензированные fallback-источники cats
+
+- Source route обновлён до v7 без изменения Pexels/Pixabay v6, порога 5 клипов,
+  cooldown, звуковых/геометрических/vision gates и публикационных receipts.
+- Добавлена локальная библиотека только для явно human-approved Public Domain,
+  CC0 и CC BY 3.0/4.0 файлов. Неясные, NC/ND/SA лицензии отклоняются.
+- После полного неуспеха stock route разрешён Wikimedia Commons с проверкой
+  лицензии/размера/вертикали до скачивания и прежним Luna visual gate.
+- При нехватке safe sources автоматически создаётся кэшированная очередь
+  YouTube CC и standard-license references. Это только metadata/URL: обычные
+  Shorts не скачиваются и не публикуются автоматически.
+- CC BY attribution из `sources.json` автоматически попадает в description;
+  отдельный fallback audit хранит результат каждого этапа.
+- Новый CLI: `vv-cat-sources local-template` и `youtube-queue SLOT`.
+- Полный локальный suite: 228 PASS; внешние/OpenAI/YouTube API не вызывались.
+- Подробности: [CAT_SOURCE_FALLBACK_RU.md](CAT_SOURCE_FALLBACK_RU.md).
 
 ## 2026-09-20 — продолжение серии после неудачного сюжета
 

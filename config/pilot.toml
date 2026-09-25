@@ -185,6 +185,26 @@ highlight_vision_max_estimated_cost_usd = 0.05
 youtube_clean_vision_min_confidence = 0.78
 youtube_clean_vision_max_estimated_cost_usd = 0.02
 
+[source_fallback]
+# Used only after the normal licensed stock route cannot reach the existing
+# five-source gate. No threshold is relaxed and no standard-license media is
+# downloaded or published automatically.
+local_library_enabled = true
+local_library_manifest = "runtime/licensed_sources/cats/manifest.json"
+local_library_max_sources = 6
+wikimedia_enabled = true
+wikimedia_queries = ["cat", "kitten", "domestic cat", "cat playing"]
+wikimedia_per_query = 25
+wikimedia_max_candidates = 16
+wikimedia_max_file_mb = 80
+wikimedia_vision_batch_size = 8
+youtube_queue_enabled = true
+youtube_standard_queue_enabled = true
+youtube_queue_days = 3650
+youtube_queue_limit = 10
+youtube_cc_query = "cat kitten shorts"
+youtube_general_query = "funny cat shorts"
+
 [audio]
 # Global transition SFX remain disabled. Animal-only meow is scoped under [animal].
 transition_sfx = "none"
