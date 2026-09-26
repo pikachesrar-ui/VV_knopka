@@ -39,7 +39,7 @@ cat_cooled_reuse_max_per_history_episode = 1
 enabled = true
 max_replans_per_slot = 1
 # At most one blocked AI slot can be passed in a single run to bound API spending.
-max_blocked_skips_per_run = 1
+max_blocked_skips_per_run = 2
 # Reserve ceiling for one planner + fact check + bounded vision batches.
 # The actual charge is recorded by the existing $10 ledger and is usually lower.
 max_estimated_extra_usd = 0.55
@@ -83,12 +83,38 @@ web_search_call_usd = 0.01
 
 [qa]
 enabled = true
-# Shadow mode writes reports and scheduler logs but never blocks upload.
-mode = "shadow"
+# Scheduler blocks only critical local failures; warnings remain observable.
+mode = "critical"
 recommended_min_seconds = 25
 recommended_max_seconds = 35
 hard_min_seconds = 10
 hard_max_seconds = 60
+
+[strategy]
+# Only categories with a safe automatic visual route may enter production.
+# Anime/movies/theories are researched, but remain disabled until a rights-safe
+# source pack or another explicitly approved visual route exists.
+production_categories = ["cats", "animals", "other_facts"]
+minimum_samples = 3
+prior_weight = 4.0
+exploration_share = 0.20
+
+[research]
+# Two YouTube search.list calls per weekly run (~202 quota units including details).
+# Metadata only: no third-party media is downloaded or published.
+categories = ["cats", "animals", "anime", "movies", "theories", "other_facts"]
+max_queries_per_run = 2
+lookback_days = 90
+results_per_query = 25
+failure_retry_hours = 24
+
+[research.queries]
+cats = "cat shorts"
+animals = "animal facts shorts"
+anime = "anime facts shorts"
+movies = "movie facts shorts"
+theories = "film anime theories shorts"
+other_facts = "interesting facts shorts"
 
 [video]
 aspect = "9:16"

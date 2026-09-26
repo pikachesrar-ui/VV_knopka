@@ -214,13 +214,16 @@ def collect_statistics(settings: Settings) -> dict[str, Any]:
         try:
             upload_metadata = json.loads(upload_path.read_text(encoding="utf-8"))
             profile = str(upload_metadata.get("editorial_profile") or "legacy")
+            category = str(upload_metadata.get("category") or "").strip() or None
         except (OSError, ValueError, AttributeError):
             profile = "unknown"
+            category = None
         entry = {
             "slot": int(payload.get("slot") or 0),
             "video_id": video_id,
             "youtube_url": payload.get("youtube_url"),
             "pipeline": pipeline,
+            "category": category,
             "editorial_profile": profile,
             "language": language,
             "title": snippet.get("title") or payload.get("title"),

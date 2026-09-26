@@ -5,11 +5,14 @@ param(
     [ValidateRange(1, 1440)]
     [int]$IntervalMinutes = 60,
 
-    [ValidateRange(1, 5)]
-    [int]$MaxAttemptsPerPublication = 3,
+    [ValidateRange(1, 8)]
+    [int]$MaxAttemptsPerPublication = 5,
 
     [ValidateRange(1, 600)]
     [int]$RetryDelaySeconds = 30,
+
+    [ValidateRange(15, 240)]
+    [int]$AttemptTimeoutMinutes = 90,
 
     [switch]$DryRun,
 
@@ -63,6 +66,7 @@ function Write-BatchState {
         completed = $Completed
         interval_minutes = $IntervalMinutes
         max_attempts_per_publication = $MaxAttemptsPerPublication
+        attempt_timeout_minutes = $AttemptTimeoutMinutes
         started_at = $Script:StartedAt.ToString("o")
         updated_at = [DateTimeOffset]::Now.ToString("o")
         suppress_scheduled_until = $Script:SuppressUntil.ToString("o")
@@ -135,19 +139,37 @@ try {
             if ($PublishNotBefore) {
                 $Arguments += @("-PublishNotBefore", $PublishNotBefore)
             }
-            & $PowerShellExe @Arguments
-            $LastExitCode = $LASTEXITCODE
+            if ($NoConsoleOutput) {
+                $Child = Start-Process -FilePath $PowerShellExe -ArgumentList $Arguments -PassThru -WindowStyle Hidden
+                $Finished = $Child.WaitForExit($AttemptTimeoutMinutes * 60 * 1000)
+                if (-not $Finished) {
+                    Write-BatchLog ("TIMEOUT: cycle {0}/{1} attempt {2} exceeded {3} minutes; terminating its process tree." -f $Index, $Count, $Attempt, $AttemptTimeoutMinutes)
+                    & taskkill.exe /PID $Child.Id /T /F 2>&1 | ForEach-Object { Write-BatchLog ("taskkill: {0}" -f $_) }
+                    $LastExitCode = 124
+                }
+                else {
+                    $LastExitCode = $Child.ExitCode
+                }
+            }
+            else {
+                & $PowerShellExe @Arguments
+                $LastExitCode = $LASTEXITCODE
+            }
             if ($LastExitCode -eq 0) {
                 $PublicationSucceeded = $true
                 break
             }
 
             if ($Attempt -lt $MaxAttemptsPerPublication) {
+                $BackoffSeconds = [Math]::Min(
+                    $RetryDelaySeconds * [Math]::Pow(2, $Attempt - 1),
+                    600
+                )
                 Write-BatchLog (
                     "RETRY: cycle {0}/{1} attempt {2} exited {3}; retrying the same missing publication in {4}s." -f
-                    $Index, $Count, $Attempt, $LastExitCode, $RetryDelaySeconds
+                    $Index, $Count, $Attempt, $LastExitCode, [int]$BackoffSeconds
                 )
-                Start-Sleep -Seconds $RetryDelaySeconds
+                Start-Sleep -Seconds ([int]$BackoffSeconds)
             }
         }
 

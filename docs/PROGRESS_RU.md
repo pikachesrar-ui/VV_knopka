@@ -1,6 +1,23 @@
 # VV_knopka — LIVE PROGRESS
 
-Обновлено 2026-09-25.
+Обновлено 2026-09-27.
+
+## 2026-09-27 — завершён дешёвый self-learning контур
+
+- Strategy report использует реальные checkpoints 24/72/168h, shrinkage и
+  20% exploration; единичный всплеск не меняет весь контент-план.
+- Категории cats/animals/other_facts разрешены в production. Anime, movies и
+  theories размечаются/исследуются, но ждут безопасных визуальных источников.
+- Hook Engine создаёт три варианта в одном writer call; отдельного платного
+  ранжирования нет. Хранятся hook style/score, structure, payoff и word count.
+- Weekly Outlier Research собирает только публичные metadata двух категорий за
+  запуск, вращает окно и не скачивает чужие видео.
+- Auto-QA теперь останавливает upload при critical FAIL; warnings не блокируют.
+- Manual batch получил пять ограниченных попыток, exponential backoff и
+  90-минутный timeout попытки; до двух новых terminal blocked slots можно
+  пропустить без остановки текущей возможности публикации.
+- Разработка не вызывала внешние/платные API. Документация:
+  `docs/STRATEGY_RESEARCH_RU.md`.
 
 ## 2026-09-25 — лицензированные fallback-источники cats
 

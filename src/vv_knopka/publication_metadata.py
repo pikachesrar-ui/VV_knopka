@@ -190,16 +190,16 @@ def build_upload_metadata(
         description = str(plan.get("hook") or plan.get("summary") or "").strip()
         attributions = []
         if longrun:
-            hashtags = _hashtags(list(plan.get("hashtags") or []), fallback=("#animals", "#shorts"))
+            content_category = str(plan.get("category") or "animals")
+            fallback_hashtags = ("#facts", "#shorts") if content_category == "other_facts" else ("#animals", "#shorts")
+            hashtags = _hashtags(list(plan.get("hashtags") or []), fallback=fallback_hashtags)
             anchor = str(plan.get("visual_anchor") or "").strip()
-            tags = _youtube_tags(
-                hashtags,
-                anchor,
-                "animal facts",
-                "nature facts",
-                "animals",
-            )
-            cta = "What animal should we cover next?"
+            if content_category == "other_facts":
+                tags = _youtube_tags(hashtags, anchor, "interesting facts", "science facts", "facts")
+                cta = "What should we explain next?"
+            else:
+                tags = _youtube_tags(hashtags, anchor, "animal facts", "nature facts", "animals")
+                cta = "What animal should we cover next?"
         else:
             hashtags, tags, cta = [], [], ""
 
@@ -226,6 +226,7 @@ def build_upload_metadata(
     result = {
         "slot": slot.slot,
         "pipeline": slot.pipeline,
+        "category": "cats" if slot.pipeline == "animal_compilation" else str(plan.get("category") or "animals"),
         "language": slot.language,
         "video_file": str(output.resolve()),
         "youtube_title": title,

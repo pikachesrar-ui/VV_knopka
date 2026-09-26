@@ -54,6 +54,23 @@ Metadata backfill 1–11 and pre-upload upgrade 12–15 were completed historica
 
 After substantive work update this file, PROJECT_HANDOFF_RU.md and PROGRESS_RU.md.
 
+## Strategy/feedback completion — 2026-09-27
+
+Current plan schema carries category, three hook candidates from the SAME writer
+call, hook audit fields, structure_variant, payoff and word_count. Do not add a
+second LLM hook-ranking call: local `hook_engine` is intentionally free. The
+local feedback loop reads only real 24/72/168h checkpoints, shrinks small
+samples toward the channel mean and preserves 20% exploration. Production may
+automatically select only cats/animals/other_facts. Anime/movies/theories are
+research-only until a rights-safe visual route is explicitly approved.
+
+Weekly outlier research is public metadata only, rotates two of six categories
+per run, never downloads media and never blocks publishing. Auto-QA now blocks
+critical failures while warnings/SKIP remain nonblocking. Manual batches use
+five bounded attempts, exponential backoff, 90-minute attempt timeout and at
+most two newly proven blocked-slot skips per run. The $10 ledger remains the
+hard paid-API boundary. See docs/STRATEGY_RESEARCH_RU.md.
+
 ## 2026-09-20 user checkpoint / Windows console
 
 User subsequently confirmed 213 Windows tests pass and `recovery-status`

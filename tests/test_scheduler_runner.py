@@ -31,8 +31,9 @@ def test_manual_batch_retries_each_publication_but_keeps_gates_fail_closed() -> 
 
     assert '[int]$Count = 3' in script
     assert '[int]$IntervalMinutes = 60' in script
-    assert '[int]$MaxAttemptsPerPublication = 3' in script
+    assert '[int]$MaxAttemptsPerPublication = 5' in script
     assert '[int]$RetryDelaySeconds = 30' in script
+    assert '[int]$AttemptTimeoutMinutes = 90' in script
     assert 'manual-batch.lock' in script
     assert 'manual-batch-state.json' in script
     assert '"-ManualBatch"' in script
@@ -42,8 +43,20 @@ def test_manual_batch_retries_each_publication_but_keeps_gates_fail_closed() -> 
     assert 'for ($Attempt = 1; $Attempt -le $MaxAttemptsPerPublication; $Attempt++)' in script
     assert 'if ($LastExitCode -eq 0)' in script
     assert 'retrying the same missing publication' in script
+    assert '$Child.WaitForExit($AttemptTimeoutMinutes * 60 * 1000)' in script
+    assert 'taskkill.exe /PID $Child.Id /T /F' in script
+    assert '[Math]::Pow(2, $Attempt - 1)' in script
     assert 'did not publish after {1} attempts' in script
     assert 'Normal night schedule remains available' in script
+
+
+def test_scheduler_enforces_critical_qa_and_runs_weekly_metadata_research() -> None:
+    script = Path("scripts/run-longrun-task.ps1").read_text(encoding="utf-8")
+
+    assert script.count('"--enforce"') >= 2
+    assert 'critical video QA failed' in script
+    assert 'vv-research.exe' in script
+    assert '"collect", "--if-due-hours", "168"' in script
 
 
 def test_detached_launcher_separates_worker_from_monitor_console() -> None:

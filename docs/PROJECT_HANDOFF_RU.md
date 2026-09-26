@@ -3,6 +3,33 @@
 GitHub — source of truth. Ветка mvp/pilot-scaffold. PR #1 open/draft/unmerged,
 merge только по явной команде пользователя. TikTok не трогать.
 
+## 27 сентября: feedback loop, hooks, research и устойчивость
+
+Локальная стратегия теперь строит `runtime/analytics/strategy-report.json` по
+самой поздней реальной checkpoint-точке каждого ролика. Метрики объединяются в
+осторожный score, маленькие выборки сглаживаются с prior weight 4, exploration
+20% сохраняется. Только после трёх примеров выдаётся рекомендация по hook style,
+structure или duration bucket. Планировщик применяет её как soft preference.
+
+Три hook-кандидата генерируются внутри прежнего writer call, без второго
+платного запроса. Сохраняются hook audit, structure_variant, payoff и word_count.
+Production-категории: cats/animals/other_facts. Anime/movies/theories уже есть в
+аналитике и weekly metadata research, но не публикуются автоматически без
+rights-safe визуального маршрута.
+
+`vv-research` раз в неделю исследует две вращающиеся категории через YouTube
+Data API metadata (~202 quota units/run), не скачивает чужие файлы и не блокирует
+основной runner. После failed attempt повтор откладывается минимум на 24 часа.
+
+Scheduler теперь вызывает QA с `--enforce`: critical FAIL блокирует upload,
+warnings/SKIP нет. Manual batch: 5 попыток вместо 3, backoff 30/60/120/240s,
+тайм-аут одной фоновой попытки 90 минут с остановкой process tree. Recovery
+может пропустить до двух новых доказанно BLOCKED slots за вызов. Hard budget
+$10, receipts, locks, fact/source gates и Draft PR #1 сохранены.
+
+Локально 235 tests PASS до финальной документационной сверки; внешние API при
+разработке не вызывались. Документ: `docs/STRATEGY_RESEARCH_RU.md`.
+
 ## 25 сентября: лицензированные fallback-источники котов
 
 По прямому разрешению пользователя source route повышен с v6 до v7. Локальная

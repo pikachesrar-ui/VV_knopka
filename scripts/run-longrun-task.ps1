@@ -40,6 +40,7 @@ $LockPath = Join-Path $SchedulerDir "longrun-task.lock"
 $ManualBatchStatePath = Join-Path $SchedulerDir "manual-batch-state.json"
 $VvExe = Join-Path $ProjectRoot ".venv\Scripts\vv.exe"
 $YouTubeExe = Join-Path $ProjectRoot ".venv\Scripts\vv-youtube.exe"
+$ResearchExe = Join-Path $ProjectRoot ".venv\Scripts\vv-research.exe"
 
 New-Item -ItemType Directory -Force -Path $SchedulerDir | Out-Null
 
@@ -221,6 +222,15 @@ try {
         if ($ExitCode -ne 0) {
             Write-TaskLog ("WARN: rich YouTube analytics sync failed with exit code {0}; continuing publication workflow." -f $ExitCode)
         }
+
+        # Public metadata research is deliberately tiny and weekly. It never
+        # downloads third-party media and must never block publication.
+        if (Test-Path $ResearchExe) {
+            $ExitCode = Invoke-Logged -Prefix "outlier-research" -Exe $ResearchExe -Arguments @("collect", "--if-due-hours", "168")
+            if ($ExitCode -ne 0) {
+                Write-TaskLog ("WARN: outlier metadata research failed with exit code {0}; continuing publication workflow." -f $ExitCode)
+            }
+        }
     }
 
     # While any ready backlog exists, each trigger spends its single publication
@@ -229,10 +239,11 @@ try {
     $PendingBefore = Get-PendingUploadCount
     Write-TaskLog ("youtube-pending: {0} ready uploads before this trigger." -f $PendingBefore)
     if ($PendingBefore -gt 0) {
-        # Shadow QA records evidence before upload but cannot block publication yet.
-        $ExitCode = Invoke-Logged -Prefix "video-qa" -Exe $YouTubeExe -Arguments @("qa-ready", "--limit", "1")
+        # Warnings remain nonblocking, but a critical local QA failure must not upload.
+        $ExitCode = Invoke-Logged -Prefix "video-qa" -Exe $YouTubeExe -Arguments @("qa-ready", "--limit", "1", "--enforce")
         if ($ExitCode -ne 0) {
-            Write-TaskLog ("WARN: shadow video QA failed with exit code {0}; continuing publication workflow." -f $ExitCode)
+            Write-TaskLog ("FAIL: critical video QA failed with exit code {0}; refusing upload." -f $ExitCode)
+            exit $ExitCode
         }
 
         $BacklogArgs = @("upload-ready", "--limit", "1")
@@ -257,11 +268,11 @@ try {
         exit $ExitCode
     }
 
-    # Shadow QA runs after rendering and before the automatic upload. It writes a
-    # report but does not enforce failures until real-video calibration is complete.
-    $ExitCode = Invoke-Logged -Prefix "video-qa" -Exe $YouTubeExe -Arguments @("qa-ready", "--limit", "1", "--newest")
+    # Local QA warnings remain visible but only critical failures block upload.
+    $ExitCode = Invoke-Logged -Prefix "video-qa" -Exe $YouTubeExe -Arguments @("qa-ready", "--limit", "1", "--newest", "--enforce")
     if ($ExitCode -ne 0) {
-        Write-TaskLog ("WARN: shadow video QA failed with exit code {0}; continuing publication workflow." -f $ExitCode)
+        Write-TaskLog ("FAIL: critical video QA failed with exit code {0}; refusing upload." -f $ExitCode)
+        exit $ExitCode
     }
 
     # Dry-run cannot create a new ready file, so this only previews current state.
@@ -293,4 +304,3 @@ finally {
         # The OS handle is the actual lock; a leftover empty file is harmless.
     }
 }
-

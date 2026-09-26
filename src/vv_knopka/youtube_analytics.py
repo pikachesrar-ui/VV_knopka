@@ -524,6 +524,9 @@ def _local_features(settings: Settings, videos: list[sqlite3.Row]) -> list[dict[
         }
         for key in (
             "hook",
+            "hook_candidates",
+            "hook_style",
+            "hook_local_score",
             "script",
             "visual_anchor",
             "topic",

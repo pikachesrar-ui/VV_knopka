@@ -30,6 +30,8 @@ vv-cat-theme = "vv_knopka.cat_theme:main"
 vv-cat-import = "vv_knopka.trend_import:main"
 vv-cat-youtube = "vv_knopka.youtube_cat_source_v6:main"
 vv-cat-sources = "vv_knopka.cat_source_candidates:main"
+vv-strategy = "vv_knopka.strategy_cli:main"
+vv-research = "vv_knopka.outlier_research:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -15,6 +15,7 @@ from .cat_compilation import build_generic_cat_plan
 from .fact_check import FactChecker
 from .editorial import PROFILE, build_cat_edit, enabled_for_slot
 from .gates import publication_gate
+from .hook_engine import assess_hooks
 from .long_run_conveyor import run_longrun_batch
 from .longrun_recovery import recovery_state, unblock_after_manual_replan
 from .manifest import longrun_start_slot, resolve_slot, write_manifest
@@ -220,6 +221,16 @@ def main() -> None:
             topic_hint=args.topic,
             excluded_anchors=tuple(args.avoid_anchor),
         )
+        hook_audit_path = slot_dir / "hook-selection.json"
+        hook_audit_path.write_text(
+            json.dumps(
+                assess_hooks(content.get("hook"), content.get("hook_candidates") or []),
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print(f"Hook audit: {hook_audit_path}")
         path = slot_dir / "plan.json"
         should_fact_check = (
             slot.pipeline == "ai_short"

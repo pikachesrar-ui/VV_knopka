@@ -7,20 +7,26 @@ from typing import Any
 import httpx
 
 from .budget import BudgetLedger
-from .settings import Settings
+from .content_strategy import build_strategy_report, planner_feedback_guidance, recommend_category
 from .editorial import PROFILE, enabled_for_slot
+from .hook_engine import assess_hooks
+from .settings import Settings
 
 
 SHORT_PLAN_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "title", "hook", "script", "visual_anchor", "search_terms", "caption", "hashtags",
-        "editorial_value", "fact_check_items", "ai_disclosure_recommended"
+        "title", "hook", "hook_candidates", "category", "script", "visual_anchor", "search_terms", "caption", "hashtags",
+        "structure_variant", "payoff", "editorial_value", "fact_check_items", "ai_disclosure_recommended"
     ],
     "properties": {
         "title": {"type": "string"},
         "hook": {"type": "string"},
+        "hook_candidates": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
+        "category": {"type": "string", "enum": ["cats", "animals", "anime", "movies", "theories", "other_facts"]},
+        "structure_variant": {"type": "string", "enum": ["answer_first", "misconception_correction", "mini_mystery", "cause_and_effect"]},
+        "payoff": {"type": "string"},
         "script": {"type": "string"},
         "visual_anchor": {"type": "string"},
         "search_terms": {"type": "array", "minItems": 4, "maxItems": 10, "items": {"type": "string"}},
@@ -54,6 +60,11 @@ STOCK_FRIENDLY_AI_ANCHORS = (
     "frog",
     "duck",
     "chicken",
+)
+
+STOCK_FRIENDLY_OTHER_FACT_ANCHORS = (
+    "moon", "lightning", "volcano", "ocean wave", "cloud", "iceberg",
+    "desert", "cave", "mushroom", "sunflower", "magnet", "hourglass",
 )
 
 
@@ -104,12 +115,25 @@ class OpenAIPlanner:
         self.ledger.ensure_room(float(cfg["max_estimated_cost_per_call_usd"]))
 
         language_name = "Russian" if language == "ru" else "English"
+        strategy_report = build_strategy_report(self.settings)
+        category = "cats" if pipeline == "animal_compilation" else recommend_category(
+            self.settings, slot=slot, pipeline=pipeline, report=strategy_report
+        )
+        feedback_guidance = planner_feedback_guidance(strategy_report)
         if pipeline == "ai_short":
-            task = (
-                "Create one original 25-45 second YouTube Short about a surprising, well-established "
-                "animal behavior or nature curiosity. Build a strong first-second hook and a compact payoff. "
-                "Do not invent studies, statistics, quotations, rescue stories, or events. Avoid medical advice."
-            )
+            if category == "other_facts":
+                task = (
+                    "Create one original 25-45 second YouTube Short about a surprising, well-established "
+                    "science or everyday-world fact that generic licensed stock footage can show. Build a strong "
+                    "first-second hook and a compact payoff. Do not use medical, political, crime, celebrity, "
+                    "film, anime, brand, or copyrighted-fiction claims."
+                )
+            else:
+                task = (
+                    "Create one original 25-45 second YouTube Short about a surprising, well-established "
+                    "animal behavior or nature curiosity. Build a strong first-second hook and a compact payoff. "
+                    "Do not invent studies, statistics, quotations, rescue stories, or events. Avoid medical advice."
+                )
         else:
             task = (
                 "Create an editorial concept for a 25-45 second cute/funny animal compilation. The final video "
@@ -141,9 +165,10 @@ class OpenAIPlanner:
             cooldown = int(self.settings.raw.get("long_run", {}).get("fact_subject_cooldown", 6))
             recent = recent_visual_anchors(self.settings, slot, limit=cooldown)
             excluded = {str(anchor).strip().lower() for anchor in excluded_anchors}
-            available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in set(recent) | excluded]
+            anchor_pool = STOCK_FRIENDLY_OTHER_FACT_ANCHORS if category == "other_facts" else STOCK_FRIENDLY_AI_ANCHORS
+            available = [anchor for anchor in anchor_pool if anchor not in set(recent) | excluded]
             if not available:
-                available = [anchor for anchor in STOCK_FRIENDLY_AI_ANCHORS if anchor not in excluded]
+                available = [anchor for anchor in anchor_pool if anchor not in excluded]
             if not available:
                 raise RuntimeError("All stock-friendly AI subjects were excluded")
             recent_text = ", ".join(recent) if recent else "none"
@@ -152,17 +177,16 @@ class OpenAIPlanner:
                 f"this exact stock-friendly visual_anchor list: {', '.join(available)}. "
                 f"Recent AI subjects still on cooldown ({max(cooldown, 0)}-subject window): {recent_text}. "
                 "Do not choose a cooldown subject unless the available list had to reset because every supported subject was blocked. "
-                "Do not narrow the subject to a rare species, subspecies, breed, or scientific name. "
-                "The factual story itself must genuinely apply to the chosen broad animal, so do not use generic "
-                "footage to illustrate a claim that is only true of a rare species. "
-                "Prefer a visually demonstrable behavior that can be represented by several distinct licensed stock clips."
+                "Do not narrow the subject to something that generic stock cannot honestly represent. "
+                "The factual story itself must genuinely apply to the chosen broad visible subject. "
+                "Prefer a visually demonstrable event or behavior that several licensed stock clips can represent."
             )
 
         if excluded_anchors:
             forbidden = ", ".join(sorted({str(anchor).strip().lower() for anchor in excluded_anchors}))
             topic_instruction += (
                 f"\nRECOVERY CONSTRAINT: do not choose any of these failed visual_anchor subjects: {forbidden}. "
-                "Choose a different broad, filmable animal from the allowed list."
+                "Choose a different broad, filmable subject from the allowed list."
             )
 
         pilot_total = int(self.settings.raw.get("pilot", {}).get("total_shorts", 15))
@@ -182,15 +206,21 @@ class OpenAIPlanner:
             )
         slot_label = f"Pilot slot: {slot}/{pilot_total}." if slot <= pilot_total else f"Long-run sequence slot: {slot}."
         prompt = f"""You are the editor of a review-first Shorts pipeline.
-Niche: Animals / Nature Curiosities.
+Niche: Animals / Nature Curiosities / Safe General Facts.
+Selected category: {category}. Return category exactly as {category!r}.
 Language: {language_name}.
 Pipeline: {pipeline}.
 {slot_label}
 {task}{topic_instruction}
+Feedback loop: {feedback_guidance}
 For visual_anchor, return one concise ENGLISH noun or noun phrase naming the visible main subject that must be present in every stock clip (examples: "octopus", "cat", "bee").
 Every search term must include that exact visual_anchor. Avoid ambiguous standalone visual terms such as "skin texture", "reef", "ocean", or "forest" that could retrieve footage without the main subject.
 Search terms must describe generic footage that can be found on licensed stock providers such as Pexels/Pixabay.
 Keep the title natural, original and not deceptive clickbait. Hashtags must not claim something unsupported.
+Return exactly three concise hook_candidates in this same response. The selected hook must be the strongest,
+must appear in hook_candidates, and must be the exact opening of script. There is no second hook-generation call.
+Choose one structure_variant and provide a concrete payoff delivered near the end. Vary structures across episodes;
+never add a subscribe/like outro.
 Return only the requested structured object."""
 
         payload = {
@@ -227,6 +257,22 @@ Return only the requested structured object."""
         )
         text = data.get("output_text") or _extract_output_text(data)
         plan = json.loads(text)
+        returned_category = str(plan.get("category") or "").strip().lower()
+        if returned_category and returned_category != category:
+            raise RuntimeError("Planner returned a category different from the local strategy decision")
+        plan["category"] = category
+        candidates = list(plan.get("hook_candidates") or [])
+        if not candidates:
+            candidates = [plan.get("hook"), plan.get("hook"), plan.get("hook")]
+        hook_audit = assess_hooks(plan.get("hook"), candidates)
+        plan["hook_candidates"] = [item["text"] for item in hook_audit["candidates"]]
+        while len(plan["hook_candidates"]) < 3:
+            plan["hook_candidates"].append(str(plan.get("hook") or ""))
+        plan["hook_style"] = hook_audit["selected_style"]
+        plan["hook_local_score"] = hook_audit["selected_score"]
+        plan.setdefault("structure_variant", "answer_first")
+        plan.setdefault("payoff", "")
+        plan["word_count"] = len(str(plan.get("script") or "").split())
         forbidden_anchors = {str(anchor).strip().lower() for anchor in excluded_anchors}
         if str(plan.get("visual_anchor") or "").strip().lower() in forbidden_anchors:
             raise RuntimeError("Recovery planner repeated an excluded visual_anchor")

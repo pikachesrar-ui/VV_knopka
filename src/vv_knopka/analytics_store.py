@@ -54,6 +54,12 @@ def infer_category(video: dict[str, Any]) -> str:
     ).casefold()
     if re.search(r"\b(cats?|kittens?)\b", searchable):
         return "cats"
+    if re.search(r"\b(anime|manga)\b", searchable):
+        return "anime"
+    if re.search(r"\b(movie|movies|film|cinema)\b", searchable):
+        return "movies"
+    if re.search(r"\b(theory|theories)\b", searchable):
+        return "theories"
     pipeline = str(video.get("pipeline") or "").strip().lower()
     if pipeline == "animal_compilation":
         return "cats"
