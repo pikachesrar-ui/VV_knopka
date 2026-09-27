@@ -44,7 +44,9 @@ def test_manual_batch_retries_each_publication_but_keeps_gates_fail_closed() -> 
     assert 'if ($LastExitCode -eq 0)' in script
     assert 'retrying the same missing publication' in script
     assert '$Child.WaitForExit($AttemptTimeoutMinutes * 60 * 1000)' in script
-    assert 'taskkill.exe /PID $Child.Id /T /F' in script
+    assert 'Stop-ProcessTreeBestEffort -ProcessId $Child.Id' in script
+    assert '-FilePath "taskkill.exe"' in script
+    assert 'timeout remains retryable' in script
     assert '[Math]::Pow(2, $Attempt - 1)' in script
     assert 'did not publish after {1} attempts' in script
     assert 'Normal night schedule remains available' in script
@@ -71,6 +73,7 @@ def test_detached_launcher_separates_worker_from_monitor_console() -> None:
     assert 'Find-RunningBatchProcess' in script
     assert 'Get-CimInstance Win32_Process' in script
     assert 'start-three-video-batch.ps1' in script
+    assert '[int]$MaxAttemptsPerPublication = 5' in script
 
 
 def test_shortcut_installer_targets_manual_batch_script() -> None:

@@ -5,8 +5,8 @@ param(
     [ValidateRange(1, 1440)]
     [int]$IntervalMinutes = 60,
 
-    [ValidateRange(1, 5)]
-    [int]$MaxAttemptsPerPublication = 3,
+    [ValidateRange(1, 8)]
+    [int]$MaxAttemptsPerPublication = 5,
 
     [ValidateRange(1, 600)]
     [int]$RetryDelaySeconds = 30,

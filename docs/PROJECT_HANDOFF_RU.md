@@ -3,6 +3,17 @@
 GitHub — source of truth. Ветка mvp/pilot-scaffold. PR #1 open/draft/unmerged,
 merge только по явной команде пользователя. TikTok не трогать.
 
+## 27 сентября: timeout ручной серии не обрывает retry
+
+Реальный Windows batch PID 5904 показал две ошибки. Launcher всё ещё передавал
+`MaxAttemptsPerPublication=3`, хотя worker default уже был 5. Теперь оба
+значения равны 5. После 90-минутного timeout `taskkill` вернул ошибку о child
+PID и из-за глобального `ErrorActionPreference=Stop` оборвал весь batch.
+Очистка теперь запускается с раздельно перехваченными stdout/stderr, неуспех
+логируется как WARN, parent дополнительно останавливается best-effort, а retry
+loop получает штатный exit 124. Лимиты, gates и защита бюджета не ослаблены.
+235 локальных тестов PASS, внешние API не вызывались.
+
 ## 27 сентября: feedback loop, hooks, research и устойчивость
 
 Локальная стратегия теперь строит `runtime/analytics/strategy-report.json` по

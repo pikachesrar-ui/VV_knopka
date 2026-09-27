@@ -77,6 +77,48 @@ function Write-BatchState {
     Move-Item -LiteralPath $Temporary -Destination $StatePath -Force
 }
 
+function Stop-ProcessTreeBestEffort {
+    param([Parameter(Mandatory = $true)][int]$ProcessId)
+
+    # taskkill writes ordinary cleanup failures to stderr. With the worker's
+    # fail-closed ErrorActionPreference that stderr used to become a terminating
+    # PowerShell error and abort the whole batch before the retry loop could run.
+    # Capture both streams in files so a non-zero cleanup result stays telemetry.
+    $Stamp = "{0}-{1}" -f $PID, ([Guid]::NewGuid().ToString("N"))
+    $StdoutPath = Join-Path $SchedulerDir "taskkill-$Stamp.stdout.log"
+    $StderrPath = Join-Path $SchedulerDir "taskkill-$Stamp.stderr.log"
+    try {
+        $KillProcess = Start-Process `
+            -FilePath "taskkill.exe" `
+            -ArgumentList @("/PID", [string]$ProcessId, "/T", "/F") `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $StdoutPath `
+            -RedirectStandardError $StderrPath `
+            -Wait `
+            -PassThru
+
+        foreach ($Path in @($StdoutPath, $StderrPath)) {
+            if (Test-Path $Path) {
+                Get-Content -LiteralPath $Path -Encoding Default -ErrorAction SilentlyContinue |
+                    ForEach-Object { Write-BatchLog ("taskkill: {0}" -f $_) }
+            }
+        }
+        if ($KillProcess.ExitCode -ne 0) {
+            Write-BatchLog ("WARN: taskkill exited {0}; timeout remains retryable." -f $KillProcess.ExitCode)
+        }
+    }
+    catch {
+        Write-BatchLog ("WARN: process-tree cleanup failed: {0}; timeout remains retryable." -f $_.Exception.Message)
+    }
+    finally {
+        Remove-Item -LiteralPath $StdoutPath, $StderrPath -Force -ErrorAction SilentlyContinue
+    }
+
+    # The parent may still exist even when one already-exited child made
+    # taskkill return non-zero. A final parent-only stop is also best effort.
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
 if (-not (Test-Path $Runner)) {
     throw "Long-run runner was not found at $Runner"
 }
@@ -144,7 +186,7 @@ try {
                 $Finished = $Child.WaitForExit($AttemptTimeoutMinutes * 60 * 1000)
                 if (-not $Finished) {
                     Write-BatchLog ("TIMEOUT: cycle {0}/{1} attempt {2} exceeded {3} minutes; terminating its process tree." -f $Index, $Count, $Attempt, $AttemptTimeoutMinutes)
-                    & taskkill.exe /PID $Child.Id /T /F 2>&1 | ForEach-Object { Write-BatchLog ("taskkill: {0}" -f $_) }
+                    Stop-ProcessTreeBestEffort -ProcessId $Child.Id
                     $LastExitCode = 124
                 }
                 else {

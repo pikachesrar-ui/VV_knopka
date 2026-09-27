@@ -71,6 +71,15 @@ five bounded attempts, exponential backoff, 90-minute attempt timeout and at
 most two newly proven blocked-slot skips per run. The $10 ledger remains the
 hard paid-API boundary. See docs/STRATEGY_RESEARCH_RU.md.
 
+## Manual batch timeout cleanup — 2026-09-27
+
+The first post-update Windows batch exposed two launcher/cleanup defects. The
+launcher still overrode the worker default with three attempts; it now passes
+five. A 90-minute timeout may make `taskkill` return non-zero when one child
+has already exited or cannot be terminated. Cleanup is now best-effort and
+logged; its stderr/non-zero exit must never escape the retry loop. The timed-out
+attempt remains exit 124 and advances through bounded backoff/retry normally.
+
 ## 2026-09-20 user checkpoint / Windows console
 
 User subsequently confirmed 213 Windows tests pass and `recovery-status`
