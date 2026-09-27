@@ -27,6 +27,21 @@ _WIKIMEDIA_API = "https://commons.wikimedia.org/w/api.php"
 _VIDEO_SUFFIXES = {".mp4", ".webm", ".ogv", ".ogg", ".mov", ".m4v"}
 
 
+def _stock_route_unavailable(exc: RuntimeError) -> bool:
+    text = str(exc).casefold()
+    return any(
+        marker in text
+        for marker in (
+            "stock provider request failed",
+            "stock provider returned http 429",
+            "stock provider returned http 500",
+            "stock provider returned http 502",
+            "stock provider returned http 503",
+            "stock provider returned http 504",
+        )
+    )
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -637,7 +652,7 @@ def ensure_audio_animal_sources(
         _finalize_provenance(result)
         return result
     except RuntimeError as exc:
-        if _MINIMUM_GATE_TEXT not in str(exc):
+        if _MINIMUM_GATE_TEXT not in str(exc) and not _stock_route_unavailable(exc):
             raise
         stock_error = str(exc)
 

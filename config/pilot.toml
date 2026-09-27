@@ -169,6 +169,12 @@ source_aspect_tolerance = 0.08
 # Search deeper because stock libraries often publish silent footage.
 audio_pexels_candidates = 60
 audio_pixabay_candidates = 80
+# Keep an exhausted remote cat catalog from occupying a worker for hours.
+# These caps bound search effort only; source quality/licensing gates stay unchanged.
+cat_stock_search_max_seconds = 300
+cat_stock_max_pages_per_provider = 8
+cat_stock_max_probes_per_provider = 18
+cat_stock_request_timeout_seconds = 20
 # Put one chosen real meow here and it will be reused on every intro/transition/end card.
 # CAT_MEOW_FILE in .env can override this path.
 meow_file = "runtime/assets/cat-transition-meow.mp3"

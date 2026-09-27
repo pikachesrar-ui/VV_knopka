@@ -1,5 +1,6 @@
 import vv_knopka.animal_audio_sources_v4 as source_v4
 from vv_knopka.animal_audio_sources_v4 import (
+    _StockSearchBudget,
     _deep_pexels_collector,
     _deep_pixabay_collector,
     _expanded_queries,
@@ -178,3 +179,46 @@ def test_expanded_queries_adds_diversity_without_duplicates():
     assert "house cat" in queries
     assert "cat eating" in queries
     assert "domestic cat" in queries
+
+
+def test_deep_search_stops_at_page_budget(monkeypatch):
+    monkeypatch.setattr(source_v4._base, "has_audio_stream", lambda *args, **kwargs: False)
+    budget = _StockSearchBudget(max_seconds=300, max_pages_per_provider=1, max_probes_per_provider=20)
+    collector = _deep_pexels_collector(prior=set(), pages_per_query=4, budget=budget)
+    client = _Client()
+
+    found = collector(
+        client=client,
+        api_key="key",
+        queries=["cat"],
+        per_page=40,
+        max_candidates=10,
+        clip_seconds=5,
+        anchor="cat",
+        aspect_tolerance=0.08,
+    )
+
+    assert found == []
+    assert len(client.pages) == 1
+    assert budget.stop_reason == "pexels_page_limit"
+
+
+def test_deep_search_stops_at_probe_budget(monkeypatch):
+    monkeypatch.setattr(source_v4._base, "has_audio_stream", lambda *args, **kwargs: False)
+    budget = _StockSearchBudget(max_seconds=300, max_pages_per_provider=5, max_probes_per_provider=1)
+    collector = _deep_pexels_collector(prior=set(), pages_per_query=4, budget=budget)
+    client = _Client()
+
+    collector(
+        client=client,
+        api_key="key",
+        queries=["cat"],
+        per_page=40,
+        max_candidates=10,
+        clip_seconds=5,
+        anchor="cat",
+        aspect_tolerance=0.08,
+    )
+
+    assert budget.probes == {"pexels": 1}
+    assert budget.stop_reason == "pexels_probe_limit"

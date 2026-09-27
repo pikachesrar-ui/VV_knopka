@@ -9,7 +9,15 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 
-RETRYABLE_STOCK_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError, httpx.ReadTimeout)
+RETRYABLE_STOCK_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadError,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+    httpx.WriteError,
+    httpx.PoolTimeout,
+)
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 RETRY_DELAYS_SECONDS = (2, 6)
 

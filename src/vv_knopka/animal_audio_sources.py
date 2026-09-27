@@ -451,6 +451,7 @@ def ensure_audio_animal_sources(
     pixabay_per_page = int(materials_cfg.get("pixabay_per_page", 100))
     batch_size = max(1, int(materials_cfg.get("vision_batch_size", 10)))
     min_confidence = float(materials_cfg.get("vision_min_confidence", 0.72))
+    stock_timeout = max(float(animal_cfg.get("cat_stock_request_timeout_seconds", 20.0)), 5.0)
     anchor = infer_visual_anchor(plan)
 
     local_dir = Path(
@@ -547,7 +548,7 @@ def ensure_audio_animal_sources(
         pexels_key = os.getenv("PEXELS_API_KEY", "").strip()
         if not pexels_key:
             raise RuntimeError("PEXELS_API_KEY is not set; cannot search audible vertical cat stock")
-        with httpx.Client(timeout=60, follow_redirects=True) as client:
+        with httpx.Client(timeout=stock_timeout, follow_redirects=True) as client:
             pexels_candidates = _collect_pexels_audio_candidates(
                 client=client,
                 api_key=pexels_key,
@@ -563,7 +564,7 @@ def ensure_audio_animal_sources(
     if len(accepted) < target_count:
         pixabay_key = os.getenv("PIXABAY_API_KEY", "").strip()
         if pixabay_key:
-            with httpx.Client(timeout=60, follow_redirects=True) as client:
+            with httpx.Client(timeout=stock_timeout, follow_redirects=True) as client:
                 pixabay_candidates = _collect_pixabay_candidates(
                     client=client,
                     api_key=pixabay_key,

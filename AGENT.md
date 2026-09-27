@@ -80,6 +80,18 @@ has already exited or cannot be terminated. Cleanup is now best-effort and
 logged; its stderr/non-zero exit must never escape the retry loop. The timed-out
 attempt remains exit 124 and advances through bounded backoff/retry normally.
 
+## Bounded cat stock discovery — 2026-09-27
+
+Slot 78 repeatedly spent up to the outer 90-minute timeout inside cat source
+discovery before FFmpeg/render/upload. Deep Pexels/Pixabay pagination and serial
+remote audio probes are now bounded per pass: 300 seconds, 8 pages and 18 probes
+per provider by default; stock request timeout is 20 seconds. The completed
+audit records counters and stop reason. These are effort caps, not relaxed
+source gates. RemoteProtocolError and related transient transport failures use
+the existing bounded stock retry and may continue to licensed Wikimedia; if
+safe sources remain insufficient, normal fail-closed queue/block recovery
+applies. Do not increase these caps without a measured need.
+
 ## 2026-09-20 user checkpoint / Windows console
 
 User subsequently confirmed 213 Windows tests pass and `recovery-status`

@@ -2,6 +2,19 @@
 
 Обновлено 2026-09-27.
 
+## 2026-09-27 — ограничен зависавший поиск cat sources
+
+- Журнал slot 78 локализовал 90-минутное зависание между выбором cat mode и
+  получением источников: рендер и YouTube ещё не начинались.
+- Deep stock search ограничен 300 секундами, 8 страницами и 18 remote audio
+  probes на каждого провайдера; запрос Pexels/Pixabay — 20 секунд.
+- Аудит сохраняет фактические pages/probes/elapsed/stop_reason даже при
+  minimum gate failure.
+- Server disconnect теперь получает bounded retry и разрешает переход к
+  лицензированному Wikimedia fallback вместо немедленного обрыва.
+- Все quality/license/audio/vertical/vision gates сохранены; добавочных
+  LLM-вызовов нет. 239 tests PASS.
+
 ## 2026-09-27 — исправлен timeout ручной серии
 
 - Первый Windows-запуск после обновления дошёл до 90-минутного timeout на

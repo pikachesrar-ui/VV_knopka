@@ -59,6 +59,22 @@ def test_stock_search_retries_temporary_http_status(monkeypatch):
     assert client.calls == 3
 
 
+def test_stock_search_wraps_remote_protocol_disconnect(monkeypatch):
+    monkeypatch.setattr(stock_network.time, "sleep", lambda _: None)
+
+    class Client:
+        calls = 0
+
+        def get(self, url, **kwargs):
+            self.calls += 1
+            raise httpx.RemoteProtocolError("server disconnected")
+
+    client = Client()
+    with pytest.raises(RuntimeError, match="stock provider request failed"):
+        stock_network.get_stock(client, "https://stock.example/video?key=secret")
+    assert client.calls == 3
+
+
 def test_stock_download_discards_partial_file_before_retry(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(pexels_curator.time, "sleep", lambda _: None)
     target = tmp_path / "clip.mp4"

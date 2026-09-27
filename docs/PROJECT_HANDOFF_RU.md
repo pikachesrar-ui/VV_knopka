@@ -14,6 +14,26 @@ PID и из-за глобального `ErrorActionPreference=Stop` оборв�
 loop получает штатный exit 124. Лимиты, gates и защита бюджета не ослаблены.
 235 локальных тестов PASS, внешние API не вызывались.
 
+## 27 сентября: slot 78 больше не может искать stock бесконечно
+
+Полный `longrun-task.log` показал, что slot 78 останавливался сразу после
+`Cat compilation mode` и до строки `Audible vertical licensed cat sources`.
+Это этап `ensure_audio_animal_sources`, а не FFmpeg или YouTube. Старый deep
+search мог последовательно пройти десятки страниц и сотни remote audio probes
+по 8 секунд; slot 78 также несколько раз получал Pexels/Pixabay disconnect.
+
+Один stock-проход теперь ограничен общим deadline 300 секунд, максимумом 8
+страниц и 18 probes на провайдера; HTTP timeout поиска — 20 секунд. Счётчики и
+причина остановки сохраняются в `animal_audio_sources.json`. Ограничение лишь
+останавливает дальнейший каталоговый перебор: минимум 5 клипов, лицензия,
+вертикаль, звук, vision, cooldown и reuse gates не изменены.
+
+`RemoteProtocolError`/write/pool transport failures теперь проходят прежний
+bounded retry и превращаются в безопасную ошибку stock route. После неё v7
+может проверить Wikimedia, а при нехватке — создать YouTube metadata queue и
+отдать slot штатному fail-closed recovery. Полный suite: 239 PASS; внешние и
+платные API при разработке не вызывались.
+
 ## 27 сентября: feedback loop, hooks, research и устойчивость
 
 Локальная стратегия теперь строит `runtime/analytics/strategy-report.json` по

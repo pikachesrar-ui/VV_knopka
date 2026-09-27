@@ -163,3 +163,39 @@ def test_exhausted_safe_sources_create_queue_but_still_fail_closed(monkeypatch, 
     audit = json.loads((slot_dir / "cat_source_fallback.json").read_text(encoding="utf-8"))
     assert audit["youtube_queue"]["candidate_count"] == 1
     assert audit["youtube_queue"]["auto_publish"] is False
+
+
+def test_stock_network_failure_uses_safe_fallback(monkeypatch, tmp_path):
+    settings = DummySettings(tmp_path)
+    slot_dir = settings.runtime_dir / "slots" / "51"
+    source_manifest = slot_dir / "sources.json"
+    slot_dir.mkdir(parents=True)
+    source_manifest.write_text(json.dumps({"clips": []}), encoding="utf-8")
+
+    monkeypatch.setattr(fallback, "seed_local_library", lambda *args, **kwargs: {"accepted": 0})
+    monkeypatch.setattr(
+        fallback._v6,
+        "ensure_audio_animal_sources",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("stock provider request failed for https://api.pexels.com/videos/search (RemoteProtocolError)")
+        ),
+    )
+    monkeypatch.setattr(
+        fallback,
+        "try_wikimedia_fallback",
+        lambda *args, **kwargs: (source_manifest, {"status": "sufficient", "selected": 5}),
+    )
+    monkeypatch.setattr(fallback, "_finalize_provenance", lambda path: None)
+
+    result = fallback.ensure_audio_animal_sources(
+        settings,
+        {"search_terms": ["cat"]},
+        slot=51,
+        slot_dir=slot_dir,
+        source_manifest=source_manifest,
+        ledger=object(),
+    )
+
+    assert result == source_manifest
+    audit = json.loads((slot_dir / "cat_source_fallback.json").read_text(encoding="utf-8"))
+    assert audit["wikimedia"]["status"] == "sufficient"

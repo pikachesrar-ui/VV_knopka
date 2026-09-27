@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -47,6 +49,56 @@ _EXTRA_CAT_QUERIES = (
 )
 
 
+@dataclass
+class _StockSearchBudget:
+    """Bound the cumulative remote catalog walk for one stock-search pass."""
+
+    max_seconds: float
+    max_pages_per_provider: int
+    max_probes_per_provider: int
+    started_at: float = field(default_factory=time.monotonic)
+    pages: dict[str, int] = field(default_factory=dict)
+    probes: dict[str, int] = field(default_factory=dict)
+    stop_reason: str | None = None
+
+    def _within_deadline(self) -> bool:
+        if time.monotonic() - self.started_at < max(float(self.max_seconds), 1.0):
+            return True
+        self.stop_reason = "deadline"
+        return False
+
+    def permit_page(self, provider: str) -> bool:
+        if not self._within_deadline():
+            return False
+        used = int(self.pages.get(provider, 0))
+        if used >= max(int(self.max_pages_per_provider), 1):
+            self.stop_reason = f"{provider}_page_limit"
+            return False
+        self.pages[provider] = used + 1
+        return True
+
+    def permit_probe(self, provider: str) -> bool:
+        if not self._within_deadline():
+            return False
+        used = int(self.probes.get(provider, 0))
+        if used >= max(int(self.max_probes_per_provider), 1):
+            self.stop_reason = f"{provider}_probe_limit"
+            return False
+        self.probes[provider] = used + 1
+        return True
+
+    def audit(self) -> dict[str, Any]:
+        return {
+            "max_seconds": float(self.max_seconds),
+            "max_pages_per_provider": int(self.max_pages_per_provider),
+            "max_probes_per_provider": int(self.max_probes_per_provider),
+            "elapsed_seconds": round(max(time.monotonic() - self.started_at, 0.0), 3),
+            "pages": dict(self.pages),
+            "probes": dict(self.probes),
+            "stop_reason": self.stop_reason,
+        }
+
+
 def _expanded_queries(queries: list[str]) -> list[str]:
     values = [str(value).strip() for value in queries if str(value).strip()]
     values.extend(_EXTRA_CAT_QUERIES)
@@ -81,6 +133,7 @@ def _deep_pexels_collector(
     prior: set[tuple[str, str]],
     all_prior: set[tuple[str, str]] | None = None,
     pages_per_query: int = 4,
+    budget: _StockSearchBudget | None = None,
 ):
     blocked = set(prior)
     historical = set(all_prior) if all_prior is not None else set(prior)
@@ -106,6 +159,11 @@ def _deep_pexels_collector(
 
         for query in _expanded_queries(queries):
             for page in range(1, max(int(pages_per_query), 1) + 1):
+                if budget is not None and not budget.permit_page("pexels"):
+                    return _finish_fresh_first(
+                        fresh_confirmed, fresh_unknown, cooled_confirmed, cooled_unknown,
+                        max_candidates=cap,
+                    )
                 response = get_stock(client,
                     "https://api.pexels.com/videos/search",
                     headers={"Authorization": api_key},
@@ -141,6 +199,11 @@ def _deep_pexels_collector(
                         )
                     ):
                         continue
+                    if budget is not None and not budget.permit_probe("pexels"):
+                        return _finish_fresh_first(
+                            fresh_confirmed, fresh_unknown, cooled_confirmed, cooled_unknown,
+                            max_candidates=cap,
+                        )
                     audio_state = _audio_probe_state(file_info)
                     if audio_state is False:
                         continue
@@ -185,6 +248,7 @@ def _deep_pixabay_collector(
     prior: set[tuple[str, str]],
     all_prior: set[tuple[str, str]] | None = None,
     pages_per_query: int = 4,
+    budget: _StockSearchBudget | None = None,
 ):
     blocked = set(prior)
     historical = set(all_prior) if all_prior is not None else set(prior)
@@ -212,6 +276,11 @@ def _deep_pixabay_collector(
             # episodes have exhausted the same popular results.
             for order in ("popular", "latest"):
                 for page in range(1, max(int(pages_per_query), 1) + 1):
+                    if budget is not None and not budget.permit_page("pixabay"):
+                        return _finish_fresh_first(
+                            fresh_confirmed, fresh_unknown, cooled_confirmed, cooled_unknown,
+                            max_candidates=cap,
+                        )
                     response = get_stock(client,
                         "https://pixabay.com/api/videos/",
                         params={
@@ -242,6 +311,11 @@ def _deep_pixabay_collector(
                         thumbnail_url = str((file_info or {}).get("thumbnail") or "").strip()
                         if not file_info or not thumbnail_url:
                             continue
+                        if budget is not None and not budget.permit_probe("pixabay"):
+                            return _finish_fresh_first(
+                                fresh_confirmed, fresh_unknown, cooled_confirmed, cooled_unknown,
+                                max_candidates=cap,
+                            )
                         audio_state = _audio_probe_state(file_info)
                         if audio_state is False:
                             continue
@@ -293,6 +367,7 @@ def _append_deep_search_audit(
     all_prior_count: int,
     protected_count: int,
     cooldown_episodes: int,
+    budget: _StockSearchBudget,
 ) -> None:
     audit_path = slot_dir / "animal_audio_sources.json"
     if not audit_path.exists():
@@ -312,6 +387,7 @@ def _append_deep_search_audit(
         "all_prior_source_ids": int(all_prior_count),
         "protected_source_ids": int(protected_count),
         "long_run_cat_source_cooldown_episodes": int(cooldown_episodes),
+        "bounded_search": budget.audit(),
         "policy": (
             "exclude source IDs inside the active protected cooldown window; scan for never-used stock first; "
             "only then use older cooled-down stock as fallback; skip confirmed-silent remote files before Luna/candidate cap"
@@ -332,6 +408,12 @@ def ensure_audio_animal_sources(
     """History-aware cat sourcing with pagination, cooldown and pre-vision audio filtering."""
     all_prior = prior_rendered_cat_identities(settings, before_slot=slot)
     protected = blocked_cat_source_identities(settings, before_slot=slot)
+    animal_cfg = settings.raw.get("animal", {})
+    budget = _StockSearchBudget(
+        max_seconds=float(animal_cfg.get("cat_stock_search_max_seconds", 300.0)),
+        max_pages_per_provider=int(animal_cfg.get("cat_stock_max_pages_per_provider", 8)),
+        max_probes_per_provider=int(animal_cfg.get("cat_stock_max_probes_per_provider", 18)),
+    )
 
     removed: list[dict[str, Any]] = []
     removed.extend(sanitize_unapproved_youtube_sources(source_manifest))
@@ -343,10 +425,12 @@ def ensure_audio_animal_sources(
     _base._collect_pexels_audio_candidates = _deep_pexels_collector(
         prior=protected,
         all_prior=all_prior,
+        budget=budget,
     )
     _base._collect_pixabay_candidates = _deep_pixabay_collector(
         prior=protected,
         all_prior=all_prior,
+        budget=budget,
     )
 
     try:
@@ -361,13 +445,14 @@ def ensure_audio_animal_sources(
     finally:
         _base._collect_pexels_audio_candidates = original_pexels
         _base._collect_pixabay_candidates = original_pixabay
+        _append_history_audit(slot_dir, prior_count=len(protected), removed=removed)
+        _append_deep_search_audit(
+            slot_dir,
+            all_prior_count=len(all_prior),
+            protected_count=len(protected),
+            cooldown_episodes=cat_source_cooldown_episodes(settings),
+            budget=budget,
+        )
 
-    _append_history_audit(slot_dir, prior_count=len(protected), removed=removed)
-    _append_deep_search_audit(
-        slot_dir,
-        all_prior_count=len(all_prior),
-        protected_count=len(protected),
-        cooldown_episodes=cat_source_cooldown_episodes(settings),
-    )
     _normalize_source_policy(result)
     return result
